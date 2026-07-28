@@ -1,0 +1,18 @@
+// Espelho de STATUS_OS_ORDENADOS em cadastros.py. Fluxo real (plano de
+// migração, seção 4): qualquer reprovação nos checkpoints 5, 7, 8 ou 9
+// retorna a OS para "4. EM MANUTENÇÃO".
+export const STATUS_OS_ORDENADOS = [
+  '1. TRIAGEM / RECEBIMENTO',
+  '2. AGUARDANDO ORÇAMENTO',
+  '3. AGUARDANDO APROVAÇÃO DO CLIENTE',
+  '4. EM MANUTENÇÃO',
+  '5. BANCADA DE VISÃO - CHECKPOINT A',
+  '6. SELAGEM',
+  '7. TESTE DE ESTANQUEIDADE',
+  '8. TESTE DE AUTOCLAVE',
+  '9. BANCADA DE VISÃO - CHECKPOINT B',
+  '10. PRONTO PARA ENTREGA',
+  '11. ENTREGUE AO CLIENTE',
+] as const;
+
+export const STATUS_VOLTA_MANUTENCAO = '4. EM MANUTENÇÃO';

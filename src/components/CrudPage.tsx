@@ -46,6 +46,9 @@ export interface CrudPageProps<Row extends { id: number }> {
   valorInicial?: Record<string, unknown>;
   validar?: (dados: Record<string, unknown>) => string | null;
   antesDeEnviar?: (dados: Record<string, unknown>) => Record<string, unknown>;
+  // Efeito colateral pós-salvar (ex: telas de teste que precisam voltar o
+  // status da OS para "Em Manutenção" quando o resultado é reprovado).
+  aposSalvar?: (dadosEnviados: Record<string, unknown>) => Promise<void>;
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -58,6 +61,7 @@ export function CrudPage<Row extends { id: number }>({
   valorInicial = {},
   validar,
   antesDeEnviar,
+  aposSalvar,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const [filtro, setFiltro] = useState('');
@@ -116,6 +120,7 @@ export function CrudPage<Row extends { id: number }>({
       } else {
         await criar.mutateAsync(dados as Partial<Row>);
       }
+      if (aposSalvar) await aposSalvar(dados);
       setModalAberto(false);
     } catch (e) {
       setErro(mensagemErro(e));

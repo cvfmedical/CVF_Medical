@@ -13,9 +13,20 @@ import { CatalogoOticas } from './pages/cadastros/CatalogoOticas';
 import { EquipamentosClientes } from './pages/cadastros/EquipamentosClientes';
 import { ProdutosServicos } from './pages/cadastros/ProdutosServicos';
 import { PadroesCalibracao } from './pages/cadastros/PadroesCalibracao';
+import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
+import { OrdemServico } from './pages/pipeline/OrdemServico';
+import { FilaTriagem } from './pages/pipeline/FilaTriagem';
+import { OrcamentoTecnico } from './pages/pipeline/OrcamentoTecnico';
+import { OrcamentoFinanceiro } from './pages/pipeline/OrcamentoFinanceiro';
+import { Manutencao } from './pages/pipeline/Manutencao';
+import { Selagem } from './pages/pipeline/Selagem';
+import { TesteEstanqueidade } from './pages/pipeline/TesteEstanqueidade';
+import { TesteAutoclave } from './pages/pipeline/TesteAutoclave';
+import { Entrega } from './pages/pipeline/Entrega';
+import { Laudos } from './pages/pipeline/Laudos';
 
-// Telas já migradas (Fase A) - path -> componente. O que não estiver aqui
-// cai no placeholder EmConstrucao (Fases B/C, ainda não implementadas).
+// Telas já migradas - path -> componente. O que não estiver aqui cai no
+// placeholder EmConstrucao (ainda não implementado).
 const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/clientes': Clientes,
   '/funcionarios': Funcionarios,
@@ -24,6 +35,17 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/equipamentos': EquipamentosClientes,
   '/produtos-servicos': ProdutosServicos,
   '/padroes-calibracao': PadroesCalibracao,
+  '/entrada-equipamento': EntradaEquipamento,
+  '/ordens-servico/nova': OrdemServico,
+  '/fila-triagem': FilaTriagem,
+  '/orcamento-tecnico': OrcamentoTecnico,
+  '/orcamento-financeiro': OrcamentoFinanceiro,
+  '/manutencao': Manutencao,
+  '/selagem': Selagem,
+  '/teste-estanqueidade': TesteEstanqueidade,
+  '/teste-autoclave': TesteAutoclave,
+  '/entrega': Entrega,
+  '/laudos': Laudos,
 };
 
 export default function App() {
