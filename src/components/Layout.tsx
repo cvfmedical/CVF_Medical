@@ -3,6 +3,7 @@ import { IconLayoutDashboard, IconLogout } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MENU, categoriaDoPath } from '../lib/menu';
 import cvfMarca from '../assets/cvf-marca.png';
+import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 
 export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
@@ -54,7 +55,12 @@ export function Layout() {
       <div className="area-principal">
         <header className="barra-contextual">
           <div className="barra-contextual-topo">
-            <span className="categoria-label">{noDashboard ? 'Visão geral' : categoriaAtual?.titulo ?? ''}</span>
+            <div className="marca-barra-contextual">
+              <img src={cvfLogoCompleto} alt="Q-CVF Medical" className="logo-barra-contextual" />
+              {!noDashboard && categoriaAtual && (
+                <span className="categoria-label">{categoriaAtual.titulo}</span>
+              )}
+            </div>
             <span className="usuario-logado">
               {funcionario?.nome} <span className="cargo">({funcionario?.nivel_acesso})</span>
             </span>
