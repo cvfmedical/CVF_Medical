@@ -57,7 +57,8 @@ button {
 .card-login .logomark-topo {
   display: block;
   margin: 0 auto 12px;
-  color: var(--copper-500);
+  width: 64px;
+  height: auto;
 }
 
 .card-login h1 {
@@ -147,9 +148,13 @@ button {
 }
 
 .rail-logo {
-  color: var(--copper-500);
   display: flex;
   margin-bottom: 16px;
+}
+
+.rail-logo-img {
+  width: 30px;
+  height: auto;
 }
 
 .rail-nav {
@@ -268,6 +273,27 @@ button {
   flex: 1;
   padding: 24px;
   position: relative;
+  overflow: hidden;
+}
+
+.conteudo-camada {
+  position: relative;
+  z-index: 1;
+}
+
+/* Marca d'água do logo, cobrindo a página inteira - ver briefing de
+   design, seção 4 (elemento de assinatura). Fixa em relação à janela,
+   assim continua "atrás" do conteúdo mesmo com rolagem. */
+.marca-dagua-pagina {
+  position: fixed;
+  top: 50%;
+  left: calc(50% + var(--rail-largura) / 2);
+  transform: translate(-50%, -50%);
+  width: min(70vw, 900px);
+  height: auto;
+  opacity: 0.05;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .rodape {
@@ -302,15 +328,6 @@ button {
   to {
     transform: rotate(360deg);
   }
-}
-
-.marca-dagua {
-  position: absolute;
-  right: 24px;
-  bottom: 12px;
-  color: var(--ink-900);
-  opacity: 0.06;
-  pointer-events: none;
 }
 
 .aviso-sem-permissao {

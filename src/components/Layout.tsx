@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { IconLayoutDashboard, IconLogout } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MENU, categoriaDoPath } from '../lib/menu';
-import { Logomark } from './Logomark';
+import cvfMarca from '../assets/cvf-marca.png';
 
 export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
@@ -16,7 +16,7 @@ export function Layout() {
     <div className="layout-app">
       <aside className="rail">
         <NavLink to="/" className="rail-logo" data-tooltip="Q-CVF Medical">
-          <Logomark size={22} title="Q-CVF Medical" />
+          <img src={cvfMarca} alt="Q-CVF Medical" className="rail-logo-img" />
         </NavLink>
 
         <nav className="rail-nav">
@@ -78,7 +78,10 @@ export function Layout() {
         </header>
 
         <main className="conteudo">
-          <Outlet />
+          <img src={cvfMarca} alt="" aria-hidden="true" className="marca-dagua-pagina" />
+          <div className="conteudo-camada">
+            <Outlet />
+          </div>
         </main>
 
         <footer className="rodape">

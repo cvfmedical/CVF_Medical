@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Logomark } from '../components/Logomark';
+import cvfMarca from '../assets/cvf-marca.png';
 
 export function Login() {
   const { session, signIn } = useAuth();
@@ -24,7 +24,7 @@ export function Login() {
   return (
     <div className="tela-login">
       <form className="card-login" onSubmit={handleSubmit}>
-        <Logomark size={32} className="logomark-topo" title="Q-CVF Medical" />
+        <img src={cvfMarca} alt="Q-CVF Medical" className="logomark-topo" />
         <h1>Q-CVF Medical</h1>
         <p className="subtitulo">Sistema interno - acesso restrito a funcionários</p>
 
