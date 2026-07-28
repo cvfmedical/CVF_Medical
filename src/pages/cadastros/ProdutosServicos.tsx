@@ -1,4 +1,5 @@
 import { CrudPage } from '../../components/CrudPage';
+import { Badge } from '../../components/Badge';
 
 interface ProdutoServico {
   id: number;
@@ -13,7 +14,7 @@ interface ProdutoServico {
 export function ProdutosServicos() {
   return (
     <CrudPage<ProdutoServico>
-      titulo="Produtos e Serviços"
+      titulo="Produtos e serviços"
       tabela="produtos_servicos"
       ordenarPor="nome"
       camposFiltro={['nome', 'categoria']}
@@ -23,17 +24,21 @@ export function ProdutosServicos() {
         { chave: 'categoria', label: 'Categoria' },
         {
           chave: 'preco_unitario',
-          label: 'Preço Unitário',
+          label: 'Preço unitário',
           render: (r) => (r.preco_unitario != null ? `R$ ${Number(r.preco_unitario).toFixed(2)}` : '-'),
         },
         { chave: 'unidade', label: 'Unidade' },
-        { chave: 'status_ativo', label: 'Ativo', render: (r) => (r.status_ativo ? 'Sim' : 'Não') },
+        {
+          chave: 'status_ativo',
+          label: 'Ativo',
+          render: (r) => <Badge tono={r.status_ativo ? 'teal' : 'neutro'}>{r.status_ativo ? 'Ativo' : 'Inativo'}</Badge>,
+        },
       ]}
       campos={[
         { name: 'nome', label: 'Nome', type: 'text', obrigatorio: true },
         { name: 'descricao', label: 'Descrição', type: 'textarea' },
         { name: 'categoria', label: 'Categoria', type: 'text' },
-        { name: 'preco_unitario', label: 'Preço Unitário (R$)', type: 'number' },
+        { name: 'preco_unitario', label: 'Preço unitário (R$)', type: 'number' },
         { name: 'unidade', label: 'Unidade', type: 'text' },
         { name: 'status_ativo', label: 'Ativo', type: 'checkbox' },
       ]}

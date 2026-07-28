@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
+import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react';
 import { useCrud } from '../lib/useCrud';
 import { mensagemErro } from '../lib/erros';
+import { CarregandoTela } from './CarregandoTela';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'date';
 
@@ -15,7 +17,7 @@ export interface CampoConfig {
   type: TipoCampo;
   // string[]: valor e rótulo iguais. OpcaoSelect[]: valor (ex: id) e rótulo
   // (ex: nome) diferentes - necessário quando o campo referencia outra
-  // tabela por id (ex: cliente_id em Equipamentos do Cliente).
+  // tabela por id (ex: cliente_id em Equipamentos do cliente).
   opcoes?: string[] | OpcaoSelect[];
   obrigatorio?: boolean;
 }
@@ -29,6 +31,9 @@ export interface ColunaConfig<Row> {
   chave: string;
   label: string;
   render?: (row: Row) => React.ReactNode;
+  // Identificadores (Nº OS, nº de série, código de laudo) usam
+  // IBM Plex Mono, discreto, pra não competir com o conteúdo da linha.
+  mono?: boolean;
 }
 
 export interface CrudPageProps<Row extends { id: number }> {
@@ -133,7 +138,7 @@ export function CrudPage<Row extends { id: number }>({
       <div className="crud-cabecalho">
         <h1>{titulo}</h1>
         <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
-          + Novo
+          <IconPlus size={16} /> Novo
         </button>
       </div>
 
@@ -146,7 +151,7 @@ export function CrudPage<Row extends { id: number }>({
         />
       )}
 
-      {listQuery.isLoading && <p>Carregando...</p>}
+      {listQuery.isLoading && <CarregandoTela />}
       {listQuery.isError && <p className="erro-login">{mensagemErro(listQuery.error)}</p>}
 
       {!listQuery.isLoading && !listQuery.isError && (
@@ -163,14 +168,20 @@ export function CrudPage<Row extends { id: number }>({
             {linhas.map((row) => (
               <tr key={row.id}>
                 {colunas.map((c) => (
-                  <td key={c.chave}>
+                  <td key={c.chave} className={c.mono ? 'mono' : undefined}>
                     {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.chave] ?? '')}
                   </td>
                 ))}
                 <td className="acoes-tabela">
-                  <button onClick={() => abrirEdicao(row)}>Editar</button>
-                  <button onClick={() => handleExcluir(row)} className="botao-excluir">
-                    Excluir
+                  <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(row)}>
+                    <IconPencil size={16} />
+                  </button>
+                  <button
+                    className="botao-icone perigo"
+                    title="Excluir"
+                    onClick={() => handleExcluir(row)}
+                  >
+                    <IconTrash size={16} />
                   </button>
                 </td>
               </tr>
@@ -230,7 +241,7 @@ export function CrudPage<Row extends { id: number }>({
             {erro && <p className="erro-login">{erro}</p>}
 
             <div className="modal-acoes">
-              <button onClick={fechar} disabled={salvando}>
+              <button className="botao-secundario" onClick={fechar} disabled={salvando}>
                 Cancelar
               </button>
               <button className="botao-primario" onClick={salvar} disabled={salvando}>

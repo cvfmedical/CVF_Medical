@@ -1,0 +1,44 @@
+/* =====================================================================
+   Tema Q-CVF Medical — tokens centralizados
+   Qualquer ajuste de cor/tipografia da aplicação deve ser feito AQUI,
+   nunca com valores soltos nos componentes.
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Cor: rail de navegação escura, área de conteúdo clara. Cor codifica
+     significado (copper = ação/destaque, teal = status positivo/em
+     andamento, cinza = neutro/estrutural) - nunca por sequência. */
+  --graphite-900: #1b1d20;
+  --graphite-700: #2a2d31;
+
+  --copper-500: #c9814b;
+  --copper-800: #6b4423;
+  --copper-500-12: rgba(201, 129, 75, 0.12);
+
+  --teal-500: #3e7a6f;
+  --teal-800: #244840;
+  --teal-500-12: rgba(62, 122, 111, 0.12);
+
+  --ink-900: #21201c;
+  --ink-600: #5c5a54;
+  --ink-400: #8c8a83;
+  --ink-400-rail: #9ba0a5; /* equivalente claro de ink-400 sobre graphite */
+
+  --paper-50: #f5f3ee;
+  --paper-0: #ffffff;
+  --border: #e4e1d8;
+
+  --danger-500: #c1503e;
+  --danger-500-12: rgba(193, 80, 62, 0.12);
+
+  --botao-primario-texto: #3a2113;
+
+  /* Tipografia */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', Helvetica, Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  --rail-largura: 56px;
+}

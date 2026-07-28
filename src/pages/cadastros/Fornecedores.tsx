@@ -1,5 +1,6 @@
 import { CrudPage } from '../../components/CrudPage';
 import { validarCnpj, formatarCnpj } from '../../lib/cnpj';
+import { Badge } from '../../components/Badge';
 
 interface Fornecedor {
   id: number;
@@ -22,19 +23,23 @@ export function Fornecedores() {
       camposFiltro={['razao_social', 'cnpj', 'categoria_fornecimento']}
       valorInicial={{ status_ativo: true }}
       colunas={[
-        { chave: 'razao_social', label: 'Razão Social' },
-        { chave: 'cnpj', label: 'CNPJ' },
+        { chave: 'razao_social', label: 'Razão social' },
+        { chave: 'cnpj', label: 'CNPJ', mono: true },
         { chave: 'contato_nome', label: 'Contato' },
         { chave: 'categoria_fornecimento', label: 'Categoria' },
-        { chave: 'status_ativo', label: 'Ativo', render: (r) => (r.status_ativo ? 'Sim' : 'Não') },
+        {
+          chave: 'status_ativo',
+          label: 'Ativo',
+          render: (r) => <Badge tono={r.status_ativo ? 'teal' : 'neutro'}>{r.status_ativo ? 'Ativo' : 'Inativo'}</Badge>,
+        },
       ]}
       campos={[
-        { name: 'razao_social', label: 'Razão Social', type: 'text', obrigatorio: true },
+        { name: 'razao_social', label: 'Razão social', type: 'text', obrigatorio: true },
         { name: 'cnpj', label: 'CNPJ', type: 'text' },
-        { name: 'contato_nome', label: 'Nome do Contato', type: 'text' },
+        { name: 'contato_nome', label: 'Nome do contato', type: 'text' },
         { name: 'telefone', label: 'Telefone', type: 'text' },
         { name: 'email', label: 'E-mail', type: 'text' },
-        { name: 'categoria_fornecimento', label: 'Categoria de Fornecimento', type: 'text' },
+        { name: 'categoria_fornecimento', label: 'Categoria de fornecimento', type: 'text' },
         { name: 'endereco', label: 'Endereço', type: 'textarea' },
         { name: 'status_ativo', label: 'Ativo', type: 'checkbox' },
       ]}

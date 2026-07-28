@@ -1,5 +1,6 @@
 import { CrudPage } from '../../components/CrudPage';
 import { NIVEIS_ACESSO } from '../../lib/permissions';
+import { Badge } from '../../components/Badge';
 
 interface Funcionario {
   id: number;
@@ -17,7 +18,7 @@ export function Funcionarios() {
   return (
     <div>
       <CrudPage<Funcionario>
-        titulo="Funcionários / Técnicos"
+        titulo="Funcionários / técnicos"
         tabela="funcionarios"
         ordenarPor="nome"
         camposFiltro={['nome', 'cargo', 'email']}
@@ -25,19 +26,27 @@ export function Funcionarios() {
         colunas={[
           { chave: 'nome', label: 'Nome' },
           { chave: 'cargo', label: 'Cargo' },
-          { chave: 'nivel_acesso', label: 'Nível de Acesso' },
+          { chave: 'nivel_acesso', label: 'Nível de acesso' },
           { chave: 'email', label: 'E-mail' },
-          { chave: 'status_ativo', label: 'Ativo', render: (r) => (r.status_ativo ? 'Sim' : 'Não') },
+          {
+            chave: 'status_ativo',
+            label: 'Ativo',
+            render: (r) => <Badge tono={r.status_ativo ? 'teal' : 'neutro'}>{r.status_ativo ? 'Ativo' : 'Inativo'}</Badge>,
+          },
           {
             chave: 'auth_user_id',
-            label: 'Conta Web',
-            render: (r) => (r.auth_user_id ? 'Vinculada' : 'Pendente (convite manual)'),
+            label: 'Conta web',
+            render: (r) => (
+              <Badge tono={r.auth_user_id ? 'teal' : 'copper'}>
+                {r.auth_user_id ? 'Vinculada' : 'Pendente (convite manual)'}
+              </Badge>
+            ),
           },
         ]}
         campos={[
           { name: 'nome', label: 'Nome', type: 'text', obrigatorio: true },
           { name: 'cargo', label: 'Cargo', type: 'text' },
-          { name: 'nivel_acesso', label: 'Nível de Acesso', type: 'select', opcoes: [...NIVEIS_ACESSO], obrigatorio: true },
+          { name: 'nivel_acesso', label: 'Nível de acesso', type: 'select', opcoes: [...NIVEIS_ACESSO], obrigatorio: true },
           { name: 'email', label: 'E-mail (usado para o convite de acesso web)', type: 'text', obrigatorio: true },
           { name: 'status_ativo', label: 'Ativo', type: 'checkbox' },
         ]}
@@ -64,7 +73,7 @@ export function Funcionarios() {
           return dados;
         }}
       />
-      <p style={{ fontSize: 12, color: 'var(--texto-sec)', marginTop: 12 }}>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 12 }}>
         O convite de acesso à web (criação da conta no Supabase Auth) ainda é um passo manual do
         administrador, feito por script - ver plano de migração, seção "Cutover de autenticação".
       </p>

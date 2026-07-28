@@ -12,7 +12,7 @@ interface CatalogoOtica {
 export function CatalogoOticas() {
   return (
     <CrudPage<CatalogoOtica>
-      titulo="Catálogo de Óticas (Modelos)"
+      titulo="Catálogo de óticas (modelos)"
       tabela="catalogo_oticas"
       ordenarPor="fabricante"
       camposFiltro={['fabricante', 'modelo', 'tipo']}

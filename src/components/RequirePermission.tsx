@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { Categoria } from '../lib/permissions';
+import { CarregandoTela } from './CarregandoTela';
 
 // Equivalente web de main_dashboard.py só renderizar o botao do menu
 // quando tem_permissao(categoria) é true - mas aqui cobre tambem acesso
@@ -18,7 +19,7 @@ export function RequirePermission({
 }) {
   const { temPermissao, funcionario } = useAuth();
 
-  if (!funcionario) return <div className="tela-carregando">Carregando...</div>;
+  if (!funcionario) return <CarregandoTela />;
 
   if (!temPermissao(categoria)) {
     return (
