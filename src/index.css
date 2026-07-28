@@ -230,3 +230,129 @@ button {
   border: 1px solid #fecaca;
   border-radius: 8px;
 }
+
+/* ===================== CrudPage ===================== */
+.crud-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.botao-pequeno {
+  width: auto;
+  margin-top: 0;
+  padding: 8px 16px;
+}
+
+.campo-filtro {
+  width: 100%;
+  max-width: 320px;
+  padding: 8px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.tabela-crud {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabela-crud th {
+  background: var(--azul);
+  color: white;
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.tabela-crud td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--borda);
+  font-size: 13px;
+}
+
+.acoes-tabela {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.acoes-tabela button {
+  background: none;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  padding: 4px 10px;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.botao-excluir {
+  color: var(--vermelho);
+  border-color: var(--vermelho) !important;
+}
+
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal-card {
+  background: white;
+  border-radius: 10px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.campo-form {
+  margin-bottom: 12px;
+}
+
+.campo-form label {
+  display: block;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--texto-sec);
+  margin-bottom: 4px;
+}
+
+.campo-form input[type='text'],
+.campo-form input[type='number'],
+.campo-form input[type='date'],
+.campo-form input[type='email'],
+.campo-form textarea,
+.campo-form select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.modal-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.modal-acoes button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: white;
+}
