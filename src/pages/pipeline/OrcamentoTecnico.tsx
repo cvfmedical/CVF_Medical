@@ -79,6 +79,19 @@ export function OrcamentoTecnico() {
     },
   });
 
+  const observacoesQuery = useQuery({
+    queryKey: ['observacoes-defeito-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('observacoes_defeito')
+        .select('id, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { id: number; descricao: string }[];
+    },
+  });
+
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento', orcamentoQuery.data?.id],
     enabled: !!orcamentoQuery.data?.id,
@@ -264,12 +277,21 @@ export function OrcamentoTecnico() {
             />
           </div>
           <div className="campo-form">
-            <label>Observação</label>
-            <input
-              type="text"
+            <label>Observação (defeito identificado)</label>
+            <select
               value={novoItem.observacao}
               onChange={(e) => setNovoItem((f) => ({ ...f, observacao: e.target.value }))}
-            />
+            >
+              <option value="">Selecione...</option>
+              {(observacoesQuery.data ?? []).map((o) => (
+                <option key={o.id} value={o.descricao}>
+                  {o.descricao}
+                </option>
+              ))}
+            </select>
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+              Não achou a observação certa? Cadastre em "Observações de defeito" (Cadastros Gerais).
+            </p>
           </div>
           <div className="campo-form">
             <label>Foto da peça danificada (opcional)</label>
