@@ -347,6 +347,17 @@ export function EntradaEquipamento() {
       <div class="valor">${avariasMarcadas.length ? avariasMarcadas.join(', ') : 'Nenhuma avaria marcada'}</div>
       ${fotosHtml}
       `,
+      {
+        whatsapp: linkWhatsApp(
+          c?.telefone,
+          `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`,
+        ),
+        email: linkEmail(
+          c?.email,
+          `Q-CVF Medical - Entrada ${entrada.codigo_entrada}`,
+          `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`,
+        ),
+      },
     );
   }
 

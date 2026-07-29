@@ -17,6 +17,8 @@ interface Orcamento {
   ordem_servico_id: number;
   observacoes_tecnico: string | null;
   observacoes_financeiro: string | null;
+  aprovacao_manual: boolean | null;
+  motivo_aprovacao_manual: string | null;
   ordens_servico: { numero_os: string; cliente_nome: string; cliente_id: number } | null;
 }
 
@@ -63,7 +65,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, ordens_servico(numero_os, cliente_nome, cliente_id)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, ordens_servico(numero_os, cliente_nome, cliente_id)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -73,6 +75,7 @@ export function OrcamentoFinanceiro() {
 
   const orcamentoSelecionado = orcamentosQuery.data?.find((o) => o.id === selecionadoId);
   const pendente = orcamentoSelecionado?.status === 'Aguardando Precificação';
+  const podeAprovarManualmente = orcamentoSelecionado?.status === 'Enviado ao Cliente';
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -121,6 +124,10 @@ export function OrcamentoFinanceiro() {
     if (url) window.open(url, '_blank');
   }
 
+  function mensagemCompartilhar() {
+    return `Olá! Segue o orçamento ${orcamentoSelecionado?.numero_orcamento} (OS ${orcamentoSelecionado?.ordens_servico?.numero_os}) no valor de R$ ${total.toFixed(2)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
+  }
+
   function imprimirOrcamento() {
     if (!orcamentoSelecionado) return;
     const linhas = (itensQuery.data ?? [])
@@ -153,12 +160,18 @@ export function OrcamentoFinanceiro() {
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>
       `,
+      clienteQuery.data
+        ? {
+            whatsapp: linkWhatsApp(clienteQuery.data.telefone, mensagemCompartilhar()),
+            email: linkEmail(clienteQuery.data.email, `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`, mensagemCompartilhar()),
+          }
+        : undefined,
     );
   }
 
   function compartilhar(vetorEnvio: 'whatsapp' | 'email') {
     if (!orcamentoSelecionado || !clienteQuery.data) return;
-    const mensagem = `Olá! Segue o orçamento ${orcamentoSelecionado.numero_orcamento} (OS ${orcamentoSelecionado.ordens_servico?.numero_os}) no valor de R$ ${total.toFixed(2)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
+    const mensagem = mensagemCompartilhar();
     if (vetorEnvio === 'whatsapp') {
       window.open(linkWhatsApp(clienteQuery.data.telefone, mensagem), '_blank');
     } else {
@@ -238,6 +251,36 @@ export function OrcamentoFinanceiro() {
       setErro(mensagemErro(e));
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function aprovarManualmente() {
+    if (!selecionadoId || !orcamentoSelecionado) return;
+    const motivo = prompt(
+      'Motivo da aprovação manual (o cliente não usou o portal/link - ex: aprovou por telefone). Esse texto fica salvo no orçamento:',
+    );
+    if (motivo === null) return; // usuário cancelou
+    if (!motivo.trim()) {
+      alert('Informe o motivo para registrar a aprovação manual.');
+      return;
+    }
+    setErro(null);
+    try {
+      const { error } = await supabase
+        .from('orcamentos')
+        .update({
+          status: 'Aprovado',
+          data_resposta_cliente: new Date().toISOString(),
+          aprovacao_manual: true,
+          motivo_aprovacao_manual: motivo.trim(),
+          aprovado_manualmente_por: funcionario?.id ?? null,
+        })
+        .eq('id', selecionadoId);
+      if (error) throw error;
+      setSelecionadoId(null);
+      qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
     }
   }
 
@@ -364,6 +407,12 @@ export function OrcamentoFinanceiro() {
                 <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico}</p>
               </div>
             )}
+            {orcamentoSelecionado.aprovacao_manual && (
+              <div className="campo-form">
+                <label>Aprovação manual (fora do portal/link)</label>
+                <p style={{ fontSize: 13 }}>{orcamentoSelecionado.motivo_aprovacao_manual}</p>
+              </div>
+            )}
 
             {erro && <p className="erro-login">{erro}</p>}
 
@@ -389,6 +438,11 @@ export function OrcamentoFinanceiro() {
                 <button className="botao-secundario" onClick={salvarAlteracoes} disabled={salvando}>
                   {salvando ? 'Salvando...' : 'Salvar alterações'}
                 </button>
+                {podeAprovarManualmente && (
+                  <button className="botao-secundario" onClick={aprovarManualmente}>
+                    Aprovar manualmente
+                  </button>
+                )}
                 {pendente && (
                   <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
                     {enviando ? 'Enviando...' : 'Enviar ao cliente'}

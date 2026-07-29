@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { mensagemErro } from '../../lib/erros';
-import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
@@ -22,11 +20,20 @@ interface OrdemServico {
 }
 
 // Une o que antes eram duas telas separadas (Fila de Triagem + Histórico
-// de Equipamentos) num único painel: lista todas as OS, com busca e
-// alteração de status inline; clicar numa linha mostra os detalhes
-// completos (checklist de avarias da triagem, defeito relatado etc.).
+// de Equipamentos) num único painel: lista todas as OS, com busca;
+// clicar numa linha mostra os detalhes completos (checklist de avarias
+// da triagem, defeito relatado etc.). O status não é editável aqui -
+// ele muda sozinho conforme a OS avança pelas telas do fluxo real
+// (orçamento, aprovação do cliente, manutenção, selagem, testes,
+// entrega); editar isso à mão aqui destoava do fluxo de verdade.
+function tonoStatus(status: string | null): 'copper' | 'teal' | 'neutro' {
+  if (!status) return 'neutro';
+  if (status.startsWith('11.')) return 'teal';
+  if (status.startsWith('3.')) return 'copper';
+  return 'neutro';
+}
+
 export function OrdensServicoPanel() {
-  const qc = useQueryClient();
   const navigate = useNavigate();
   const [filtro, setFiltro] = useState('');
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
@@ -55,15 +62,6 @@ export function OrdensServicoPanel() {
         (os.optica_desc ?? '').toLowerCase().includes(termo),
     );
   }, [query.data, filtro]);
-
-  async function mudarStatus(id: number, novoStatus: string) {
-    const { error } = await supabase.from('ordens_servico').update({ status_os: novoStatus }).eq('id', id);
-    if (error) {
-      alert(mensagemErro(error));
-      return;
-    }
-    qc.invalidateQueries({ queryKey: ['ordens-servico-painel'] });
-  }
 
   if (query.isLoading) return <CarregandoTela />;
 
@@ -97,16 +95,7 @@ export function OrdensServicoPanel() {
               <td>{os.optica_desc}</td>
               <td className="mono">{os.optica_sn}</td>
               <td>
-                <select value={os.status_os ?? ''} onChange={(e) => mudarStatus(os.id, e.target.value)}>
-                  <option value="" disabled>
-                    (status antigo - escolha um novo)
-                  </option>
-                  {STATUS_OS_ORDENADOS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <Badge tono={tonoStatus(os.status_os)}>{os.status_os ?? '-'}</Badge>
               </td>
               <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
               <td className="acoes-tabela">

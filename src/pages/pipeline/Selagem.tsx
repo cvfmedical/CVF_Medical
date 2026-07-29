@@ -1,6 +1,7 @@
 import { CrudPage } from '../../components/CrudPage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { supabase } from '../../lib/supabaseClient';
 
 interface SelagemRow {
   id: number;
@@ -41,6 +42,14 @@ export function Selagem() {
         ordem_servico_id: Number(d.ordem_servico_id),
         tempo_cura_horas: d.tempo_cura_horas ? Number(d.tempo_cura_horas) : null,
       })}
+      aposSalvar={async (dados) => {
+        // Selagem registrada = cura em andamento/concluída - avança para
+        // o teste de estanqueidade automaticamente.
+        await supabase
+          .from('ordens_servico')
+          .update({ status_os: '7. TESTE DE ESTANQUEIDADE' })
+          .eq('id', dados.ordem_servico_id as number);
+      }}
     />
   );
 }

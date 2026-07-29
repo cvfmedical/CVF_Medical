@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
@@ -33,6 +34,7 @@ interface OSDetalhe {
 
 export function Manutencao() {
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   const [modalAberto, setModalAberto] = useState(false);
   const [osId, setOsId] = useState('');
@@ -104,6 +106,19 @@ export function Manutencao() {
     setModalAberto(true);
   }
 
+  // Pré-seleciona a OS quando vem de "Iniciar manutenção" (Orçamentos aprovados).
+  useEffect(() => {
+    const osParam = searchParams.get('os');
+    if (osParam) {
+      setOsId(osParam);
+      setDataInicio('');
+      setDataFim('');
+      setObservacoes('');
+      setErro(null);
+      setModalAberto(true);
+    }
+  }, [searchParams]);
+
   function selecionarOS(valor: string) {
     setOsId(valor);
     setChecklist([]);
@@ -136,6 +151,16 @@ export function Manutencao() {
         checklist,
       });
       if (error) throw error;
+
+      // Data de fim preenchida = manutenção concluída - avança para o
+      // próximo checkpoint automaticamente.
+      if (dataFim) {
+        await supabase
+          .from('ordens_servico')
+          .update({ status_os: '5. BANCADA DE VISÃO - CHECKPOINT A' })
+          .eq('id', Number(osId));
+      }
+
       setModalAberto(false);
       qc.invalidateQueries({ queryKey: ['manutencoes'] });
     } catch (e) {

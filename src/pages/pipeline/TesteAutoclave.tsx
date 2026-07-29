@@ -67,12 +67,13 @@ export function TesteAutoclave() {
           tempo_minutos: d.tempo_minutos ? Number(d.tempo_minutos) : null,
         })}
         aposSalvar={async (dados) => {
-          if (dados.resultado === 'Reprovado') {
-            await supabase
-              .from('ordens_servico')
-              .update({ status_os: STATUS_VOLTA_MANUTENCAO })
-              .eq('id', dados.ordem_servico_id as number);
-          }
+          await supabase
+            .from('ordens_servico')
+            .update({
+              status_os:
+                dados.resultado === 'Reprovado' ? STATUS_VOLTA_MANUTENCAO : '9. BANCADA DE VISÃO - CHECKPOINT B',
+            })
+            .eq('id', dados.ordem_servico_id as number);
         }}
       />
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 8 }}>

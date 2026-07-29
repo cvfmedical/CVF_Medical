@@ -1,11 +1,24 @@
+export interface LinksCompartilharImpressao {
+  whatsapp?: string;
+  email?: string;
+}
+
 // Abre uma janela nova só com o conteúdo do relatório e chama print() -
-// evita ter que gerar PDF pra relatórios simples de impressão.
-export function abrirImpressao(titulo: string, corpoHtml: string) {
+// evita ter que gerar PDF pra relatórios simples de impressão (para
+// salvar em PDF, o próprio diálogo de impressão do navegador tem a
+// opção "Salvar como PDF" como destino). Os links de WhatsApp/e-mail
+// são pré-montados por quem chama (precisam do telefone/e-mail do
+// cliente, que essa janela isolada não tem acesso).
+export function abrirImpressao(titulo: string, corpoHtml: string, links?: LinksCompartilharImpressao) {
   const janela = window.open('', '_blank', 'width=800,height=900');
   if (!janela) {
     alert('Não foi possível abrir a janela de impressão (verifique o bloqueador de pop-ups).');
     return;
   }
+  const botoesCompartilhar = `
+    ${links?.whatsapp ? `<a class="botao-acao" href="${links.whatsapp}" target="_blank" rel="noopener">Enviar por WhatsApp</a>` : ''}
+    ${links?.email ? `<a class="botao-acao" href="${links.email}" target="_blank" rel="noopener">Enviar por e-mail</a>` : ''}
+  `;
   janela.document.write(`
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -24,12 +37,23 @@ export function abrirImpressao(titulo: string, corpoHtml: string) {
         .fotos img { max-width: 220px; max-height: 220px; border: 1px solid #ccc; border-radius: 4px; }
         table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
         th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-        @media print { button { display: none; } }
+        .acoes-impressao { margin-top: 24px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .acoes-impressao button, .botao-acao {
+          padding: 10px 20px; border-radius: 6px; border: 1px solid #ccc; background: #fff;
+          color: #21201c; font-size: 13px; text-decoration: none; cursor: pointer; display: inline-block;
+        }
+        .acoes-impressao button { background: #c1503e; color: #fff; border: none; }
+        .dica-pdf { font-size: 11px; color: #5c5a54; margin-top: 8px; }
+        @media print { .acoes-impressao, .dica-pdf { display: none; } }
       </style>
     </head>
     <body>
       ${corpoHtml}
-      <button onclick="window.print()" style="margin-top: 24px; padding: 10px 20px;">Imprimir</button>
+      <div class="acoes-impressao">
+        <button onclick="window.print()">Imprimir / salvar PDF</button>
+        ${botoesCompartilhar}
+      </div>
+      <p class="dica-pdf">Para salvar em PDF: clique em "Imprimir / salvar PDF" e escolha "Salvar como PDF" como destino/impressora.</p>
     </body>
     </html>
   `);

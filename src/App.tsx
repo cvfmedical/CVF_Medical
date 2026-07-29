@@ -18,6 +18,7 @@ import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
 import { OrdemServico } from './pages/pipeline/OrdemServico';
 import { OrdensServicoPanel } from './pages/pipeline/OrdensServicoPanel';
 import { OrcamentoTecnico } from './pages/pipeline/OrcamentoTecnico';
+import { OrcamentosAprovados } from './pages/pipeline/OrcamentosAprovados';
 import { OrcamentoFinanceiro } from './pages/pipeline/OrcamentoFinanceiro';
 import { Manutencao } from './pages/pipeline/Manutencao';
 import { Selagem } from './pages/pipeline/Selagem';
@@ -41,6 +42,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/ordens-servico/nova': OrdemServico,
   '/ordens-servico': OrdensServicoPanel,
   '/orcamento-tecnico': OrcamentoTecnico,
+  '/orcamentos-aprovados': OrcamentosAprovados,
   '/orcamento-financeiro': OrcamentoFinanceiro,
   '/manutencao': Manutencao,
   '/selagem': Selagem,

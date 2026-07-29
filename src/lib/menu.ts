@@ -61,6 +61,7 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Emissão de laudos PDF', path: '/laudos', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Calibração de padrões (17025)', path: '/padroes-calibracao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Montar orçamento (técnico)', path: '/orcamento-tecnico', categoria: 'laboratorio_qualidade', implementado: false },
+      { label: 'Orçamentos aprovados', path: '/orcamentos-aprovados', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Manutenção / remontagem', path: '/manutencao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Selagem', path: '/selagem', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Teste de estanqueidade', path: '/teste-estanqueidade', categoria: 'laboratorio_qualidade', implementado: false },

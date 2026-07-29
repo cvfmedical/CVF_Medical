@@ -41,7 +41,9 @@ export function OrcamentoTecnico() {
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
-  const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1', observacao: '' });
+  const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1' });
+  const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
+  const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
   const [fotoItem, setFotoItem] = useState<File | null>(null);
 
   // Pré-seleciona a OS quando vem de "Converter em OS" (Entrada do Equipamento).
@@ -124,6 +126,18 @@ export function OrcamentoTecnico() {
     }
   }
 
+  function adicionarObservacaoNaLista() {
+    if (!observacaoParaAdicionar) return;
+    setObservacoesSelecionadas((lista) =>
+      lista.includes(observacaoParaAdicionar) ? lista : [...lista, observacaoParaAdicionar],
+    );
+    setObservacaoParaAdicionar('');
+  }
+
+  function removerObservacaoDaLista(descricao: string) {
+    setObservacoesSelecionadas((lista) => lista.filter((o) => o !== descricao));
+  }
+
   async function adicionarItem() {
     if (!orcamentoQuery.data || !novoItem.produto_servico_id) return;
     setErro(null);
@@ -136,11 +150,13 @@ export function OrcamentoTecnico() {
         orcamento_id: orcamentoQuery.data.id,
         produto_servico_id: Number(novoItem.produto_servico_id),
         quantidade: Number(novoItem.quantidade) || 1,
-        observacao: novoItem.observacao || null,
+        observacao: observacoesSelecionadas.length ? observacoesSelecionadas.join('; ') : null,
         foto_peca_danificada_path: fotoPath,
       });
       if (error) throw error;
-      setNovoItem({ produto_servico_id: '', quantidade: '1', observacao: '' });
+      setNovoItem({ produto_servico_id: '', quantidade: '1' });
+      setObservacoesSelecionadas([]);
+      setObservacaoParaAdicionar('');
       setFotoItem(null);
       qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data.id] });
     } catch (e) {
@@ -277,18 +293,55 @@ export function OrcamentoTecnico() {
             />
           </div>
           <div className="campo-form">
-            <label>Observação (defeito identificado)</label>
-            <select
-              value={novoItem.observacao}
-              onChange={(e) => setNovoItem((f) => ({ ...f, observacao: e.target.value }))}
-            >
-              <option value="">Selecione...</option>
-              {(observacoesQuery.data ?? []).map((o) => (
-                <option key={o.id} value={o.descricao}>
-                  {o.descricao}
-                </option>
-              ))}
-            </select>
+            <label>Observação (defeito identificado) - pode adicionar mais de um</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                style={{ flex: 1 }}
+                value={observacaoParaAdicionar}
+                onChange={(e) => setObservacaoParaAdicionar(e.target.value)}
+              >
+                <option value="">Selecione...</option>
+                {(observacoesQuery.data ?? [])
+                  .filter((o) => !observacoesSelecionadas.includes(o.descricao))
+                  .map((o) => (
+                    <option key={o.id} value={o.descricao}>
+                      {o.descricao}
+                    </option>
+                  ))}
+              </select>
+              <button type="button" className="botao-secundario" onClick={adicionarObservacaoNaLista}>
+                Adicionar
+              </button>
+            </div>
+            {observacoesSelecionadas.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {observacoesSelecionadas.map((descricao) => (
+                  <span
+                    key={descricao}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: 'var(--paper-50)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      fontSize: 12,
+                    }}
+                  >
+                    {descricao}
+                    <button
+                      type="button"
+                      className="botao-icone perigo"
+                      title="Remover"
+                      onClick={() => removerObservacaoDaLista(descricao)}
+                    >
+                      <IconTrash size={14} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
               Não achou a observação certa? Cadastre em "Observações de defeito" (Cadastros Gerais).
             </p>
