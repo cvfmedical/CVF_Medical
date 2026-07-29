@@ -39,6 +39,15 @@ interface FotoEntrada {
   descricao: string | null;
 }
 
+interface CatalogoOtica {
+  id: number;
+  fabricante: string;
+  modelo: string;
+  tipo: string | null;
+  diametro_mm: number | null;
+  angulo_graus: number | null;
+}
+
 interface Cliente {
   id: number;
   razao_social: string;
@@ -100,6 +109,26 @@ export function EntradaEquipamento() {
       return data as Cliente[];
     },
   });
+
+  const catalogoQuery = useQuery({
+    queryKey: ['catalogo-oticas-opcoes'],
+    queryFn: async (): Promise<CatalogoOtica[]> => {
+      const { data, error } = await supabase
+        .from('catalogo_oticas')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus')
+        .order('fabricante');
+      if (error) throw error;
+      return data as CatalogoOtica[];
+    },
+  });
+
+  function preencherDoCatalogo(catalogoId: string) {
+    const item = catalogoQuery.data?.find((c) => String(c.id) === catalogoId);
+    if (!item) return;
+    const partes = [item.tipo, item.diametro_mm ? `${item.diametro_mm}mm` : null, item.angulo_graus != null ? `${item.angulo_graus}°` : null];
+    const descricao = partes.filter(Boolean).join(' ');
+    setForm((f) => ({ ...f, equipamento_fab: item.fabricante, equipamento_desc: descricao || item.modelo }));
+  }
 
   const entradasQuery = useQuery({
     queryKey: ['entradas_equipamento'],
@@ -400,6 +429,20 @@ export function EntradaEquipamento() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="campo-form">
+              <label>Selecionar do catálogo de óticas (opcional)</label>
+              <select defaultValue="" onChange={(e) => preencherDoCatalogo(e.target.value)}>
+                <option value="">Preencher manualmente...</option>
+                {(catalogoQuery.data ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.fabricante} - {c.modelo} {c.tipo ? `(${c.tipo})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Preenche descrição e fabricante abaixo - o número de série e o resto continuam manuais.
+              </p>
             </div>
             <div className="campo-form">
               <label>Descrição do equipamento</label>
