@@ -25,6 +25,12 @@ interface Entrada {
   ordem_servico_id: number | null;
   data_entrada: string;
   triagem_avarias: ChecklistAvarias | null;
+  nf_remessa_numero: string | null;
+  nf_remessa_serie: string | null;
+  nf_remessa_chave_acesso: string | null;
+  nf_remessa_cfop: string | null;
+  nf_remessa_data_emissao: string | null;
+  nf_remessa_valor: number | null;
 }
 
 interface FotoEntrada {
@@ -65,6 +71,12 @@ const formVazio = {
   equipamento_sn: '',
   defeito_relatado: '',
   condicao_chegada: '',
+  nf_remessa_numero: '',
+  nf_remessa_serie: '',
+  nf_remessa_chave_acesso: '',
+  nf_remessa_cfop: '',
+  nf_remessa_data_emissao: '',
+  nf_remessa_valor: '',
 };
 
 export function EntradaEquipamento() {
@@ -123,6 +135,12 @@ export function EntradaEquipamento() {
       equipamento_sn: e.equipamento_sn ?? '',
       defeito_relatado: e.defeito_relatado ?? '',
       condicao_chegada: e.condicao_chegada ?? '',
+      nf_remessa_numero: e.nf_remessa_numero ?? '',
+      nf_remessa_serie: e.nf_remessa_serie ?? '',
+      nf_remessa_chave_acesso: e.nf_remessa_chave_acesso ?? '',
+      nf_remessa_cfop: e.nf_remessa_cfop ?? '',
+      nf_remessa_data_emissao: e.nf_remessa_data_emissao ?? '',
+      nf_remessa_valor: e.nf_remessa_valor != null ? String(e.nf_remessa_valor) : '',
     });
     setAvarias(e.triagem_avarias ?? {});
     setFotos([]);
@@ -148,19 +166,24 @@ export function EntradaEquipamento() {
     }
     setSalvando(true);
     try {
+      const camposComuns = {
+        cliente_id: Number(form.cliente_id),
+        equipamento_desc: form.equipamento_desc || null,
+        equipamento_fab: form.equipamento_fab || null,
+        equipamento_sn: form.equipamento_sn || null,
+        defeito_relatado: form.defeito_relatado || null,
+        condicao_chegada: form.condicao_chegada || null,
+        triagem_avarias: avarias,
+        nf_remessa_numero: form.nf_remessa_numero || null,
+        nf_remessa_serie: form.nf_remessa_serie || null,
+        nf_remessa_chave_acesso: form.nf_remessa_chave_acesso || null,
+        nf_remessa_cfop: form.nf_remessa_cfop || null,
+        nf_remessa_data_emissao: form.nf_remessa_data_emissao || null,
+        nf_remessa_valor: form.nf_remessa_valor ? Number(form.nf_remessa_valor) : null,
+      };
+
       if (editando) {
-        const { error } = await supabase
-          .from('entradas_equipamento')
-          .update({
-            cliente_id: Number(form.cliente_id),
-            equipamento_desc: form.equipamento_desc || null,
-            equipamento_fab: form.equipamento_fab || null,
-            equipamento_sn: form.equipamento_sn || null,
-            defeito_relatado: form.defeito_relatado || null,
-            condicao_chegada: form.condicao_chegada || null,
-            triagem_avarias: avarias,
-          })
-          .eq('id', editando.id);
+        const { error } = await supabase.from('entradas_equipamento').update(camposComuns).eq('id', editando.id);
         if (error) throw error;
 
         for (const foto of fotos) {
@@ -173,13 +196,7 @@ export function EntradaEquipamento() {
           .from('entradas_equipamento')
           .insert({
             codigo_entrada: codigo,
-            cliente_id: Number(form.cliente_id),
-            equipamento_desc: form.equipamento_desc || null,
-            equipamento_fab: form.equipamento_fab || null,
-            equipamento_sn: form.equipamento_sn || null,
-            defeito_relatado: form.defeito_relatado || null,
-            condicao_chegada: form.condicao_chegada || null,
-            triagem_avarias: avarias,
+            ...camposComuns,
             recebido_por: funcionario?.id ?? null,
           })
           .select('id')
@@ -275,6 +292,11 @@ export function EntradaEquipamento() {
       <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${entrada.defeito_relatado ?? '-'}</div></div>
       <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${entrada.condicao_chegada ?? '-'}</div></div>
       <div class="linha"><div class="rotulo">Data</div><div class="valor">${new Date(entrada.data_entrada).toLocaleString('pt-BR')}</div></div>
+      <div class="secao">Nota fiscal de remessa para conserto</div>
+      <div class="linha"><div class="rotulo">Número/Série</div><div class="valor mono">${entrada.nf_remessa_numero ?? '-'} / ${entrada.nf_remessa_serie ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">CFOP</div><div class="valor">${entrada.nf_remessa_cfop ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Chave de acesso</div><div class="valor mono">${entrada.nf_remessa_chave_acesso ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Emissão / Valor</div><div class="valor">${entrada.nf_remessa_data_emissao ?? '-'} ${entrada.nf_remessa_valor ? '- R$ ' + Number(entrada.nf_remessa_valor).toFixed(2) : ''}</div></div>
       <div class="secao">Avarias identificadas na triagem</div>
       <div class="valor">${avariasMarcadas.length ? avariasMarcadas.join(', ') : 'Nenhuma avaria marcada'}</div>
       ${fotosHtml}
@@ -311,6 +333,7 @@ export function EntradaEquipamento() {
             <th>Cliente</th>
             <th>Equipamento</th>
             <th>Nº de série</th>
+            <th>NF remessa</th>
             <th>Status</th>
             <th>Data</th>
             <th></th>
@@ -323,6 +346,7 @@ export function EntradaEquipamento() {
               <td>{cliente(e.cliente_id)?.razao_social}</td>
               <td>{e.equipamento_desc}</td>
               <td className="mono">{e.equipamento_sn}</td>
+              <td className="mono">{e.nf_remessa_numero || '-'}</td>
               <td>
                 <Badge tono={e.ordem_servico_id ? 'teal' : 'copper'}>
                   {e.ordem_servico_id ? 'Convertida em OS' : e.status}
@@ -355,7 +379,7 @@ export function EntradaEquipamento() {
           ))}
           {(entradasQuery.data ?? []).length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhum registro encontrado.</td>
+              <td colSpan={8}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>
@@ -414,6 +438,66 @@ export function EntradaEquipamento() {
                 value={form.condicao_chegada}
                 onChange={(e) => setForm((f) => ({ ...f, condicao_chegada: e.target.value }))}
               />
+            </div>
+
+            <h2 style={{ fontSize: 14, marginTop: 20 }}>Nota fiscal de remessa para conserto</h2>
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+              Dados da NF-e emitida pelo cliente para o envio do equipamento (CFOP 5915/6915) - controle interno,
+              não emite nota fiscal de verdade.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>Número</label>
+                <input
+                  type="text"
+                  value={form.nf_remessa_numero}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_numero: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>Série</label>
+                <input
+                  type="text"
+                  value={form.nf_remessa_serie}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_serie: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>CFOP</label>
+                <input
+                  type="text"
+                  placeholder="5915/6915"
+                  value={form.nf_remessa_cfop}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_cfop: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="campo-form">
+              <label>Chave de acesso</label>
+              <input
+                type="text"
+                maxLength={44}
+                value={form.nf_remessa_chave_acesso}
+                onChange={(e) => setForm((f) => ({ ...f, nf_remessa_chave_acesso: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>Data de emissão</label>
+                <input
+                  type="date"
+                  value={form.nf_remessa_data_emissao}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_data_emissao: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>Valor (R$)</label>
+                <input
+                  type="number"
+                  value={form.nf_remessa_valor}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_valor: e.target.value }))}
+                />
+              </div>
             </div>
 
             <div className="campo-form">

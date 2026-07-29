@@ -9,6 +9,12 @@ interface EntregaRow {
   forma_devolucao: string;
   detalhes: string | null;
   data_entrega: string | null;
+  nf_devolucao_numero: string | null;
+  nf_devolucao_serie: string | null;
+  nf_devolucao_chave_acesso: string | null;
+  nf_devolucao_cfop: string | null;
+  nf_devolucao_data_emissao: string | null;
+  nf_devolucao_valor: number | null;
 }
 
 export function Entrega() {
@@ -28,6 +34,7 @@ export function Entrega() {
           render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
         },
         { chave: 'forma_devolucao', label: 'Forma de devolução' },
+        { chave: 'nf_devolucao_numero', label: 'NF devolução', mono: true },
         { chave: 'data_entrega', label: 'Data', render: (r) => (r.data_entrega ? new Date(r.data_entrega).toLocaleString('pt-BR') : '-') },
         { chave: 'detalhes', label: 'Detalhes' },
       ]}
@@ -41,13 +48,23 @@ export function Entrega() {
           obrigatorio: true,
         },
         { name: 'detalhes', label: 'Detalhes (transportadora, rastreio, etc.)', type: 'textarea' },
+        { name: 'nf_devolucao_numero', label: 'Nota fiscal de devolução - número', type: 'text' },
+        { name: 'nf_devolucao_serie', label: 'Nota fiscal de devolução - série', type: 'text' },
+        { name: 'nf_devolucao_cfop', label: 'CFOP (5916/6916)', type: 'text' },
+        { name: 'nf_devolucao_chave_acesso', label: 'Chave de acesso', type: 'text' },
+        { name: 'nf_devolucao_data_emissao', label: 'Data de emissão da NF', type: 'date' },
+        { name: 'nf_devolucao_valor', label: 'Valor da NF (R$)', type: 'number' },
       ]}
       validar={(d) => {
         if (!d.ordem_servico_id) return 'Selecione a ordem de serviço.';
         if (!d.forma_devolucao) return 'Selecione a forma de devolução.';
         return null;
       }}
-      antesDeEnviar={(d) => ({ ...d, ordem_servico_id: Number(d.ordem_servico_id) })}
+      antesDeEnviar={(d) => ({
+        ...d,
+        ordem_servico_id: Number(d.ordem_servico_id),
+        nf_devolucao_valor: d.nf_devolucao_valor ? Number(d.nf_devolucao_valor) : null,
+      })}
       aposSalvar={async (dados) => {
         await supabase
           .from('ordens_servico')
