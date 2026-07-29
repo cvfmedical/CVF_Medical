@@ -4,14 +4,16 @@ import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { Badge } from '../../components/Badge';
 import { urlAssinadaFoto } from '../../lib/storage';
 import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { IconPhoto } from '@tabler/icons-react';
 
-interface OrcamentoPendente {
+interface Orcamento {
   id: number;
   numero_orcamento: string;
+  status: string;
   ordem_servico_id: number;
   observacoes_tecnico: string | null;
   ordens_servico: { numero_os: string; cliente_nome: string; cliente_id: number } | null;
@@ -34,6 +36,13 @@ interface Cliente {
   email: string | null;
 }
 
+const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
+  'Aguardando Precificação': 'copper',
+  'Enviado ao Cliente': 'neutro',
+  Aprovado: 'teal',
+  Recusado: 'danger',
+};
+
 export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
@@ -46,20 +55,20 @@ export function OrcamentoFinanceiro() {
   // funciona mesmo se o usuário for direto no botão "Enviar ao cliente").
   const [precos, setPrecos] = useState<Record<number, string>>({});
 
-  const pendentesQuery = useQuery({
-    queryKey: ['orcamentos-pendentes'],
-    queryFn: async (): Promise<OrcamentoPendente[]> => {
+  const orcamentosQuery = useQuery({
+    queryKey: ['orcamentos-todos'],
+    queryFn: async (): Promise<Orcamento[]> => {
       const { data, error } = await supabase
         .from('orcamentos')
-        .select('id, numero_orcamento, ordem_servico_id, observacoes_tecnico, ordens_servico(numero_os, cliente_nome, cliente_id)')
-        .eq('status', 'Aguardando Precificação')
-        .order('data_criacao', { ascending: true });
+        .select('id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, ordens_servico(numero_os, cliente_nome, cliente_id)')
+        .order('data_criacao', { ascending: false });
       if (error) throw error;
-      return data as unknown as OrcamentoPendente[];
+      return data as unknown as Orcamento[];
     },
   });
 
-  const orcamentoSelecionado = pendentesQuery.data?.find((o) => o.id === selecionadoId);
+  const orcamentoSelecionado = orcamentosQuery.data?.find((o) => o.id === selecionadoId);
+  const podeEditar = orcamentoSelecionado?.status === 'Aguardando Precificação';
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -108,7 +117,7 @@ export function OrcamentoFinanceiro() {
     if (url) window.open(url, '_blank');
   }
 
-  async function imprimirOrcamento() {
+  function imprimirOrcamento() {
     if (!orcamentoSelecionado) return;
     const linhas = (itensQuery.data ?? [])
       .map(
@@ -130,6 +139,7 @@ export function OrcamentoFinanceiro() {
       <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor mono">${orcamentoSelecionado.numero_orcamento}</div></div>
       <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${orcamentoSelecionado.ordens_servico?.numero_os}</div></div>
       <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${orcamentoSelecionado.ordens_servico?.cliente_nome}</div></div>
+      <div class="linha"><div class="rotulo">Status</div><div class="valor">${orcamentoSelecionado.status}</div></div>
       <div class="secao">Itens</div>
       <table>
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
@@ -155,13 +165,17 @@ export function OrcamentoFinanceiro() {
     }
   }
 
+  function abrirOrcamento(o: Orcamento) {
+    setSelecionadoId(o.id);
+    setObservacoesFinanceiro('');
+    setErro(null);
+  }
+
   async function enviarAoCliente() {
-    if (!selecionadoId) return;
+    if (!selecionadoId || !orcamentoSelecionado) return;
     setErro(null);
     setEnviando(true);
     try {
-      const orcamento = pendentesQuery.data?.find((o) => o.id === selecionadoId);
-
       // Persiste todos os preços editados antes de mudar o status.
       for (const item of itensQuery.data ?? []) {
         const valor = precos[item.id];
@@ -183,16 +197,17 @@ export function OrcamentoFinanceiro() {
         .eq('id', selecionadoId);
       if (error) throw error;
 
-      if (orcamento) {
-        await supabase
-          .from('ordens_servico')
-          .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
-          .eq('id', orcamento.ordem_servico_id);
-      }
+      await supabase
+        .from('ordens_servico')
+        .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
+        .eq('id', orcamentoSelecionado.ordem_servico_id);
+
+      // Abre o relatório pra salvar/imprimir assim que o envio é confirmado.
+      imprimirOrcamento();
 
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
-      qc.invalidateQueries({ queryKey: ['orcamentos-pendentes'] });
+      qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
     } catch (e) {
       setErro(mensagemErro(e));
     } finally {
@@ -200,7 +215,7 @@ export function OrcamentoFinanceiro() {
     }
   }
 
-  if (pendentesQuery.isLoading) return <CarregandoTela />;
+  if (orcamentosQuery.isLoading) return <CarregandoTela />;
 
   return (
     <div>
@@ -212,34 +227,40 @@ export function OrcamentoFinanceiro() {
             <th>Nº orçamento</th>
             <th>OS</th>
             <th>Cliente</th>
+            <th>Status</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {(pendentesQuery.data ?? []).map((o) => (
+          {(orcamentosQuery.data ?? []).map((o) => (
             <tr key={o.id}>
               <td className="mono">{o.numero_orcamento}</td>
               <td className="mono">{o.ordens_servico?.numero_os}</td>
               <td>{o.ordens_servico?.cliente_nome}</td>
+              <td>
+                <Badge tono={TONO_STATUS[o.status] ?? 'neutro'}>{o.status}</Badge>
+              </td>
               <td className="acoes-tabela">
-                <button className="botao-secundario" onClick={() => setSelecionadoId(o.id)}>
-                  Precificar
+                <button className="botao-secundario" onClick={() => abrirOrcamento(o)}>
+                  {o.status === 'Aguardando Precificação' ? 'Precificar' : 'Ver / reimprimir'}
                 </button>
               </td>
             </tr>
           ))}
-          {(pendentesQuery.data ?? []).length === 0 && (
+          {(orcamentosQuery.data ?? []).length === 0 && (
             <tr>
-              <td colSpan={4}>Nenhum orçamento aguardando precificação.</td>
+              <td colSpan={5}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>
       </table>
 
-      {selecionadoId && (
+      {selecionadoId && orcamentoSelecionado && (
         <div className="modal-fundo" onClick={() => setSelecionadoId(null)}>
           <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
-            <h2>Precificar itens</h2>
+            <h2>
+              {orcamentoSelecionado.numero_orcamento} <Badge tono={TONO_STATUS[orcamentoSelecionado.status] ?? 'neutro'}>{orcamentoSelecionado.status}</Badge>
+            </h2>
 
             <table className="tabela-crud">
               <thead>
@@ -256,12 +277,16 @@ export function OrcamentoFinanceiro() {
                     <td>{item.produtos_servicos?.nome}</td>
                     <td>{item.quantidade}</td>
                     <td>
-                      <input
-                        type="number"
-                        value={precos[item.id] ?? ''}
-                        onChange={(e) => setPrecos((p) => ({ ...p, [item.id]: e.target.value }))}
-                        style={{ width: 110 }}
-                      />
+                      {podeEditar ? (
+                        <input
+                          type="number"
+                          value={precos[item.id] ?? ''}
+                          onChange={(e) => setPrecos((p) => ({ ...p, [item.id]: e.target.value }))}
+                          style={{ width: 110 }}
+                        />
+                      ) : (
+                        `R$ ${(item.preco_unitario ?? 0).toFixed(2)}`
+                      )}
                     </td>
                     <td>
                       {item.foto_peca_danificada_path && (
@@ -279,7 +304,11 @@ export function OrcamentoFinanceiro() {
 
             <div className="campo-form">
               <label>Observações do financeiro</label>
-              <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />
+              {podeEditar ? (
+                <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />
+              ) : (
+                <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico || '-'}</p>
+              )}
             </div>
 
             {erro && <p className="erro-login">{erro}</p>}
@@ -300,9 +329,11 @@ export function OrcamentoFinanceiro() {
                 <button className="botao-secundario" onClick={() => setSelecionadoId(null)}>
                   Fechar
                 </button>
-                <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
-                  {enviando ? 'Enviando...' : 'Enviar ao cliente'}
-                </button>
+                {podeEditar && (
+                  <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
+                    {enviando ? 'Enviando...' : 'Enviar ao cliente'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
