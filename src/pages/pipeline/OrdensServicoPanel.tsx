@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
@@ -26,6 +27,7 @@ interface OrdemServico {
 // completos (checklist de avarias da triagem, defeito relatado etc.).
 export function OrdensServicoPanel() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [filtro, setFiltro] = useState('');
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
 
@@ -110,6 +112,13 @@ export function OrdensServicoPanel() {
               <td className="acoes-tabela">
                 <button className="botao-secundario" onClick={() => setDetalhe(os)}>
                   Detalhes
+                </button>
+                <button
+                  className="botao-secundario"
+                  style={{ marginLeft: 6 }}
+                  onClick={() => navigate(`/orcamento-tecnico?os=${os.id}`)}
+                >
+                  Ver orçamento
                 </button>
               </td>
             </tr>

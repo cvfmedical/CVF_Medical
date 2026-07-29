@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconPencil, IconPlus, IconPrinter, IconShare, IconTrash } from '@tabler/icons-react';
+import { IconEye, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash } from '@tabler/icons-react';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
@@ -100,6 +100,8 @@ export function EntradaEquipamento() {
   const [form, setForm] = useState(formVazio);
   const [avarias, setAvarias] = useState<ChecklistAvarias>({});
   const [convertendo, setConvertendo] = useState<number | null>(null);
+  const [detalhe, setDetalhe] = useState<Entrada | null>(null);
+  const [fotosDetalhe, setFotosDetalhe] = useState<{ id: number; url: string | null }[]>([]);
 
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes-completo'],
@@ -247,11 +249,26 @@ export function EntradaEquipamento() {
     }
   }
 
-  async function converterEmOS(entrada: Entrada) {
-    if (entrada.ordem_servico_id) {
-      navigate(`/orcamento-tecnico?os=${entrada.ordem_servico_id}`);
-      return;
+  async function abrirDetalhe(entrada: Entrada) {
+    setDetalhe(entrada);
+    setFotosDetalhe([]);
+    const { data: fotosEntrada } = await supabase
+      .from('fotos_entrada')
+      .select('id, storage_path')
+      .eq('entrada_id', entrada.id);
+    if (fotosEntrada) {
+      const comUrl = await Promise.all(
+        (fotosEntrada as { id: number; storage_path: string }[]).map(async (f) => ({
+          id: f.id,
+          url: await urlAssinadaFoto(f.storage_path),
+        })),
+      );
+      setFotosDetalhe(comUrl);
     }
+  }
+
+  async function converterEmOS(entrada: Entrada) {
+    if (entrada.ordem_servico_id) return;
     setConvertendo(entrada.id);
     try {
       const c = cliente(entrada.cliente_id);
@@ -383,6 +400,9 @@ export function EntradaEquipamento() {
               </td>
               <td>{new Date(e.data_entrada).toLocaleDateString('pt-BR')}</td>
               <td className="acoes-tabela">
+                <button className="botao-icone" title="Ver entrada" onClick={() => abrirDetalhe(e)}>
+                  <IconEye size={16} />
+                </button>
                 <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(e)}>
                   <IconPencil size={16} />
                 </button>
@@ -395,14 +415,16 @@ export function EntradaEquipamento() {
                 <button className="botao-icone perigo" title="Excluir" onClick={() => excluir(e)}>
                   <IconTrash size={16} />
                 </button>
-                <button
-                  className="botao-secundario"
-                  style={{ marginLeft: 6 }}
-                  disabled={convertendo === e.id}
-                  onClick={() => converterEmOS(e)}
-                >
-                  {e.ordem_servico_id ? 'Ver OS' : convertendo === e.id ? 'Convertendo...' : 'Converter em OS'}
-                </button>
+                {!e.ordem_servico_id && (
+                  <button
+                    className="botao-secundario"
+                    style={{ marginLeft: 6 }}
+                    disabled={convertendo === e.id}
+                    onClick={() => converterEmOS(e)}
+                  >
+                    {convertendo === e.id ? 'Convertendo...' : 'Converter em OS'}
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -576,6 +598,69 @@ export function EntradaEquipamento() {
               </button>
               <button className="botao-primario" onClick={salvar} disabled={salvando}>
                 {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detalhe && (
+        <div className="modal-fundo" onClick={() => setDetalhe(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>{detalhe.codigo_entrada}</h2>
+            <div className="campo-form">
+              <label>Cliente</label>
+              <p>{cliente(detalhe.cliente_id)?.razao_social}</p>
+            </div>
+            <div className="campo-form">
+              <label>Equipamento</label>
+              <p>
+                {detalhe.equipamento_desc} ({detalhe.equipamento_fab}) - <span className="mono">{detalhe.equipamento_sn}</span>
+              </p>
+            </div>
+            <div className="campo-form">
+              <label>Defeito relatado</label>
+              <p>{detalhe.defeito_relatado || '-'}</p>
+            </div>
+            <div className="campo-form">
+              <label>Condição de chegada</label>
+              <p>{detalhe.condicao_chegada || '-'}</p>
+            </div>
+            <div className="campo-form">
+              <label>Nota fiscal de remessa</label>
+              <p className="mono">
+                {detalhe.nf_remessa_numero ?? '-'} / {detalhe.nf_remessa_serie ?? '-'}
+              </p>
+            </div>
+            <div className="campo-form">
+              <label>Avarias identificadas na triagem</label>
+              {CHECKLIST_AVARIAS.filter((item) => detalhe.triagem_avarias?.[item.key]).length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma avaria marcada</p>
+              )}
+              {CHECKLIST_AVARIAS.filter((item) => detalhe.triagem_avarias?.[item.key]).map((item) => (
+                <Badge key={item.key} tono="copper">
+                  {item.label}
+                </Badge>
+              ))}
+            </div>
+            {fotosDetalhe.length > 0 && (
+              <div className="campo-form">
+                <label>Fotos</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {fotosDetalhe.map(
+                    (f) =>
+                      f.url && (
+                        <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
+                          <img src={f.url} alt="" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 4 }} />
+                        </a>
+                      ),
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="modal-acoes">
+              <button className="botao-secundario" onClick={() => setDetalhe(null)}>
+                Fechar
               </button>
             </div>
           </div>

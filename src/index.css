@@ -124,6 +124,16 @@ button {
   color: var(--ink-900);
 }
 
+.botao-secundario.perigo {
+  border-color: var(--danger-500);
+  color: var(--danger-500);
+}
+
+.botao-secundario.perigo:hover {
+  background: var(--danger-500);
+  color: #fff;
+}
+
 .erro-login {
   color: var(--danger-500);
   font-size: 13px;

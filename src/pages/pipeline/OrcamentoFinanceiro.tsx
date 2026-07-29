@@ -8,7 +8,7 @@ import { Badge } from '../../components/Badge';
 import { urlAssinadaFoto } from '../../lib/storage';
 import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
-import { IconPhoto } from '@tabler/icons-react';
+import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
   id: number;
@@ -16,6 +16,7 @@ interface Orcamento {
   status: string;
   ordem_servico_id: number;
   observacoes_tecnico: string | null;
+  observacoes_financeiro: string | null;
   ordens_servico: { numero_os: string; cliente_nome: string; cliente_id: number } | null;
 }
 
@@ -49,10 +50,11 @@ export function OrcamentoFinanceiro() {
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
   const [observacoesFinanceiro, setObservacoesFinanceiro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   // Preços editados localmente (controlado) - persistidos em lote ao
-  // enviar, em vez de depender só do onBlur de cada input (mais robusto:
-  // funciona mesmo se o usuário for direto no botão "Enviar ao cliente").
+  // salvar/enviar, em vez de depender só do onBlur de cada input (mais
+  // robusto: funciona mesmo se o usuário for direto no botão).
   const [precos, setPrecos] = useState<Record<number, string>>({});
 
   const orcamentosQuery = useQuery({
@@ -60,7 +62,9 @@ export function OrcamentoFinanceiro() {
     queryFn: async (): Promise<Orcamento[]> => {
       const { data, error } = await supabase
         .from('orcamentos')
-        .select('id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, ordens_servico(numero_os, cliente_nome, cliente_id)')
+        .select(
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, ordens_servico(numero_os, cliente_nome, cliente_id)',
+        )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
       return data as unknown as Orcamento[];
@@ -68,7 +72,7 @@ export function OrcamentoFinanceiro() {
   });
 
   const orcamentoSelecionado = orcamentosQuery.data?.find((o) => o.id === selecionadoId);
-  const podeEditar = orcamentoSelecionado?.status === 'Aguardando Precificação';
+  const pendente = orcamentoSelecionado?.status === 'Aguardando Precificação';
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -167,8 +171,39 @@ export function OrcamentoFinanceiro() {
 
   function abrirOrcamento(o: Orcamento) {
     setSelecionadoId(o.id);
-    setObservacoesFinanceiro('');
+    setObservacoesFinanceiro(o.observacoes_financeiro ?? '');
     setErro(null);
+  }
+
+  async function persistirPrecosEObservacoes() {
+    for (const item of itensQuery.data ?? []) {
+      const valor = precos[item.id];
+      const preco = valor ? Number(valor) : null;
+      if (preco !== item.preco_unitario) {
+        const { error } = await supabase.from('orcamento_itens').update({ preco_unitario: preco }).eq('id', item.id);
+        if (error) throw error;
+      }
+    }
+    const { error } = await supabase
+      .from('orcamentos')
+      .update({ observacoes_financeiro: observacoesFinanceiro || null })
+      .eq('id', selecionadoId!);
+    if (error) throw error;
+  }
+
+  async function salvarAlteracoes() {
+    if (!selecionadoId) return;
+    setErro(null);
+    setSalvando(true);
+    try {
+      await persistirPrecosEObservacoes();
+      qc.invalidateQueries({ queryKey: ['itens-orcamento-financeiro', selecionadoId] });
+      qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setSalvando(false);
+    }
   }
 
   async function enviarAoCliente() {
@@ -176,21 +211,12 @@ export function OrcamentoFinanceiro() {
     setErro(null);
     setEnviando(true);
     try {
-      // Persiste todos os preços editados antes de mudar o status.
-      for (const item of itensQuery.data ?? []) {
-        const valor = precos[item.id];
-        const preco = valor ? Number(valor) : null;
-        if (preco !== item.preco_unitario) {
-          const { error } = await supabase.from('orcamento_itens').update({ preco_unitario: preco }).eq('id', item.id);
-          if (error) throw error;
-        }
-      }
+      await persistirPrecosEObservacoes();
 
       const { error } = await supabase
         .from('orcamentos')
         .update({
           status: 'Enviado ao Cliente',
-          observacoes_financeiro: observacoesFinanceiro || null,
           precificado_por: funcionario?.id ?? null,
           data_envio: new Date().toISOString(),
         })
@@ -213,6 +239,28 @@ export function OrcamentoFinanceiro() {
     } finally {
       setEnviando(false);
     }
+  }
+
+  async function excluirItem(itemId: number) {
+    if (!confirm('Remover este item do orçamento?')) return;
+    const { error } = await supabase.from('orcamento_itens').delete().eq('id', itemId);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['itens-orcamento-financeiro', selecionadoId] });
+  }
+
+  async function excluirOrcamento() {
+    if (!selecionadoId || !orcamentoSelecionado) return;
+    if (!confirm(`Excluir o orçamento ${orcamentoSelecionado.numero_orcamento} inteiro? Essa ação não pode ser desfeita.`)) return;
+    const { error } = await supabase.from('orcamentos').delete().eq('id', selecionadoId);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    setSelecionadoId(null);
+    qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
   }
 
   if (orcamentosQuery.isLoading) return <CarregandoTela />;
@@ -277,26 +325,30 @@ export function OrcamentoFinanceiro() {
                     <td>{item.produtos_servicos?.nome}</td>
                     <td>{item.quantidade}</td>
                     <td>
-                      {podeEditar ? (
-                        <input
-                          type="number"
-                          value={precos[item.id] ?? ''}
-                          onChange={(e) => setPrecos((p) => ({ ...p, [item.id]: e.target.value }))}
-                          style={{ width: 110 }}
-                        />
-                      ) : (
-                        `R$ ${(item.preco_unitario ?? 0).toFixed(2)}`
-                      )}
+                      <input
+                        type="number"
+                        value={precos[item.id] ?? ''}
+                        onChange={(e) => setPrecos((p) => ({ ...p, [item.id]: e.target.value }))}
+                        style={{ width: 110 }}
+                      />
                     </td>
-                    <td>
+                    <td className="acoes-tabela">
                       {item.foto_peca_danificada_path && (
                         <button className="botao-icone" title="Ver foto da peça" onClick={() => verFoto(item.foto_peca_danificada_path)}>
                           <IconPhoto size={16} />
                         </button>
                       )}
+                      <button className="botao-icone perigo" title="Remover item" onClick={() => excluirItem(item.id)}>
+                        <IconTrash size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
+                {(itensQuery.data ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={4}>Nenhum item neste orçamento.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
 
@@ -304,16 +356,18 @@ export function OrcamentoFinanceiro() {
 
             <div className="campo-form">
               <label>Observações do financeiro</label>
-              {podeEditar ? (
-                <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />
-              ) : (
-                <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico || '-'}</p>
-              )}
+              <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />
             </div>
+            {orcamentoSelecionado.observacoes_tecnico && (
+              <div className="campo-form">
+                <label>Observações do técnico</label>
+                <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico}</p>
+              </div>
+            )}
 
             {erro && <p className="erro-login">{erro}</p>}
 
-            <div className="modal-acoes" style={{ justifyContent: 'space-between' }}>
+            <div className="modal-acoes" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="botao-secundario" onClick={imprimirOrcamento}>
                   Imprimir
@@ -324,12 +378,18 @@ export function OrcamentoFinanceiro() {
                 <button className="botao-secundario" onClick={() => compartilhar('email')}>
                   E-mail
                 </button>
+                <button className="botao-secundario perigo" onClick={excluirOrcamento}>
+                  Excluir orçamento
+                </button>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="botao-secundario" onClick={() => setSelecionadoId(null)}>
                   Fechar
                 </button>
-                {podeEditar && (
+                <button className="botao-secundario" onClick={salvarAlteracoes} disabled={salvando}>
+                  {salvando ? 'Salvando...' : 'Salvar alterações'}
+                </button>
+                {pendente && (
                   <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
                     {enviando ? 'Enviando...' : 'Enviar ao cliente'}
                   </button>
