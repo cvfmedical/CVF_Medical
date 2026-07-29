@@ -48,8 +48,7 @@ export const MENU: CategoriaMenu[] = [
     itens: [
       { label: 'Entrada do equipamento', path: '/entrada-equipamento', categoria: 'recepcao_os', implementado: false },
       { label: 'Abrir nova OS', path: '/ordens-servico/nova', categoria: 'recepcao_os', implementado: false },
-      { label: 'Fila de triagem', path: '/fila-triagem', categoria: 'recepcao_os', implementado: false },
-      { label: 'Histórico de equipamentos', path: '/historico-equipamentos', categoria: 'recepcao_os', implementado: false },
+      { label: 'Ordens de serviço', path: '/ordens-servico', categoria: 'recepcao_os', implementado: false },
       { label: 'Entrega ao cliente', path: '/entrega', categoria: 'recepcao_os', implementado: false },
     ],
   },

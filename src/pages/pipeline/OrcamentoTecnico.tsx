@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
-import { enviarArquivoStorage } from '../../lib/storage';
+import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconTrash } from '@tabler/icons-react';
+import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
   id: number;
@@ -19,6 +20,7 @@ interface ItemOrcamento {
   produto_servico_id: number | null;
   quantidade: number;
   observacao: string | null;
+  foto_peca_danificada_path: string | null;
 }
 
 async function gerarNumeroOrcamento(): Promise<string> {
@@ -32,12 +34,21 @@ async function gerarNumeroOrcamento(): Promise<string> {
 
 export function OrcamentoTecnico() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { opcoes: opcoesOS } = useOrdensServicoOpcoes();
   const [osId, setOsId] = useState<string>('');
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
+  const [finalizando, setFinalizando] = useState(false);
   const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1', observacao: '' });
   const [fotoItem, setFotoItem] = useState<File | null>(null);
+
+  // Pré-seleciona a OS quando vem de "Converter em OS" (Entrada do Equipamento).
+  useEffect(() => {
+    const osParam = searchParams.get('os');
+    if (osParam) setOsId(osParam);
+  }, [searchParams]);
 
   const orcamentoQuery = useQuery({
     queryKey: ['orcamento-por-os', osId],
@@ -74,7 +85,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<ItemOrcamento[]> => {
       const { data, error } = await supabase
         .from('orcamento_itens')
-        .select('id, produto_servico_id, quantidade, observacao')
+        .select('id, produto_servico_id, quantidade, observacao, foto_peca_danificada_path')
         .eq('orcamento_id', orcamentoQuery.data!.id);
       if (error) throw error;
       return data as ItemOrcamento[];
@@ -134,6 +145,29 @@ export function OrcamentoTecnico() {
     qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data?.id] });
   }
 
+  async function verFoto(caminho: string | null) {
+    if (!caminho) return;
+    const url = await urlAssinadaFoto(caminho);
+    if (url) window.open(url, '_blank');
+  }
+
+  async function finalizar() {
+    if (!osId) return;
+    setFinalizando(true);
+    try {
+      const { error } = await supabase
+        .from('ordens_servico')
+        .update({ status_os: '2. AGUARDANDO ORÇAMENTO' })
+        .eq('id', Number(osId));
+      if (error) throw error;
+      navigate('/ordens-servico');
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setFinalizando(false);
+    }
+  }
+
   function nomeProduto(id: number | null) {
     return produtosQuery.data?.find((p) => p.id === id)?.nome ?? '-';
   }
@@ -187,6 +221,11 @@ export function OrcamentoTecnico() {
                   <td>{item.quantidade}</td>
                   <td>{item.observacao}</td>
                   <td className="acoes-tabela">
+                    {item.foto_peca_danificada_path && (
+                      <button className="botao-icone" title="Ver foto" onClick={() => verFoto(item.foto_peca_danificada_path)}>
+                        <IconPhoto size={16} />
+                      </button>
+                    )}
                     <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)}>
                       <IconTrash size={16} />
                     </button>
@@ -239,9 +278,14 @@ export function OrcamentoTecnico() {
 
           {erro && <p className="erro-login">{erro}</p>}
 
-          <button className="botao-primario botao-pequeno" onClick={adicionarItem}>
-            Adicionar item
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="botao-primario botao-pequeno" onClick={adicionarItem}>
+              Adicionar item
+            </button>
+            <button className="botao-secundario" onClick={finalizar} disabled={finalizando}>
+              {finalizando ? 'Finalizando...' : 'Finalizar identificação de danos'}
+            </button>
+          </div>
         </div>
       )}
     </div>

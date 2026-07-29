@@ -4,13 +4,17 @@ import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { urlAssinadaFoto } from '../../lib/storage';
+import { abrirImpressao } from '../../lib/imprimir';
+import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
+import { IconPhoto } from '@tabler/icons-react';
 
 interface OrcamentoPendente {
   id: number;
   numero_orcamento: string;
   ordem_servico_id: number;
   observacoes_tecnico: string | null;
-  ordens_servico: { numero_os: string; cliente_nome: string } | null;
+  ordens_servico: { numero_os: string; cliente_nome: string; cliente_id: number } | null;
 }
 
 interface ItemOrcamento {
@@ -19,7 +23,15 @@ interface ItemOrcamento {
   quantidade: number;
   preco_unitario: number | null;
   observacao: string | null;
+  foto_peca_danificada_path: string | null;
   produtos_servicos: { nome: string } | null;
+}
+
+interface Cliente {
+  id: number;
+  razao_social: string;
+  telefone: string | null;
+  email: string | null;
 }
 
 export function OrcamentoFinanceiro() {
@@ -39,7 +51,7 @@ export function OrcamentoFinanceiro() {
     queryFn: async (): Promise<OrcamentoPendente[]> => {
       const { data, error } = await supabase
         .from('orcamentos')
-        .select('id, numero_orcamento, ordem_servico_id, observacoes_tecnico, ordens_servico(numero_os, cliente_nome)')
+        .select('id, numero_orcamento, ordem_servico_id, observacoes_tecnico, ordens_servico(numero_os, cliente_nome, cliente_id)')
         .eq('status', 'Aguardando Precificação')
         .order('data_criacao', { ascending: true });
       if (error) throw error;
@@ -47,16 +59,32 @@ export function OrcamentoFinanceiro() {
     },
   });
 
+  const orcamentoSelecionado = pendentesQuery.data?.find((o) => o.id === selecionadoId);
+
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
     enabled: !!selecionadoId,
     queryFn: async (): Promise<ItemOrcamento[]> => {
       const { data, error } = await supabase
         .from('orcamento_itens')
-        .select('id, produto_servico_id, quantidade, preco_unitario, observacao, produtos_servicos(nome)')
+        .select('id, produto_servico_id, quantidade, preco_unitario, observacao, foto_peca_danificada_path, produtos_servicos(nome)')
         .eq('orcamento_id', selecionadoId!);
       if (error) throw error;
       return data as unknown as ItemOrcamento[];
+    },
+  });
+
+  const clienteQuery = useQuery({
+    queryKey: ['cliente-do-orcamento', orcamentoSelecionado?.ordens_servico?.cliente_id],
+    enabled: !!orcamentoSelecionado?.ordens_servico?.cliente_id,
+    queryFn: async (): Promise<Cliente> => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, razao_social, telefone, email')
+        .eq('id', orcamentoSelecionado!.ordens_servico!.cliente_id)
+        .single();
+      if (error) throw error;
+      return data as Cliente;
     },
   });
 
@@ -73,6 +101,59 @@ export function OrcamentoFinanceiro() {
     (soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade,
     0,
   );
+
+  async function verFoto(caminho: string | null) {
+    if (!caminho) return;
+    const url = await urlAssinadaFoto(caminho);
+    if (url) window.open(url, '_blank');
+  }
+
+  async function imprimirOrcamento() {
+    if (!orcamentoSelecionado) return;
+    const linhas = (itensQuery.data ?? [])
+      .map(
+        (item) => `
+        <tr>
+          <td>${item.produtos_servicos?.nome ?? ''}</td>
+          <td>${item.quantidade}</td>
+          <td>R$ ${(Number(precos[item.id]) || 0).toFixed(2)}</td>
+          <td>R$ ${((Number(precos[item.id]) || 0) * item.quantidade).toFixed(2)}</td>
+        </tr>`,
+      )
+      .join('');
+
+    abrirImpressao(
+      `Orçamento ${orcamentoSelecionado.numero_orcamento}`,
+      `
+      <h1>Orçamento de Manutenção</h1>
+      <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
+      <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor mono">${orcamentoSelecionado.numero_orcamento}</div></div>
+      <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${orcamentoSelecionado.ordens_servico?.numero_os}</div></div>
+      <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${orcamentoSelecionado.ordens_servico?.cliente_nome}</div></div>
+      <div class="secao">Itens</div>
+      <table>
+        <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <p style="text-align:right; font-weight:bold; margin-top:12px;">Total: R$ ${total.toFixed(2)}</p>
+      <div class="secao">Observações</div>
+      <div class="valor">${observacoesFinanceiro || '-'}</div>
+      `,
+    );
+  }
+
+  function compartilhar(vetorEnvio: 'whatsapp' | 'email') {
+    if (!orcamentoSelecionado || !clienteQuery.data) return;
+    const mensagem = `Olá! Segue o orçamento ${orcamentoSelecionado.numero_orcamento} (OS ${orcamentoSelecionado.ordens_servico?.numero_os}) no valor de R$ ${total.toFixed(2)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
+    if (vetorEnvio === 'whatsapp') {
+      window.open(linkWhatsApp(clienteQuery.data.telefone, mensagem), '_blank');
+    } else {
+      window.open(
+        linkEmail(clienteQuery.data.email, `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`, mensagem),
+        '_blank',
+      );
+    }
+  }
 
   async function enviarAoCliente() {
     if (!selecionadoId) return;
@@ -166,6 +247,7 @@ export function OrcamentoFinanceiro() {
                   <th>Item</th>
                   <th>Qtd.</th>
                   <th>Preço unitário (R$)</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -181,6 +263,13 @@ export function OrcamentoFinanceiro() {
                         style={{ width: 110 }}
                       />
                     </td>
+                    <td>
+                      {item.foto_peca_danificada_path && (
+                        <button className="botao-icone" title="Ver foto da peça" onClick={() => verFoto(item.foto_peca_danificada_path)}>
+                          <IconPhoto size={16} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -195,13 +284,26 @@ export function OrcamentoFinanceiro() {
 
             {erro && <p className="erro-login">{erro}</p>}
 
-            <div className="modal-acoes">
-              <button className="botao-secundario" onClick={() => setSelecionadoId(null)}>
-                Fechar
-              </button>
-              <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
-                {enviando ? 'Enviando...' : 'Enviar ao cliente'}
-              </button>
+            <div className="modal-acoes" style={{ justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="botao-secundario" onClick={imprimirOrcamento}>
+                  Imprimir
+                </button>
+                <button className="botao-secundario" onClick={() => compartilhar('whatsapp')}>
+                  WhatsApp
+                </button>
+                <button className="botao-secundario" onClick={() => compartilhar('email')}>
+                  E-mail
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="botao-secundario" onClick={() => setSelecionadoId(null)}>
+                  Fechar
+                </button>
+                <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
+                  {enviando ? 'Enviando...' : 'Enviar ao cliente'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

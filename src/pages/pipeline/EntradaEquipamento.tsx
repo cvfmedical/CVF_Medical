@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { enviarArquivoStorage } from '../../lib/storage';
+import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconPlus } from '@tabler/icons-react';
+import { IconPencil, IconPlus, IconPrinter, IconShare, IconTrash } from '@tabler/icons-react';
+import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { abrirImpressao } from '../../lib/imprimir';
+import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 
 interface Entrada {
   id: number;
@@ -20,6 +24,20 @@ interface Entrada {
   status: string;
   ordem_servico_id: number | null;
   data_entrada: string;
+  triagem_avarias: ChecklistAvarias | null;
+}
+
+interface FotoEntrada {
+  id: number;
+  storage_path: string;
+  descricao: string | null;
+}
+
+interface Cliente {
+  id: number;
+  razao_social: string;
+  telefone: string | null;
+  email: string | null;
 }
 
 async function gerarCodigoEntrada(): Promise<string> {
@@ -31,28 +49,43 @@ async function gerarCodigoEntrada(): Promise<string> {
   return `ENT-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
 }
 
+async function gerarNumeroOS(): Promise<string> {
+  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const { count } = await supabase
+    .from('ordens_servico')
+    .select('id', { count: 'exact', head: true })
+    .like('numero_os', `OS-${hoje}-%`);
+  return `OS-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+}
+
+const formVazio = {
+  cliente_id: '',
+  equipamento_desc: '',
+  equipamento_fab: '',
+  equipamento_sn: '',
+  defeito_relatado: '',
+  condicao_chegada: '',
+};
+
 export function EntradaEquipamento() {
   const { funcionario } = useAuth();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [modalAberto, setModalAberto] = useState(false);
+  const [editando, setEditando] = useState<Entrada | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [foto, setFoto] = useState<File | null>(null);
-  const [form, setForm] = useState({
-    cliente_id: '',
-    equipamento_desc: '',
-    equipamento_fab: '',
-    equipamento_sn: '',
-    defeito_relatado: '',
-    condicao_chegada: '',
-  });
+  const [fotos, setFotos] = useState<File[]>([]);
+  const [form, setForm] = useState(formVazio);
+  const [avarias, setAvarias] = useState<ChecklistAvarias>({});
+  const [convertendo, setConvertendo] = useState<number | null>(null);
 
   const clientesQuery = useQuery({
-    queryKey: ['clientes-opcoes'],
+    queryKey: ['clientes-opcoes-completo'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('clientes').select('id, razao_social').order('razao_social');
+      const { data, error } = await supabase.from('clientes').select('id, razao_social, telefone, email').order('razao_social');
       if (error) throw error;
-      return data as { id: number; razao_social: string }[];
+      return data as Cliente[];
     },
   });
 
@@ -68,8 +101,43 @@ export function EntradaEquipamento() {
     },
   });
 
-  function nomeCliente(id: number) {
-    return clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}`;
+  function cliente(id: number) {
+    return clientesQuery.data?.find((c) => c.id === id);
+  }
+
+  function abrirNova() {
+    setEditando(null);
+    setForm(formVazio);
+    setAvarias({});
+    setFotos([]);
+    setErro(null);
+    setModalAberto(true);
+  }
+
+  function abrirEdicao(e: Entrada) {
+    setEditando(e);
+    setForm({
+      cliente_id: String(e.cliente_id),
+      equipamento_desc: e.equipamento_desc ?? '',
+      equipamento_fab: e.equipamento_fab ?? '',
+      equipamento_sn: e.equipamento_sn ?? '',
+      defeito_relatado: e.defeito_relatado ?? '',
+      condicao_chegada: e.condicao_chegada ?? '',
+    });
+    setAvarias(e.triagem_avarias ?? {});
+    setFotos([]);
+    setErro(null);
+    setModalAberto(true);
+  }
+
+  async function excluir(e: Entrada) {
+    if (!confirm(`Excluir a entrada ${e.codigo_entrada}?`)) return;
+    const { error } = await supabase.from('entradas_equipamento').delete().eq('id', e.id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
   }
 
   async function salvar() {
@@ -80,43 +148,148 @@ export function EntradaEquipamento() {
     }
     setSalvando(true);
     try {
-      const codigo = await gerarCodigoEntrada();
-      const { data: inserida, error } = await supabase
-        .from('entradas_equipamento')
-        .insert({
-          codigo_entrada: codigo,
-          cliente_id: Number(form.cliente_id),
-          equipamento_desc: form.equipamento_desc || null,
-          equipamento_fab: form.equipamento_fab || null,
-          equipamento_sn: form.equipamento_sn || null,
-          defeito_relatado: form.defeito_relatado || null,
-          condicao_chegada: form.condicao_chegada || null,
-          recebido_por: funcionario?.id ?? null,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
+      if (editando) {
+        const { error } = await supabase
+          .from('entradas_equipamento')
+          .update({
+            cliente_id: Number(form.cliente_id),
+            equipamento_desc: form.equipamento_desc || null,
+            equipamento_fab: form.equipamento_fab || null,
+            equipamento_sn: form.equipamento_sn || null,
+            defeito_relatado: form.defeito_relatado || null,
+            condicao_chegada: form.condicao_chegada || null,
+            triagem_avarias: avarias,
+          })
+          .eq('id', editando.id);
+        if (error) throw error;
 
-      if (foto && inserida) {
-        const caminho = await enviarArquivoStorage(`entrada_${inserida.id}`, foto);
-        await supabase.from('fotos_entrada').insert({ entrada_id: inserida.id, storage_path: caminho });
+        for (const foto of fotos) {
+          const caminho = await enviarArquivoStorage(`entrada_${editando.id}`, foto);
+          await supabase.from('fotos_entrada').insert({ entrada_id: editando.id, storage_path: caminho });
+        }
+      } else {
+        const codigo = await gerarCodigoEntrada();
+        const { data: inserida, error } = await supabase
+          .from('entradas_equipamento')
+          .insert({
+            codigo_entrada: codigo,
+            cliente_id: Number(form.cliente_id),
+            equipamento_desc: form.equipamento_desc || null,
+            equipamento_fab: form.equipamento_fab || null,
+            equipamento_sn: form.equipamento_sn || null,
+            defeito_relatado: form.defeito_relatado || null,
+            condicao_chegada: form.condicao_chegada || null,
+            triagem_avarias: avarias,
+            recebido_por: funcionario?.id ?? null,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+
+        for (const foto of fotos) {
+          const caminho = await enviarArquivoStorage(`entrada_${inserida.id}`, foto);
+          await supabase.from('fotos_entrada').insert({ entrada_id: inserida.id, storage_path: caminho });
+        }
       }
 
       setModalAberto(false);
-      setForm({
-        cliente_id: '',
-        equipamento_desc: '',
-        equipamento_fab: '',
-        equipamento_sn: '',
-        defeito_relatado: '',
-        condicao_chegada: '',
-      });
-      setFoto(null);
       qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
     } catch (e) {
       setErro(mensagemErro(e));
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function converterEmOS(entrada: Entrada) {
+    if (entrada.ordem_servico_id) {
+      navigate(`/orcamento-tecnico?os=${entrada.ordem_servico_id}`);
+      return;
+    }
+    setConvertendo(entrada.id);
+    try {
+      const c = cliente(entrada.cliente_id);
+      const numeroOS = await gerarNumeroOS();
+      const { data: os, error } = await supabase
+        .from('ordens_servico')
+        .insert({
+          numero_os: numeroOS,
+          cliente_id: entrada.cliente_id,
+          cliente_nome: c?.razao_social ?? '',
+          optica_desc: entrada.equipamento_desc,
+          optica_fab: entrada.equipamento_fab,
+          optica_sn: entrada.equipamento_sn,
+          defeito_relatado: entrada.defeito_relatado,
+          status_os: '1. TRIAGEM / RECEBIMENTO',
+          triagem_avarias: entrada.triagem_avarias ?? {},
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      await supabase
+        .from('entradas_equipamento')
+        .update({ ordem_servico_id: os.id, status: 'Convertida em OS' })
+        .eq('id', entrada.id);
+
+      qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
+      navigate(`/orcamento-tecnico?os=${os.id}`);
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setConvertendo(null);
+    }
+  }
+
+  async function imprimirRelatorio(entrada: Entrada) {
+    const c = cliente(entrada.cliente_id);
+    const { data: fotosEntrada } = await supabase
+      .from('fotos_entrada')
+      .select('id, storage_path, descricao')
+      .eq('entrada_id', entrada.id);
+
+    const incluirFotos = confirm('Incluir as fotos no relatório impresso? (Cancelar = só os dados, sem fotos)');
+    let fotosHtml = '';
+    if (incluirFotos && fotosEntrada?.length) {
+      const urls = await Promise.all((fotosEntrada as FotoEntrada[]).map((f) => urlAssinadaFoto(f.storage_path)));
+      fotosHtml = `<div class="secao">Fotos</div><div class="fotos">${urls
+        .filter(Boolean)
+        .map((u) => `<img src="${u}" />`)
+        .join('')}</div>`;
+    }
+
+    const avariasMarcadas = CHECKLIST_AVARIAS.filter((item) => entrada.triagem_avarias?.[item.key]).map(
+      (item) => item.label,
+    );
+
+    abrirImpressao(
+      `Entrada ${entrada.codigo_entrada}`,
+      `
+      <h1>Relatório de Entrada do Equipamento</h1>
+      <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
+      <div class="linha"><div class="rotulo">Código</div><div class="valor mono">${entrada.codigo_entrada}</div></div>
+      <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${c?.razao_social ?? ''}</div></div>
+      <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${entrada.equipamento_desc ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Fabricante</div><div class="valor">${entrada.equipamento_fab ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${entrada.equipamento_sn ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${entrada.defeito_relatado ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${entrada.condicao_chegada ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Data</div><div class="valor">${new Date(entrada.data_entrada).toLocaleString('pt-BR')}</div></div>
+      <div class="secao">Avarias identificadas na triagem</div>
+      <div class="valor">${avariasMarcadas.length ? avariasMarcadas.join(', ') : 'Nenhuma avaria marcada'}</div>
+      ${fotosHtml}
+      `,
+    );
+  }
+
+  function compartilharLink(entrada: Entrada) {
+    const c = cliente(entrada.cliente_id);
+    const mensagem = `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`;
+    const escolha = confirm('OK = WhatsApp | Cancelar = E-mail');
+    if (escolha) {
+      window.open(linkWhatsApp(c?.telefone, mensagem), '_blank');
+    } else {
+      window.open(linkEmail(c?.email, `Q-CVF Medical - Entrada ${entrada.codigo_entrada}`, mensagem), '_blank');
     }
   }
 
@@ -126,7 +299,7 @@ export function EntradaEquipamento() {
     <div>
       <div className="crud-cabecalho">
         <h1>Entrada do equipamento</h1>
-        <button className="botao-primario botao-pequeno" onClick={() => setModalAberto(true)}>
+        <button className="botao-primario botao-pequeno" onClick={abrirNova}>
           <IconPlus size={16} /> Nova entrada
         </button>
       </div>
@@ -140,13 +313,14 @@ export function EntradaEquipamento() {
             <th>Nº de série</th>
             <th>Status</th>
             <th>Data</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           {(entradasQuery.data ?? []).map((e) => (
             <tr key={e.id}>
               <td className="mono">{e.codigo_entrada}</td>
-              <td>{nomeCliente(e.cliente_id)}</td>
+              <td>{cliente(e.cliente_id)?.razao_social}</td>
               <td>{e.equipamento_desc}</td>
               <td className="mono">{e.equipamento_sn}</td>
               <td>
@@ -155,11 +329,33 @@ export function EntradaEquipamento() {
                 </Badge>
               </td>
               <td>{new Date(e.data_entrada).toLocaleDateString('pt-BR')}</td>
+              <td className="acoes-tabela">
+                <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(e)}>
+                  <IconPencil size={16} />
+                </button>
+                <button className="botao-icone" title="Imprimir relatório" onClick={() => imprimirRelatorio(e)}>
+                  <IconPrinter size={16} />
+                </button>
+                <button className="botao-icone" title="Enviar link ao cliente" onClick={() => compartilharLink(e)}>
+                  <IconShare size={16} />
+                </button>
+                <button className="botao-icone perigo" title="Excluir" onClick={() => excluir(e)}>
+                  <IconTrash size={16} />
+                </button>
+                <button
+                  className="botao-secundario"
+                  style={{ marginLeft: 6 }}
+                  disabled={convertendo === e.id}
+                  onClick={() => converterEmOS(e)}
+                >
+                  {e.ordem_servico_id ? 'Ver OS' : convertendo === e.id ? 'Convertendo...' : 'Converter em OS'}
+                </button>
+              </td>
             </tr>
           ))}
           {(entradasQuery.data ?? []).length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhum registro encontrado.</td>
+              <td colSpan={7}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>
@@ -167,8 +363,8 @@ export function EntradaEquipamento() {
 
       {modalAberto && (
         <div className="modal-fundo" onClick={() => setModalAberto(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Nova entrada</h2>
+          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <h2>{editando ? `Editar entrada ${editando.codigo_entrada}` : 'Nova entrada'}</h2>
 
             <div className="campo-form">
               <label>Cliente *</label>
@@ -219,9 +415,30 @@ export function EntradaEquipamento() {
                 onChange={(e) => setForm((f) => ({ ...f, condicao_chegada: e.target.value }))}
               />
             </div>
+
             <div className="campo-form">
-              <label>Foto (opcional)</label>
-              <input type="file" accept="image/*" onChange={(e) => setFoto(e.target.files?.[0] ?? null)} />
+              <label>Checklist de avarias identificadas na triagem</label>
+              {CHECKLIST_AVARIAS.map((item) => (
+                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(avarias[item.key])}
+                    onChange={(e) => setAvarias((a) => ({ ...a, [item.key]: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: 13 }}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="campo-form">
+              <label>Fotos (pode escolher várias)</label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => setFotos(Array.from(e.target.files ?? []))}
+              />
+              {fotos.length > 0 && <p style={{ fontSize: 12 }}>{fotos.length} foto(s) selecionada(s)</p>}
             </div>
 
             {erro && <p className="erro-login">{erro}</p>}

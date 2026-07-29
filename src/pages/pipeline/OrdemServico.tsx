@@ -5,14 +5,6 @@ import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 
-const CHECKLIST_AVARIAS = [
-  { key: 'tubo_amassado', label: 'Tubo de inox amassado / deformado' },
-  { key: 'cristal_trincado', label: 'Lente distal / cristal trincado ou riscado' },
-  { key: 'fibra_queimada', label: 'Guia de luz / fibras com queimaduras' },
-  { key: 'ocular_solta', label: 'Ocular / acoplador com folga ou danificado' },
-  { key: 'umidade_interna', label: 'Infiltração de umidade / fungos visíveis' },
-] as const;
-
 async function gerarNumeroOS(): Promise<string> {
   const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const { count } = await supabase
@@ -35,7 +27,6 @@ export function OrdemServico() {
     defeito_relatado: '',
     status_os: STATUS_OS_ORDENADOS[0] as string,
   });
-  const [avarias, setAvarias] = useState<Record<string, boolean>>({});
 
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes'],
@@ -66,11 +57,10 @@ export function OrdemServico() {
         optica_sn: form.optica_sn || null,
         defeito_relatado: form.defeito_relatado || null,
         status_os: form.status_os,
-        triagem_avarias: avarias,
       });
       if (error) throw error;
       setSucesso(`OS ${numeroOS} criada com sucesso.`);
-      setTimeout(() => navigate('/fila-triagem'), 1200);
+      setTimeout(() => navigate('/ordens-servico'), 1200);
     } catch (e) {
       setErro(mensagemErro(e));
     } finally {
@@ -81,6 +71,11 @@ export function OrdemServico() {
   return (
     <div style={{ maxWidth: 560 }}>
       <h1>Abrir nova OS</h1>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 16 }}>
+        Use esta tela só quando não existe uma Entrada do Equipamento prévia (ex: solicitação recebida por
+        telefone). O caminho normal é: Entrada do equipamento → "Converter em OS" — o checklist de avarias é
+        preenchido lá.
+      </p>
 
       <div className="campo-form">
         <label>Cliente *</label>
@@ -123,20 +118,6 @@ export function OrdemServico() {
           value={form.defeito_relatado}
           onChange={(e) => setForm((f) => ({ ...f, defeito_relatado: e.target.value }))}
         />
-      </div>
-
-      <div className="campo-form">
-        <label>Checklist de avarias na triagem</label>
-        {CHECKLIST_AVARIAS.map((item) => (
-          <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <input
-              type="checkbox"
-              checked={Boolean(avarias[item.key])}
-              onChange={(e) => setAvarias((a) => ({ ...a, [item.key]: e.target.checked }))}
-            />
-            <span style={{ fontSize: 13 }}>{item.label}</span>
-          </div>
-        ))}
       </div>
 
       <div className="campo-form">

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { MENU, categoriaDoPath } from '../lib/menu';
 import cvfMarca from '../assets/cvf-marca.png';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
+import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
 
 export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
@@ -94,6 +95,8 @@ export function Layout() {
           <span>CVF MEDICAL MANUT. EM EQUIPAMENTOS CIRÚRGICOS LTDA | CNPJ: 46.948.692/0001-03 | Ribeirão Preto/SP</span>
         </footer>
       </div>
+
+      <AlertaOrcamentosPendentes />
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { ProdutosServicos } from './pages/cadastros/ProdutosServicos';
 import { PadroesCalibracao } from './pages/cadastros/PadroesCalibracao';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
 import { OrdemServico } from './pages/pipeline/OrdemServico';
-import { FilaTriagem } from './pages/pipeline/FilaTriagem';
+import { OrdensServicoPanel } from './pages/pipeline/OrdensServicoPanel';
 import { OrcamentoTecnico } from './pages/pipeline/OrcamentoTecnico';
 import { OrcamentoFinanceiro } from './pages/pipeline/OrcamentoFinanceiro';
 import { Manutencao } from './pages/pipeline/Manutencao';
@@ -37,7 +37,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/padroes-calibracao': PadroesCalibracao,
   '/entrada-equipamento': EntradaEquipamento,
   '/ordens-servico/nova': OrdemServico,
-  '/fila-triagem': FilaTriagem,
+  '/ordens-servico': OrdensServicoPanel,
   '/orcamento-tecnico': OrcamentoTecnico,
   '/orcamento-financeiro': OrcamentoFinanceiro,
   '/manutencao': Manutencao,
