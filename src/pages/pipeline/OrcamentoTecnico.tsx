@@ -4,9 +4,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
-import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconPhoto, IconTrash } from '@tabler/icons-react';
+import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { STATUS_TRIAGEM } from '../../lib/statusOS';
 
 interface Orcamento {
   id: number;
@@ -23,6 +23,11 @@ interface ItemOrcamento {
   foto_peca_danificada_path: string | null;
 }
 
+interface OSOpcao {
+  value: string;
+  label: string;
+}
+
 async function gerarNumeroOrcamento(): Promise<string> {
   const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const { count } = await supabase
@@ -36,16 +41,39 @@ export function OrcamentoTecnico() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { opcoes: opcoesOS } = useOrdensServicoOpcoes();
   const [osId, setOsId] = useState<string>('');
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
+  const [modalAberto, setModalAberto] = useState(false);
   const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1' });
   const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
   const [fotoItem, setFotoItem] = useState<File | null>(null);
 
-  // Pré-seleciona a OS quando vem de "Converter em OS" (Entrada do Equipamento).
+  // Só mostra, no seletor, OS que ainda não passaram da triagem - assim
+  // que o orçamento é criado/finalizado a OS avança de status e some
+  // desta lista (o técnico usa "Ver orçamento" na tela de Ordens de
+  // Serviço para continuar editando um orçamento já em andamento).
+  const opcoesOSQuery = useQuery({
+    queryKey: ['ordens-servico-em-triagem'],
+    queryFn: async (): Promise<OSOpcao[]> => {
+      const { data, error } = await supabase
+        .from('ordens_servico')
+        .select('id, numero_os, cliente_nome')
+        .eq('status_os', STATUS_TRIAGEM)
+        .order('data_abertura', { ascending: false });
+      if (error) throw error;
+      return (data as { id: number; numero_os: string; cliente_nome: string }[]).map((os) => ({
+        value: String(os.id),
+        label: `${os.numero_os} - ${os.cliente_nome}`,
+      }));
+    },
+  });
+
+  // Pré-seleciona a OS quando vem de "Converter em OS" (Entrada do
+  // Equipamento) ou de "Ver orçamento" (Ordens de Serviço) - nesses
+  // casos a OS pode já ter passado da triagem, por isso não depende da
+  // lista filtrada acima.
   useEffect(() => {
     const osParam = searchParams.get('os');
     if (osParam) setOsId(osParam);
@@ -118,11 +146,21 @@ export function OrcamentoTecnico() {
       });
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['orcamento-por-os', osId] });
+      qc.invalidateQueries({ queryKey: ['ordens-servico-em-triagem'] });
     } catch (e) {
       setErro(mensagemErro(e));
     } finally {
       setCriando(false);
     }
+  }
+
+  function abrirModalItem() {
+    setNovoItem({ produto_servico_id: '', quantidade: '1' });
+    setObservacoesSelecionadas([]);
+    setObservacaoParaAdicionar('');
+    setFotoItem(null);
+    setErro(null);
+    setModalAberto(true);
   }
 
   function adicionarObservacaoNaLista() {
@@ -153,10 +191,7 @@ export function OrcamentoTecnico() {
         foto_peca_danificada_path: fotoPath,
       });
       if (error) throw error;
-      setNovoItem({ produto_servico_id: '', quantidade: '1' });
-      setObservacoesSelecionadas([]);
-      setObservacaoParaAdicionar('');
-      setFotoItem(null);
+      setModalAberto(false);
       qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data.id] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -198,12 +233,16 @@ export function OrcamentoTecnico() {
         <label>Ordem de serviço</label>
         <select value={osId} onChange={(e) => setOsId(e.target.value)}>
           <option value="">Selecione...</option>
-          {opcoesOS.map((op) => (
+          {(opcoesOSQuery.data ?? []).map((op) => (
             <option key={op.value} value={op.value}>
               {op.label}
             </option>
           ))}
         </select>
+        <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+          Só mostra OS ainda em triagem. Para continuar um orçamento já em andamento, use "Ver orçamento" em Ordens
+          de serviço.
+        </p>
       </div>
 
       {osId && orcamentoQuery.isLoading && <CarregandoTela />}
@@ -219,9 +258,14 @@ export function OrcamentoTecnico() {
 
       {orcamentoQuery.data && (
         <div>
-          <p className="mono" style={{ color: 'var(--ink-400)' }}>
-            {orcamentoQuery.data.numero_orcamento} — {orcamentoQuery.data.status}
-          </p>
+          <div className="crud-cabecalho">
+            <p className="mono" style={{ color: 'var(--ink-400)' }}>
+              {orcamentoQuery.data.numero_orcamento} — {orcamentoQuery.data.status}
+            </p>
+            <button className="botao-primario botao-pequeno" onClick={abrirModalItem}>
+              <IconPlus size={16} /> Adicionar item
+            </button>
+          </div>
 
           <table className="tabela-crud">
             <thead>
@@ -258,97 +302,123 @@ export function OrcamentoTecnico() {
             </tbody>
           </table>
 
-          <h2 style={{ marginTop: 20 }}>Adicionar item</h2>
-          <div className="campo-form">
-            <label>Produto/serviço</label>
-            <select
-              value={novoItem.produto_servico_id}
-              onChange={(e) => setNovoItem((f) => ({ ...f, produto_servico_id: e.target.value }))}
-            >
-              <option value="">Selecione...</option>
-              {(produtosQuery.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="campo-form">
-            <label>Quantidade</label>
-            <input
-              type="number"
-              value={novoItem.quantidade}
-              onChange={(e) => setNovoItem((f) => ({ ...f, quantidade: e.target.value }))}
-            />
-          </div>
-          <div className="campo-form">
-            <label>Observação (defeito identificado) - pode adicionar mais de um</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                style={{ flex: 1 }}
-                value={observacaoParaAdicionar}
-                onChange={(e) => setObservacaoParaAdicionar(e.target.value)}
-              >
-                <option value="">Selecione...</option>
-                {(observacoesQuery.data ?? [])
-                  .filter((o) => !observacoesSelecionadas.includes(o.descricao))
-                  .map((o) => (
-                    <option key={o.id} value={o.descricao}>
-                      {o.descricao}
-                    </option>
-                  ))}
-              </select>
-              <button type="button" className="botao-secundario" onClick={adicionarObservacaoNaLista}>
-                Adicionar
-              </button>
-            </div>
-            {observacoesSelecionadas.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {observacoesSelecionadas.map((descricao) => (
-                  <span
-                    key={descricao}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: 'var(--paper-50)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      padding: '4px 8px',
-                      fontSize: 12,
-                    }}
-                  >
-                    {descricao}
-                    <button
-                      type="button"
-                      className="botao-icone perigo"
-                      title="Remover"
-                      onClick={() => removerObservacaoDaLista(descricao)}
-                    >
-                      <IconTrash size={14} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-              Não achou a observação certa? Cadastre em "Observações de defeito" (Cadastros Gerais).
-            </p>
-          </div>
-          <div className="campo-form">
-            <label>Foto da peça danificada (opcional)</label>
-            <input type="file" accept="image/*" onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)} />
-          </div>
-
-          {erro && <p className="erro-login">{erro}</p>}
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="botao-primario botao-pequeno" onClick={adicionarItem}>
-              Adicionar item
-            </button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button className="botao-secundario" onClick={finalizar}>
               Finalizar identificação de danos
             </button>
+          </div>
+        </div>
+      )}
+
+      {modalAberto && (
+        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Adicionar item</h2>
+
+            <div className="campo-form">
+              <label>Produto/serviço</label>
+              <select
+                value={novoItem.produto_servico_id}
+                onChange={(e) => setNovoItem((f) => ({ ...f, produto_servico_id: e.target.value }))}
+              >
+                <option value="">Selecione...</option>
+                {(produtosQuery.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="campo-form">
+              <label>Quantidade</label>
+              <input
+                type="number"
+                value={novoItem.quantidade}
+                onChange={(e) => setNovoItem((f) => ({ ...f, quantidade: e.target.value }))}
+              />
+            </div>
+            <div className="campo-form">
+              <label>Observação (defeito identificado) - pode adicionar mais de um</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  style={{ flex: 1 }}
+                  value={observacaoParaAdicionar}
+                  onChange={(e) => setObservacaoParaAdicionar(e.target.value)}
+                >
+                  <option value="">Selecione...</option>
+                  {(observacoesQuery.data ?? [])
+                    .filter((o) => !observacoesSelecionadas.includes(o.descricao))
+                    .map((o) => (
+                      <option key={o.id} value={o.descricao}>
+                        {o.descricao}
+                      </option>
+                    ))}
+                </select>
+                <button type="button" className="botao-secundario" onClick={adicionarObservacaoNaLista}>
+                  Adicionar
+                </button>
+              </div>
+              {observacoesSelecionadas.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {observacoesSelecionadas.map((descricao) => (
+                    <span
+                      key={descricao}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'var(--paper-50)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        fontSize: 12,
+                      }}
+                    >
+                      {descricao}
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover"
+                        onClick={() => removerObservacaoDaLista(descricao)}
+                      >
+                        <IconTrash size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Não achou a observação certa? Cadastre em "Observações de defeito" (Cadastros Gerais).
+              </p>
+            </div>
+            <div className="campo-form">
+              <label>Foto da peça danificada (opcional)</label>
+              <input type="file" accept="image/*" onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)} />
+              {fotoItem && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
+                  <span>{fotoItem.name}</span>
+                  <button
+                    type="button"
+                    className="botao-icone perigo"
+                    title="Remover foto selecionada"
+                    onClick={() => setFotoItem(null)}
+                  >
+                    <IconX size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {erro && <p className="erro-login">{erro}</p>}
+
+            <div className="modal-acoes">
+              <button className="botao-secundario" onClick={() => setModalAberto(false)}>
+                Cancelar
+              </button>
+              <button className="botao-primario" onClick={adicionarItem}>
+                Adicionar item
+              </button>
+            </div>
           </div>
         </div>
       )}

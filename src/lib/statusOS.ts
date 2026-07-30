@@ -16,3 +16,4 @@ export const STATUS_OS_ORDENADOS = [
 ] as const;
 
 export const STATUS_VOLTA_MANUTENCAO = '4. EM MANUTENÇÃO';
+export const STATUS_TRIAGEM = '1. TRIAGEM / RECEBIMENTO';
