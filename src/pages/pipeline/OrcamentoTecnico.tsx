@@ -40,7 +40,6 @@ export function OrcamentoTecnico() {
   const [osId, setOsId] = useState<string>('');
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
-  const [finalizando, setFinalizando] = useState(false);
   const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1' });
   const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
@@ -180,21 +179,11 @@ export function OrcamentoTecnico() {
     if (url) window.open(url, '_blank');
   }
 
-  async function finalizar() {
-    if (!osId) return;
-    setFinalizando(true);
-    try {
-      const { error } = await supabase
-        .from('ordens_servico')
-        .update({ status_os: '2. AGUARDANDO ORÇAMENTO' })
-        .eq('id', Number(osId));
-      if (error) throw error;
-      navigate('/ordens-servico');
-    } catch (e) {
-      setErro(mensagemErro(e));
-    } finally {
-      setFinalizando(false);
-    }
+  function finalizar() {
+    // O status da OS já foi sincronizado pelo gatilho no banco assim que
+    // o orçamento foi criado (status "Aguardando Precificação") - aqui só
+    // precisa navegar de volta.
+    navigate('/ordens-servico');
   }
 
   function nomeProduto(id: number | null) {
@@ -357,8 +346,8 @@ export function OrcamentoTecnico() {
             <button className="botao-primario botao-pequeno" onClick={adicionarItem}>
               Adicionar item
             </button>
-            <button className="botao-secundario" onClick={finalizar} disabled={finalizando}>
-              {finalizando ? 'Finalizando...' : 'Finalizar identificação de danos'}
+            <button className="botao-secundario" onClick={finalizar}>
+              Finalizar identificação de danos
             </button>
           </div>
         </div>

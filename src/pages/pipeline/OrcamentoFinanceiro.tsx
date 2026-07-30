@@ -41,6 +41,7 @@ interface Cliente {
 
 const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
   'Aguardando Precificação': 'copper',
+  'Aguardando Envio ao Cliente': 'copper',
   'Enviado ao Cliente': 'neutro',
   Aprovado: 'teal',
   Recusado: 'danger',
@@ -74,8 +75,12 @@ export function OrcamentoFinanceiro() {
   });
 
   const orcamentoSelecionado = orcamentosQuery.data?.find((o) => o.id === selecionadoId);
-  const pendente = orcamentoSelecionado?.status === 'Aguardando Precificação';
-  const podeAprovarManualmente = orcamentoSelecionado?.status === 'Enviado ao Cliente';
+  const naoEnviado =
+    orcamentoSelecionado?.status === 'Aguardando Precificação' ||
+    orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
+  const podeAprovarManualmente =
+    orcamentoSelecionado?.status === 'Enviado ao Cliente' ||
+    orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -205,11 +210,21 @@ export function OrcamentoFinanceiro() {
   }
 
   async function salvarAlteracoes() {
-    if (!selecionadoId) return;
+    if (!selecionadoId || !orcamentoSelecionado) return;
     setErro(null);
     setSalvando(true);
     try {
       await persistirPrecosEObservacoes();
+      // Assim que a precificação começa a ser salva, o orçamento sai de
+      // "aguardando precificação" para "aguardando envio ao cliente" -
+      // o gatilho no banco já mantém o status da OS em sincronia.
+      if (orcamentoSelecionado.status === 'Aguardando Precificação') {
+        const { error } = await supabase
+          .from('orcamentos')
+          .update({ status: 'Aguardando Envio ao Cliente' })
+          .eq('id', selecionadoId);
+        if (error) throw error;
+      }
       qc.invalidateQueries({ queryKey: ['itens-orcamento-financeiro', selecionadoId] });
       qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
     } catch (e) {
@@ -333,7 +348,9 @@ export function OrcamentoFinanceiro() {
               </td>
               <td className="acoes-tabela">
                 <button className="botao-secundario" onClick={() => abrirOrcamento(o)}>
-                  {o.status === 'Aguardando Precificação' ? 'Precificar' : 'Ver / reimprimir'}
+                  {o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente'
+                    ? 'Precificar'
+                    : 'Ver / reimprimir'}
                 </button>
               </td>
             </tr>
@@ -443,7 +460,7 @@ export function OrcamentoFinanceiro() {
                     Aprovar manualmente
                   </button>
                 )}
-                {pendente && (
+                {naoEnviado && (
                   <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
                     {enviando ? 'Enviando...' : 'Enviar ao cliente'}
                   </button>
