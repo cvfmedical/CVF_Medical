@@ -171,6 +171,7 @@ export function OrcamentoFinanceiro() {
             email: linkEmail(clienteQuery.data.email, `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`, mensagemCompartilhar()),
           }
         : undefined,
+      { assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'] },
     );
   }
 

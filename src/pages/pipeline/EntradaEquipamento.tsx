@@ -422,6 +422,7 @@ export function EntradaEquipamento() {
           `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`,
         ),
       },
+      { assinaturas: ['Recebido por (Q-CVF Medical)', 'Entregue por (Cliente / Transportadora)'] },
     );
   }
 
