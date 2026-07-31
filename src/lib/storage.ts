@@ -19,3 +19,7 @@ export async function urlAssinadaFoto(caminho: string): Promise<string | null> {
   if (error) return null;
   return data.signedUrl;
 }
+
+export async function excluirArquivoStorage(caminho: string): Promise<void> {
+  await supabase.storage.from('fotos-equipamentos').remove([caminho]);
+}

@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
+import { supabase } from '../../lib/supabaseClient';
 
 interface CatalogoOtica {
   id: number;
@@ -10,6 +12,19 @@ interface CatalogoOtica {
 }
 
 export function CatalogoOticas() {
+  const tiposQuery = useQuery({
+    queryKey: ['tipos-otica-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tipos_otica')
+        .select('id, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { id: number; descricao: string }[];
+    },
+  });
+
   return (
     <CrudPage<CatalogoOtica>
       titulo="Catálogo de óticas (modelos)"
@@ -26,7 +41,12 @@ export function CatalogoOticas() {
       campos={[
         { name: 'fabricante', label: 'Fabricante', type: 'text', obrigatorio: true },
         { name: 'modelo', label: 'Modelo', type: 'text', obrigatorio: true },
-        { name: 'tipo', label: 'Tipo', type: 'text' },
+        {
+          name: 'tipo',
+          label: 'Tipo',
+          type: 'select',
+          opcoes: (tiposQuery.data ?? []).map((t) => ({ value: t.descricao, label: t.descricao })),
+        },
         { name: 'diametro_mm', label: 'Diâmetro (mm)', type: 'number' },
         { name: 'angulo_graus', label: 'Ângulo (graus)', type: 'number' },
       ]}

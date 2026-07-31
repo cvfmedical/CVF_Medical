@@ -14,6 +14,9 @@ import { EquipamentosClientes } from './pages/cadastros/EquipamentosClientes';
 import { ProdutosServicos } from './pages/cadastros/ProdutosServicos';
 import { PadroesCalibracao } from './pages/cadastros/PadroesCalibracao';
 import { ObservacoesDefeito } from './pages/cadastros/ObservacoesDefeito';
+import { CategoriasProdutosServicos } from './pages/cadastros/CategoriasProdutosServicos';
+import { TiposOtica } from './pages/cadastros/TiposOtica';
+import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
 import { OrdemServico } from './pages/pipeline/OrdemServico';
 import { OrdensServicoPanel } from './pages/pipeline/OrdensServicoPanel';
@@ -38,6 +41,9 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/produtos-servicos': ProdutosServicos,
   '/padroes-calibracao': PadroesCalibracao,
   '/observacoes-defeito': ObservacoesDefeito,
+  '/categorias-produtos-servicos': CategoriasProdutosServicos,
+  '/tipos-otica': TiposOtica,
+  '/condicoes-chegada': CondicoesChegada,
   '/entrada-equipamento': EntradaEquipamento,
   '/ordens-servico/nova': OrdemServico,
   '/ordens-servico': OrdensServicoPanel,

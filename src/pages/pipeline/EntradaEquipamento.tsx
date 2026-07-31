@@ -2,15 +2,16 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
+import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconEye, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash } from '@tabler/icons-react';
+import { IconEye, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash, IconX } from '@tabler/icons-react';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
+import { CapturaFoto } from '../../components/CapturaFoto';
 
 interface Entrada {
   id: number;
@@ -79,7 +80,6 @@ const formVazio = {
   equipamento_fab: '',
   equipamento_sn: '',
   defeito_relatado: '',
-  condicao_chegada: '',
   nf_remessa_numero: '',
   nf_remessa_serie: '',
   nf_remessa_chave_acesso: '',
@@ -102,6 +102,22 @@ export function EntradaEquipamento() {
   const [convertendo, setConvertendo] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<Entrada | null>(null);
   const [fotosDetalhe, setFotosDetalhe] = useState<{ id: number; url: string | null }[]>([]);
+  const [condicaoParaAdicionar, setCondicaoParaAdicionar] = useState('');
+  const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
+  const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
+
+  const condicoesChegadaQuery = useQuery({
+    queryKey: ['condicoes-chegada-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('condicoes_chegada')
+        .select('id, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { id: number; descricao: string }[];
+    },
+  });
 
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes-completo'],
@@ -153,8 +169,27 @@ export function EntradaEquipamento() {
     setForm(formVazio);
     setAvarias({});
     setFotos([]);
+    setFotosExistentes([]);
+    setCondicoesSelecionadas([]);
+    setCondicaoParaAdicionar('');
     setErro(null);
     setModalAberto(true);
+  }
+
+  function adicionarCondicaoNaLista() {
+    if (!condicaoParaAdicionar) return;
+    setCondicoesSelecionadas((lista) =>
+      lista.includes(condicaoParaAdicionar) ? lista : [...lista, condicaoParaAdicionar],
+    );
+    setCondicaoParaAdicionar('');
+  }
+
+  function removerCondicaoDaLista(descricao: string) {
+    setCondicoesSelecionadas((lista) => lista.filter((c) => c !== descricao));
+  }
+
+  function removerFotoSelecionada(indice: number) {
+    setFotos((lista) => lista.filter((_, i) => i !== indice));
   }
 
   function abrirEdicao(e: Entrada) {
@@ -165,7 +200,6 @@ export function EntradaEquipamento() {
       equipamento_fab: e.equipamento_fab ?? '',
       equipamento_sn: e.equipamento_sn ?? '',
       defeito_relatado: e.defeito_relatado ?? '',
-      condicao_chegada: e.condicao_chegada ?? '',
       nf_remessa_numero: e.nf_remessa_numero ?? '',
       nf_remessa_serie: e.nf_remessa_serie ?? '',
       nf_remessa_chave_acesso: e.nf_remessa_chave_acesso ?? '',
@@ -175,8 +209,38 @@ export function EntradaEquipamento() {
     });
     setAvarias(e.triagem_avarias ?? {});
     setFotos([]);
+    setCondicoesSelecionadas(e.condicao_chegada ? e.condicao_chegada.split('; ').filter(Boolean) : []);
+    setCondicaoParaAdicionar('');
     setErro(null);
     setModalAberto(true);
+    carregarFotosExistentes(e.id);
+  }
+
+  async function carregarFotosExistentes(entradaId: number) {
+    setFotosExistentes([]);
+    const { data } = await supabase
+      .from('fotos_entrada')
+      .select('id, storage_path')
+      .eq('entrada_id', entradaId);
+    if (!data) return;
+    const comUrl = await Promise.all(
+      (data as { id: number; storage_path: string }[]).map(async (f) => ({
+        ...f,
+        url: await urlAssinadaFoto(f.storage_path),
+      })),
+    );
+    setFotosExistentes(comUrl);
+  }
+
+  async function excluirFotoExistente(foto: { id: number; storage_path: string }) {
+    if (!confirm('Excluir esta foto?')) return;
+    const { error } = await supabase.from('fotos_entrada').delete().eq('id', foto.id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    await excluirArquivoStorage(foto.storage_path);
+    setFotosExistentes((lista) => lista.filter((f) => f.id !== foto.id));
   }
 
   async function excluir(e: Entrada) {
@@ -203,7 +267,7 @@ export function EntradaEquipamento() {
         equipamento_fab: form.equipamento_fab || null,
         equipamento_sn: form.equipamento_sn || null,
         defeito_relatado: form.defeito_relatado || null,
-        condicao_chegada: form.condicao_chegada || null,
+        condicao_chegada: condicoesSelecionadas.length ? condicoesSelecionadas.join('; ') : null,
         triagem_avarias: avarias,
         nf_remessa_numero: form.nf_remessa_numero || null,
         nf_remessa_serie: form.nf_remessa_serie || null,
@@ -509,11 +573,58 @@ export function EntradaEquipamento() {
               />
             </div>
             <div className="campo-form">
-              <label>Condição de chegada</label>
-              <textarea
-                value={form.condicao_chegada}
-                onChange={(e) => setForm((f) => ({ ...f, condicao_chegada: e.target.value }))}
-              />
+              <label>Condição de chegada - pode adicionar mais de uma</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  style={{ flex: 1 }}
+                  value={condicaoParaAdicionar}
+                  onChange={(e) => setCondicaoParaAdicionar(e.target.value)}
+                >
+                  <option value="">Selecione...</option>
+                  {(condicoesChegadaQuery.data ?? [])
+                    .filter((c) => !condicoesSelecionadas.includes(c.descricao))
+                    .map((c) => (
+                      <option key={c.id} value={c.descricao}>
+                        {c.descricao}
+                      </option>
+                    ))}
+                </select>
+                <button type="button" className="botao-secundario" onClick={adicionarCondicaoNaLista}>
+                  Adicionar
+                </button>
+              </div>
+              {condicoesSelecionadas.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {condicoesSelecionadas.map((descricao) => (
+                    <span
+                      key={descricao}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'var(--paper-50)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        fontSize: 12,
+                      }}
+                    >
+                      {descricao}
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover"
+                        onClick={() => removerCondicaoDaLista(descricao)}
+                      >
+                        <IconTrash size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Não achou a condição certa? Cadastre em "Condições de chegada" (Cadastros Gerais).
+              </p>
             </div>
 
             <h2 style={{ fontSize: 14, marginTop: 20 }}>Nota fiscal de remessa para conserto</h2>
@@ -590,15 +701,62 @@ export function EntradaEquipamento() {
               ))}
             </div>
 
+            {fotosExistentes.length > 0 && (
+              <div className="campo-form">
+                <label>Fotos já salvas</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {fotosExistentes.map((f) => (
+                    <div key={f.id} style={{ position: 'relative' }}>
+                      {f.url && (
+                        <img
+                          src={f.url}
+                          alt=""
+                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4 }}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Excluir foto"
+                        style={{ position: 'absolute', top: -8, right: -8, background: 'var(--paper-0)', borderRadius: '50%' }}
+                        onClick={() => excluirFotoExistente(f)}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="campo-form">
-              <label>Fotos (pode escolher várias)</label>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => setFotos(Array.from(e.target.files ?? []))}
-              />
-              {fotos.length > 0 && <p style={{ fontSize: 12 }}>{fotos.length} foto(s) selecionada(s)</p>}
+              <label>Fotos (pode escolher várias ou tirar com a câmera)</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setFotos((lista) => [...lista, ...Array.from(e.target.files ?? [])])}
+                />
+                <CapturaFoto onCapturar={(arquivo) => setFotos((lista) => [...lista, arquivo])} />
+              </div>
+              {fotos.length > 0 && (
+                <ul style={{ listStyle: 'none', padding: 0, marginTop: 8 }}>
+                  {fotos.map((foto, i) => (
+                    <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 4 }}>
+                      <span>{foto.name}</span>
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover"
+                        onClick={() => removerFotoSelecionada(i)}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {erro && <p className="erro-login">{erro}</p>}

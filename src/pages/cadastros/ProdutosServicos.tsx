@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
+import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { CapturaFoto } from '../../components/CapturaFoto';
+import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 
 interface ProdutoServico {
   id: number;
@@ -64,6 +66,8 @@ export function ProdutosServicos() {
   const [filtro, setFiltro] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [fotos, setFotos] = useState<File[]>([]);
+  const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
 
   const query = useQuery({
     queryKey: ['produtos-servicos'],
@@ -80,6 +84,19 @@ export function ProdutosServicos() {
       const { data, error } = await supabase.from('fornecedores').select('id, razao_social').order('razao_social');
       if (error) throw error;
       return data as { id: number; razao_social: string }[];
+    },
+  });
+
+  const categoriasQuery = useQuery({
+    queryKey: ['categorias-produtos-servicos-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categorias_produtos_servicos')
+        .select('id, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { id: number; descricao: string }[];
     },
   });
 
@@ -109,6 +126,8 @@ export function ProdutosServicos() {
   function abrirNovo() {
     setEditando(null);
     setForm(formVazio);
+    setFotos([]);
+    setFotosExistentes([]);
     setErro(null);
     setModalAberto(true);
   }
@@ -131,8 +150,41 @@ export function ProdutosServicos() {
       observacoes: p.observacoes ?? '',
       status_ativo: p.status_ativo,
     });
+    setFotos([]);
     setErro(null);
     setModalAberto(true);
+    carregarFotosExistentes(p.id);
+  }
+
+  async function carregarFotosExistentes(produtoId: number) {
+    setFotosExistentes([]);
+    const { data } = await supabase
+      .from('fotos_produto_servico')
+      .select('id, storage_path')
+      .eq('produto_servico_id', produtoId);
+    if (!data) return;
+    const comUrl = await Promise.all(
+      (data as { id: number; storage_path: string }[]).map(async (f) => ({
+        ...f,
+        url: await urlAssinadaFoto(f.storage_path),
+      })),
+    );
+    setFotosExistentes(comUrl);
+  }
+
+  async function excluirFotoExistente(foto: { id: number; storage_path: string }) {
+    if (!confirm('Excluir esta foto?')) return;
+    const { error } = await supabase.from('fotos_produto_servico').delete().eq('id', foto.id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    await excluirArquivoStorage(foto.storage_path);
+    setFotosExistentes((lista) => lista.filter((f) => f.id !== foto.id));
+  }
+
+  function removerFotoSelecionada(indice: number) {
+    setFotos((lista) => lista.filter((_, i) => i !== indice));
   }
 
   async function excluir(p: ProdutoServico) {
@@ -173,13 +225,22 @@ export function ProdutosServicos() {
         observacoes: form.observacoes || null,
         status_ativo: form.status_ativo,
       };
+      let produtoId: number;
       if (editando) {
         const { error } = await supabase.from('produtos_servicos').update(dados).eq('id', editando.id);
         if (error) throw error;
+        produtoId = editando.id;
       } else {
-        const { error } = await supabase.from('produtos_servicos').insert(dados);
+        const { data: inserido, error } = await supabase.from('produtos_servicos').insert(dados).select('id').single();
         if (error) throw error;
+        produtoId = inserido.id;
       }
+
+      for (const foto of fotos) {
+        const caminho = await enviarArquivoStorage(`produto_${produtoId}`, foto);
+        await supabase.from('fotos_produto_servico').insert({ produto_servico_id: produtoId, storage_path: caminho });
+      }
+
       setModalAberto(false);
       qc.invalidateQueries({ queryKey: ['produtos-servicos'] });
     } catch (e) {
@@ -278,7 +339,17 @@ export function ProdutosServicos() {
             </div>
             <div className="campo-form">
               <label>Categoria</label>
-              <input type="text" value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))} />
+              <select value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}>
+                <option value="">Selecione...</option>
+                {(categoriasQuery.data ?? []).map((c) => (
+                  <option key={c.id} value={c.descricao}>
+                    {c.descricao}
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Não achou a categoria certa? Cadastre em "Categorias de produtos/serviços" (Cadastros Gerais).
+              </p>
             </div>
             <div className="campo-form">
               <label>Marca/fabricante</label>
@@ -346,6 +417,59 @@ export function ProdutosServicos() {
                 />
                 Ativo
               </label>
+            </div>
+
+            {fotosExistentes.length > 0 && (
+              <div className="campo-form">
+                <label>Fotos já salvas</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {fotosExistentes.map((f) => (
+                    <div key={f.id} style={{ position: 'relative' }}>
+                      {f.url && (
+                        <img src={f.url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4 }} />
+                      )}
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Excluir foto"
+                        style={{ position: 'absolute', top: -8, right: -8, background: 'var(--paper-0)', borderRadius: '50%' }}
+                        onClick={() => excluirFotoExistente(f)}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="campo-form">
+              <label>Fotos (pode escolher várias ou tirar com a câmera)</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setFotos((lista) => [...lista, ...Array.from(e.target.files ?? [])])}
+                />
+                <CapturaFoto onCapturar={(arquivo) => setFotos((lista) => [...lista, arquivo])} />
+              </div>
+              {fotos.length > 0 && (
+                <ul style={{ listStyle: 'none', padding: 0, marginTop: 8 }}>
+                  {fotos.map((foto, i) => (
+                    <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 4 }}>
+                      <span>{foto.name}</span>
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover"
+                        onClick={() => removerFotoSelecionada(i)}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {erro && <p className="erro-login">{erro}</p>}
