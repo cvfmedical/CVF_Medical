@@ -1,0 +1,278 @@
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../../lib/supabaseClient';
+import { mensagemErro } from '../../lib/erros';
+import { useAuth } from '../../contexts/AuthContext';
+import { Badge } from '../../components/Badge';
+import { CarregandoTela } from '../../components/CarregandoTela';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
+
+interface SolicitacaoCompra {
+  id: number;
+  numero_solicitacao: string;
+  produto_servico_id: number | null;
+  descricao_item: string | null;
+  quantidade: number;
+  fornecedor_id: number | null;
+  status: string;
+  observacoes: string | null;
+  data_solicitacao: string;
+}
+
+const STATUS_OPCOES = ['Solicitado', 'Aprovado', 'Pedido Realizado', 'Recebido', 'Cancelado'];
+
+const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
+  Solicitado: 'copper',
+  Aprovado: 'neutro',
+  'Pedido Realizado': 'neutro',
+  Recebido: 'teal',
+  Cancelado: 'danger',
+};
+
+async function gerarNumeroSolicitacao(): Promise<string> {
+  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const { count } = await supabase
+    .from('solicitacoes_compra')
+    .select('id', { count: 'exact', head: true })
+    .like('numero_solicitacao', `SOL-${hoje}-%`);
+  return `SOL-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+}
+
+const formVazio = {
+  produto_servico_id: '',
+  descricao_item: '',
+  quantidade: '1',
+  fornecedor_id: '',
+  observacoes: '',
+};
+
+export function SolicitacoesCompra() {
+  const { funcionario } = useAuth();
+  const qc = useQueryClient();
+  const [modalAberto, setModalAberto] = useState(false);
+  const [form, setForm] = useState(formVazio);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  const query = useQuery({
+    queryKey: ['solicitacoes-compra'],
+    queryFn: async (): Promise<SolicitacaoCompra[]> => {
+      const { data, error } = await supabase
+        .from('solicitacoes_compra')
+        .select('*')
+        .order('data_solicitacao', { ascending: false });
+      if (error) throw error;
+      return data as SolicitacaoCompra[];
+    },
+  });
+
+  const produtosQuery = useQuery({
+    queryKey: ['produtos-servicos-opcoes-compras'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('produtos_servicos')
+        .select('id, nome')
+        .eq('status_ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return data as { id: number; nome: string }[];
+    },
+  });
+
+  const fornecedoresQuery = useQuery({
+    queryKey: ['fornecedores-opcoes-compras'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('fornecedores').select('id, razao_social').order('razao_social');
+      if (error) throw error;
+      return data as { id: number; razao_social: string }[];
+    },
+  });
+
+  function nomeItem(s: SolicitacaoCompra) {
+    if (s.produto_servico_id) return produtosQuery.data?.find((p) => p.id === s.produto_servico_id)?.nome ?? `#${s.produto_servico_id}`;
+    return s.descricao_item ?? '-';
+  }
+
+  function nomeFornecedor(id: number | null) {
+    return id ? fornecedoresQuery.data?.find((f) => f.id === id)?.razao_social ?? `#${id}` : '-';
+  }
+
+  function abrirNova() {
+    setForm(formVazio);
+    setErro(null);
+    setModalAberto(true);
+  }
+
+  async function salvar() {
+    setErro(null);
+    if (!form.produto_servico_id && !form.descricao_item) {
+      setErro('Selecione um produto/peça ou descreva o item.');
+      return;
+    }
+    if (!form.quantidade || Number(form.quantidade) <= 0) {
+      setErro('Informe uma quantidade válida.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      const numero = await gerarNumeroSolicitacao();
+      const { error } = await supabase.from('solicitacoes_compra').insert({
+        numero_solicitacao: numero,
+        produto_servico_id: form.produto_servico_id ? Number(form.produto_servico_id) : null,
+        descricao_item: form.produto_servico_id ? null : form.descricao_item || null,
+        quantidade: Number(form.quantidade),
+        fornecedor_id: form.fornecedor_id ? Number(form.fornecedor_id) : null,
+        observacoes: form.observacoes || null,
+        status: 'Solicitado',
+        solicitado_por: funcionario?.id ?? null,
+      });
+      if (error) throw error;
+      setModalAberto(false);
+      qc.invalidateQueries({ queryKey: ['solicitacoes-compra'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function mudarStatus(id: number, novoStatus: string) {
+    const { error } = await supabase.from('solicitacoes_compra').update({ status: novoStatus }).eq('id', id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['solicitacoes-compra'] });
+    qc.invalidateQueries({ queryKey: ['produtos-estoque'] });
+  }
+
+  async function excluir(id: number, numero: string) {
+    if (!confirm(`Excluir a solicitação ${numero}?`)) return;
+    const { error } = await supabase.from('solicitacoes_compra').delete().eq('id', id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['solicitacoes-compra'] });
+  }
+
+  if (query.isLoading || produtosQuery.isLoading || fornecedoresQuery.isLoading) return <CarregandoTela />;
+
+  return (
+    <div>
+      <div className="crud-cabecalho">
+        <h1>Solicitação de compras</h1>
+        <button className="botao-primario botao-pequeno" onClick={abrirNova}>
+          <IconPlus size={16} /> Nova solicitação
+        </button>
+      </div>
+
+      <table className="tabela-crud">
+        <thead>
+          <tr>
+            <th>Nº solicitação</th>
+            <th>Item</th>
+            <th>Quantidade</th>
+            <th>Fornecedor</th>
+            <th>Status</th>
+            <th>Data</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {(query.data ?? []).map((s) => (
+            <tr key={s.id}>
+              <td className="mono">{s.numero_solicitacao}</td>
+              <td>{nomeItem(s)}</td>
+              <td>{s.quantidade}</td>
+              <td>{nomeFornecedor(s.fornecedor_id)}</td>
+              <td>
+                <select value={s.status} onChange={(e) => mudarStatus(s.id, e.target.value)}>
+                  {STATUS_OPCOES.map((op) => (
+                    <option key={op} value={op}>
+                      {op}
+                    </option>
+                  ))}
+                </select>
+                <Badge tono={TONO_STATUS[s.status] ?? 'neutro'}>{s.status}</Badge>
+              </td>
+              <td>{new Date(s.data_solicitacao).toLocaleDateString('pt-BR')}</td>
+              <td className="acoes-tabela">
+                <button className="botao-icone perigo" title="Excluir" onClick={() => excluir(s.id, s.numero_solicitacao)}>
+                  <IconTrash size={16} />
+                </button>
+              </td>
+            </tr>
+          ))}
+          {(query.data ?? []).length === 0 && (
+            <tr>
+              <td colSpan={7}>Nenhuma solicitação encontrada.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {modalAberto && (
+        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Nova solicitação de compra</h2>
+
+            <div className="campo-form">
+              <label>Produto/peça já cadastrado (opcional)</label>
+              <select
+                value={form.produto_servico_id}
+                onChange={(e) => setForm((f) => ({ ...f, produto_servico_id: e.target.value }))}
+              >
+                <option value="">Selecione...</option>
+                {(produtosQuery.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!form.produto_servico_id && (
+              <div className="campo-form">
+                <label>Ou descreva o item (ainda não cadastrado)</label>
+                <textarea
+                  value={form.descricao_item}
+                  onChange={(e) => setForm((f) => ({ ...f, descricao_item: e.target.value }))}
+                />
+              </div>
+            )}
+            <div className="campo-form">
+              <label>Quantidade *</label>
+              <input type="number" value={form.quantidade} onChange={(e) => setForm((f) => ({ ...f, quantidade: e.target.value }))} />
+            </div>
+            <div className="campo-form">
+              <label>Fornecedor (opcional)</label>
+              <select value={form.fornecedor_id} onChange={(e) => setForm((f) => ({ ...f, fornecedor_id: e.target.value }))}>
+                <option value="">Selecione...</option>
+                {(fornecedoresQuery.data ?? []).map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.razao_social}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="campo-form">
+              <label>Observações</label>
+              <textarea value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))} />
+            </div>
+
+            {erro && <p className="erro-login">{erro}</p>}
+
+            <div className="modal-acoes">
+              <button className="botao-secundario" onClick={() => setModalAberto(false)} disabled={salvando}>
+                Cancelar
+              </button>
+              <button className="botao-primario" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

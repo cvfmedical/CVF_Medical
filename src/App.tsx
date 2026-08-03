@@ -29,6 +29,9 @@ import { TesteEstanqueidade } from './pages/pipeline/TesteEstanqueidade';
 import { TesteAutoclave } from './pages/pipeline/TesteAutoclave';
 import { Entrega } from './pages/pipeline/Entrega';
 import { Laudos } from './pages/pipeline/Laudos';
+import { InventarioEstoque } from './pages/estoque/InventarioEstoque';
+import { LotesEstoque } from './pages/estoque/LotesEstoque';
+import { SolicitacoesCompra } from './pages/estoque/SolicitacoesCompra';
 
 // Telas já migradas - path -> componente. O que não estiver aqui cai no
 // placeholder EmConstrucao (ainda não implementado).
@@ -56,6 +59,9 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/teste-autoclave': TesteAutoclave,
   '/entrega': Entrega,
   '/laudos': Laudos,
+  '/estoque': InventarioEstoque,
+  '/estoque/lotes': LotesEstoque,
+  '/estoque/compras': SolicitacoesCompra,
 };
 
 export default function App() {
