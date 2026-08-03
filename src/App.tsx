@@ -35,6 +35,7 @@ import { SolicitacoesCompra } from './pages/estoque/SolicitacoesCompra';
 import { ContasReceber } from './pages/financeiro/ContasReceber';
 import { ContasPagar } from './pages/financeiro/ContasPagar';
 import { Faturamento } from './pages/financeiro/Faturamento';
+import { ContratosManutencao } from './pages/comercial/ContratosManutencao';
 
 // Telas já migradas - path -> componente. O que não estiver aqui cai no
 // placeholder EmConstrucao (ainda não implementado).
@@ -68,6 +69,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/financeiro/contas-receber': ContasReceber,
   '/financeiro/contas-pagar': ContasPagar,
   '/financeiro/faturamento': Faturamento,
+  '/comercial/contratos': ContratosManutencao,
 };
 
 export default function App() {
