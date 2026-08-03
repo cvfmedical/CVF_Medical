@@ -37,9 +37,7 @@ export function Funcionarios() {
             chave: 'auth_user_id',
             label: 'Conta web',
             render: (r) => (
-              <Badge tono={r.auth_user_id ? 'teal' : 'copper'}>
-                {r.auth_user_id ? 'Vinculada' : 'Pendente (convite manual)'}
-              </Badge>
+              <Badge tono={r.auth_user_id ? 'teal' : 'copper'}>{r.auth_user_id ? 'Vinculada' : 'Sem acesso'}</Badge>
             ),
           },
         ]}
@@ -74,8 +72,7 @@ export function Funcionarios() {
         }}
       />
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 12 }}>
-        O convite de acesso à web (criação da conta no Supabase Auth) ainda é um passo manual do
-        administrador, feito por script - ver plano de migração, seção "Cutover de autenticação".
+        Para convidar um funcionário sem acesso web, use "Configurações e usuários" (Sistema).
       </p>
     </div>
   );
