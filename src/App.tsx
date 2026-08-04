@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { Login } from './pages/Login';
+import { DefinirSenha } from './pages/DefinirSenha';
 import { DashboardHome } from './pages/DashboardHome';
 import { EmConstrucao } from './pages/EmConstrucao';
 import { Layout } from './components/Layout';
@@ -84,6 +85,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/definir-senha" element={<DefinirSenha />} />
 
       <Route
         element={

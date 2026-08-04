@@ -105,7 +105,10 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const { data: convite, error: conviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(funcionario.email);
+  const origem = req.headers.get('origin') ?? 'https://systemcvfmedical.netlify.app';
+  const { data: convite, error: conviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(funcionario.email, {
+    redirectTo: `${origem}/definir-senha`,
+  });
   if (conviteError || !convite.user) {
     return new Response(JSON.stringify({ error: conviteError?.message ?? 'Erro ao enviar convite.' }), {
       status: 500,
