@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.110.9",
     "@tabler/icons-react": "^3.45.0",
     "@tanstack/react-query": "^5.101.4",
+    "@techstark/opencv-js": "^5.0.0-release.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.83.0",
