@@ -9,6 +9,7 @@ import { MENU } from './lib/menu';
 import { Clientes } from './pages/cadastros/Clientes';
 import { Funcionarios } from './pages/cadastros/Funcionarios';
 import { Fornecedores } from './pages/cadastros/Fornecedores';
+import { Transportadoras } from './pages/cadastros/Transportadoras';
 import { CatalogoOticas } from './pages/cadastros/CatalogoOticas';
 import { EquipamentosClientes } from './pages/cadastros/EquipamentosClientes';
 import { ProdutosServicos } from './pages/cadastros/ProdutosServicos';
@@ -37,6 +38,7 @@ import { ContasPagar } from './pages/financeiro/ContasPagar';
 import { Faturamento } from './pages/financeiro/Faturamento';
 import { ContratosManutencao } from './pages/comercial/ContratosManutencao';
 import { ConfiguracoesUsuarios } from './pages/sistema/ConfiguracoesUsuarios';
+import { AcessoPortalCliente } from './pages/sistema/AcessoPortalCliente';
 
 // Telas já migradas - path -> componente. O que não estiver aqui cai no
 // placeholder EmConstrucao (ainda não implementado).
@@ -44,6 +46,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/clientes': Clientes,
   '/funcionarios': Funcionarios,
   '/fornecedores': Fornecedores,
+  '/transportadoras': Transportadoras,
   '/catalogo-oticas': CatalogoOticas,
   '/equipamentos': EquipamentosClientes,
   '/produtos-servicos': ProdutosServicos,
@@ -72,6 +75,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/financeiro/faturamento': Faturamento,
   '/comercial/contratos': ContratosManutencao,
   '/sistema/config': ConfiguracoesUsuarios,
+  '/sistema/portal-cliente': AcessoPortalCliente,
 };
 
 export default function App() {
