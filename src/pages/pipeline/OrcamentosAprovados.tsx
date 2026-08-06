@@ -8,6 +8,7 @@ interface OrcamentoAprovado {
   numero_orcamento: string;
   ordem_servico_id: number;
   data_resposta_cliente: string | null;
+  valor_fixo_contrato: number | null;
   ordens_servico: {
     numero_os: string;
     cliente_nome: string;
@@ -33,7 +34,7 @@ export function OrcamentosAprovados() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, ordem_servico_id, data_resposta_cliente, ordens_servico(numero_os, cliente_nome, optica_desc, optica_fab, optica_sn), orcamento_itens(quantidade, preco_unitario)',
+          'id, numero_orcamento, ordem_servico_id, data_resposta_cliente, valor_fixo_contrato, ordens_servico(numero_os, cliente_nome, optica_desc, optica_fab, optica_sn), orcamento_itens(quantidade, preco_unitario)',
         )
         .eq('status', 'Aprovado')
         .order('data_resposta_cliente', { ascending: true });
@@ -43,6 +44,7 @@ export function OrcamentosAprovados() {
   });
 
   function total(o: OrcamentoAprovado) {
+    if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
     return o.orcamento_itens.reduce((soma, i) => soma + (i.preco_unitario ?? 0) * i.quantidade, 0);
   }
 

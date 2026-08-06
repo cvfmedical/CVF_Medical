@@ -20,6 +20,7 @@ interface Orcamento {
   observacoes_financeiro: string | null;
   aprovacao_manual: boolean | null;
   motivo_aprovacao_manual: string | null;
+  valor_fixo_contrato: number | null;
   ordens_servico: {
     numero_os: string;
     cliente_nome: string;
@@ -75,6 +76,10 @@ export function OrcamentoFinanceiro() {
   // robusto: funciona mesmo se o usuário for direto no botão).
   const [precos, setPrecos] = useState<Record<number, string>>({});
   const [precoFixoSelecionado, setPrecoFixoSelecionado] = useState('');
+  // Valor de contrato aplicado direto no total do orçamento - os itens
+  // ficam com preço zerado (só de referência, não somam no total nesse
+  // caso). null = precificação normal por item.
+  const [valorFixoContrato, setValorFixoContrato] = useState<number | null>(null);
 
   const orcamentosQuery = useQuery({
     queryKey: ['orcamentos-todos'],
@@ -82,7 +87,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -157,26 +162,29 @@ export function OrcamentoFinanceiro() {
     setPrecos(iniciais);
   }, [itensQuery.data]);
 
-  const total = (itensQuery.data ?? []).reduce(
-    (soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade,
-    0,
-  );
+  const total =
+    valorFixoContrato != null
+      ? valorFixoContrato
+      : (itensQuery.data ?? []).reduce((soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade, 0);
 
-  // Distribui o valor fixo negociado igualmente por unidade entre os
-  // itens - assim o total bate exatamente com o valor do contrato, e a
-  // conta a receber (gatilho no banco, soma preco_unitario*quantidade)
-  // continua calculando certo sem precisar de nenhuma mudança lá.
+  // Valor de contrato vira o total do orçamento direto - os itens ficam
+  // com preço zerado (só de referência de quais peças foram usadas, não
+  // entram na soma). O gatilho que cria a conta a receber (021/024/033)
+  // já sabe usar orcamentos.valor_fixo_contrato quando ele está setado.
   function aplicarPrecoFixo() {
     const preco = precosFixosQuery.data?.find((p) => String(p.id) === precoFixoSelecionado);
     if (!preco || !itensQuery.data?.length) return;
-    const somaQuantidades = itensQuery.data.reduce((s, item) => s + item.quantidade, 0);
-    if (somaQuantidades <= 0) return;
-    const precoPorUnidade = preco.valor_fixo / somaQuantidades;
-    const novosPrecos: Record<number, string> = {};
+    const zerados: Record<number, string> = {};
     for (const item of itensQuery.data) {
-      novosPrecos[item.id] = precoPorUnidade.toFixed(2);
+      zerados[item.id] = '0';
     }
-    setPrecos(novosPrecos);
+    setPrecos(zerados);
+    setValorFixoContrato(preco.valor_fixo);
+  }
+
+  function removerValorFixo() {
+    setValorFixoContrato(null);
+    setPrecoFixoSelecionado('');
   }
 
   async function verFoto(caminho: string | null) {
@@ -281,6 +289,7 @@ export function OrcamentoFinanceiro() {
     setSelecionadoId(o.id);
     setObservacoesFinanceiro(o.observacoes_financeiro ?? '');
     setPrecoFixoSelecionado('');
+    setValorFixoContrato(o.valor_fixo_contrato ?? null);
     setErro(null);
   }
 
@@ -295,7 +304,7 @@ export function OrcamentoFinanceiro() {
     }
     const { error } = await supabase
       .from('orcamentos')
-      .update({ observacoes_financeiro: observacoesFinanceiro || null })
+      .update({ observacoes_financeiro: observacoesFinanceiro || null, valor_fixo_contrato: valorFixoContrato })
       .eq('id', selecionadoId!);
     if (error) throw error;
   }
@@ -486,10 +495,23 @@ export function OrcamentoFinanceiro() {
                     ))}
                   </select>
                 </div>
-                <button className="botao-secundario" onClick={aplicarPrecoFixo} disabled={!precoFixoSelecionado}>
-                  Aplicar aos itens
-                </button>
+                {valorFixoContrato != null ? (
+                  <button className="botao-secundario perigo" onClick={removerValorFixo}>
+                    Remover valor fixo
+                  </button>
+                ) : (
+                  <button className="botao-secundario" onClick={aplicarPrecoFixo} disabled={!precoFixoSelecionado}>
+                    Aplicar ao total
+                  </button>
+                )}
               </div>
+            )}
+
+            {valorFixoContrato != null && (
+              <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 12 }}>
+                Valor fixo de contrato aplicado (R$ {valorFixoContrato.toFixed(2)}) - os preços dos itens abaixo
+                ficam só de referência, não somam no total.
+              </p>
             )}
 
             <table className="tabela-crud">
@@ -511,6 +533,7 @@ export function OrcamentoFinanceiro() {
                         type="number"
                         value={precos[item.id] ?? ''}
                         onChange={(e) => setPrecos((p) => ({ ...p, [item.id]: e.target.value }))}
+                        disabled={valorFixoContrato != null}
                         style={{ width: 110 }}
                       />
                     </td>
