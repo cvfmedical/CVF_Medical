@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { mensagemErro } from '../../lib/erros';
+import { IconTrash } from '@tabler/icons-react';
 
 interface ContratoManutencao {
   id: number;
@@ -36,8 +38,26 @@ function statusExibicao(c: ContratoManutencao): { texto: string; tono: 'copper' 
   return { texto: 'Ativo', tono: 'teal' };
 }
 
+interface CatalogoOtica {
+  id: number;
+  fabricante: string;
+  modelo: string;
+  tipo: string | null;
+}
+
+interface PrecoFixo {
+  id: number;
+  catalogo_otica_id: number;
+  valor_fixo: number;
+}
+
 export function ContratosManutencao() {
+  const qc = useQueryClient();
   const [numeroGerado, setNumeroGerado] = useState('');
+  const [contratoPrecos, setContratoPrecos] = useState<ContratoManutencao | null>(null);
+  const [catalogoOticaId, setCatalogoOticaId] = useState('');
+  const [valorFixoNovo, setValorFixoNovo] = useState('');
+  const [erroPrecos, setErroPrecos] = useState<string | null>(null);
 
   useEffect(() => {
     gerarNumeroContrato().then(setNumeroGerado);
@@ -52,11 +72,76 @@ export function ContratosManutencao() {
     },
   });
 
+  const catalogoOticasQuery = useQuery({
+    queryKey: ['catalogo-oticas-opcoes-contratos'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('catalogo_oticas').select('id, fabricante, modelo, tipo').order('fabricante');
+      if (error) throw error;
+      return data as CatalogoOtica[];
+    },
+  });
+
+  const precosFixosQuery = useQuery({
+    queryKey: ['contrato-precos-fixos', contratoPrecos?.id],
+    enabled: !!contratoPrecos,
+    queryFn: async (): Promise<PrecoFixo[]> => {
+      const { data, error } = await supabase
+        .from('contrato_precos_fixos')
+        .select('id, catalogo_otica_id, valor_fixo')
+        .eq('contrato_manutencao_id', contratoPrecos!.id);
+      if (error) throw error;
+      return data as PrecoFixo[];
+    },
+  });
+
   function nomeCliente(id: number) {
     return clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}`;
   }
 
+  function nomeOtica(catalogoOticaId: number) {
+    const o = catalogoOticasQuery.data?.find((c) => c.id === catalogoOticaId);
+    return o ? `${o.fabricante} - ${o.modelo}${o.tipo ? ` (${o.tipo})` : ''}` : `#${catalogoOticaId}`;
+  }
+
+  function abrirPrecosFixos(c: ContratoManutencao) {
+    setContratoPrecos(c);
+    setCatalogoOticaId('');
+    setValorFixoNovo('');
+    setErroPrecos(null);
+  }
+
+  async function adicionarPrecoFixo() {
+    if (!contratoPrecos) return;
+    setErroPrecos(null);
+    if (!catalogoOticaId || !valorFixoNovo) {
+      setErroPrecos('Selecione o modelo de ótica e informe o valor.');
+      return;
+    }
+    const { error } = await supabase.from('contrato_precos_fixos').insert({
+      contrato_manutencao_id: contratoPrecos.id,
+      catalogo_otica_id: Number(catalogoOticaId),
+      valor_fixo: Number(valorFixoNovo),
+    });
+    if (error) {
+      setErroPrecos(mensagemErro(error));
+      return;
+    }
+    setCatalogoOticaId('');
+    setValorFixoNovo('');
+    qc.invalidateQueries({ queryKey: ['contrato-precos-fixos', contratoPrecos.id] });
+  }
+
+  async function excluirPrecoFixo(id: number) {
+    const { error } = await supabase.from('contrato_precos_fixos').delete().eq('id', id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['contrato-precos-fixos', contratoPrecos?.id] });
+  }
+
   return (
+    <>
     <CrudPage<ContratoManutencao>
       titulo="Contratos de manutenção"
       tabela="contratos_manutencao"
@@ -85,6 +170,15 @@ export function ContratosManutencao() {
             const s = statusExibicao(r);
             return <Badge tono={s.tono}>{s.texto}</Badge>;
           },
+        },
+        {
+          chave: 'precos_fixos',
+          label: 'Preços fixos por modelo',
+          render: (r) => (
+            <button className="botao-secundario botao-pequeno" onClick={() => abrirPrecosFixos(r)}>
+              Preços fixos
+            </button>
+          ),
         },
       ]}
       campos={[
@@ -130,5 +224,76 @@ export function ContratosManutencao() {
         setNumeroGerado(await gerarNumeroContrato());
       }}
     />
+
+    {contratoPrecos && (
+      <div className="modal-fundo" onClick={() => setContratoPrecos(null)}>
+        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <h2>Preços fixos - {contratoPrecos.numero_contrato}</h2>
+          <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+            {nomeCliente(contratoPrecos.cliente_id)} - preço fechado por modelo de ótica (diferente da mensalidade).
+            O financeiro seleciona o modelo na hora de precificar um orçamento desse cliente.
+          </p>
+
+          <table className="tabela-crud">
+            <thead>
+              <tr>
+                <th>Modelo de ótica</th>
+                <th>Valor fixo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(precosFixosQuery.data ?? []).map((p) => (
+                <tr key={p.id}>
+                  <td>{nomeOtica(p.catalogo_otica_id)}</td>
+                  <td>R$ {Number(p.valor_fixo).toFixed(2)}</td>
+                  <td className="acoes-tabela">
+                    <button className="botao-icone perigo" title="Remover" onClick={() => excluirPrecoFixo(p.id)}>
+                      <IconTrash size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {(precosFixosQuery.data ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={3}>Nenhum preço fixo cadastrado ainda.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+            <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+              <label>Modelo de ótica</label>
+              <select value={catalogoOticaId} onChange={(e) => setCatalogoOticaId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {(catalogoOticasQuery.data ?? []).map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.fabricante} - {o.modelo}
+                    {o.tipo ? ` (${o.tipo})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="campo-form" style={{ width: 140, marginBottom: 0 }}>
+              <label>Valor fixo (R$)</label>
+              <input type="number" value={valorFixoNovo} onChange={(e) => setValorFixoNovo(e.target.value)} />
+            </div>
+            <button className="botao-secundario" onClick={adicionarPrecoFixo}>
+              Adicionar
+            </button>
+          </div>
+
+          {erroPrecos && <p className="erro-login">{erroPrecos}</p>}
+
+          <div className="modal-acoes">
+            <button className="botao-primario" onClick={() => setContratoPrecos(null)}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

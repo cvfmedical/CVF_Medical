@@ -48,6 +48,12 @@ interface Cliente {
   email: string | null;
 }
 
+interface PrecoFixoContrato {
+  id: number;
+  valor_fixo: number;
+  catalogo_oticas: { fabricante: string; modelo: string; tipo: string | null } | null;
+}
+
 const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
   'Aguardando Precificação': 'copper',
   'Aguardando Envio ao Cliente': 'copper',
@@ -68,6 +74,7 @@ export function OrcamentoFinanceiro() {
   // salvar/enviar, em vez de depender só do onBlur de cada input (mais
   // robusto: funciona mesmo se o usuário for direto no botão).
   const [precos, setPrecos] = useState<Record<number, string>>({});
+  const [precoFixoSelecionado, setPrecoFixoSelecionado] = useState('');
 
   const orcamentosQuery = useQuery({
     queryKey: ['orcamentos-todos'],
@@ -124,6 +131,23 @@ export function OrcamentoFinanceiro() {
     },
   });
 
+  // Preços fixos negociados em contrato (Comercial > Contratos de
+  // manutenção), diferentes por modelo de ótica - o financeiro escolhe
+  // o modelo aqui em vez de digitar preço item a item.
+  const precosFixosQuery = useQuery({
+    queryKey: ['precos-fixos-contrato', orcamentoSelecionado?.ordens_servico?.cliente_id],
+    enabled: !!orcamentoSelecionado?.ordens_servico?.cliente_id,
+    queryFn: async (): Promise<PrecoFixoContrato[]> => {
+      const { data, error } = await supabase
+        .from('contrato_precos_fixos')
+        .select('id, valor_fixo, catalogo_oticas(fabricante, modelo, tipo), contratos_manutencao!inner(cliente_id, status)')
+        .eq('contratos_manutencao.cliente_id', orcamentoSelecionado!.ordens_servico!.cliente_id)
+        .eq('contratos_manutencao.status', 'Ativo');
+      if (error) throw error;
+      return data as unknown as PrecoFixoContrato[];
+    },
+  });
+
   useEffect(() => {
     if (!itensQuery.data) return;
     const iniciais: Record<number, string> = {};
@@ -137,6 +161,23 @@ export function OrcamentoFinanceiro() {
     (soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade,
     0,
   );
+
+  // Distribui o valor fixo negociado igualmente por unidade entre os
+  // itens - assim o total bate exatamente com o valor do contrato, e a
+  // conta a receber (gatilho no banco, soma preco_unitario*quantidade)
+  // continua calculando certo sem precisar de nenhuma mudança lá.
+  function aplicarPrecoFixo() {
+    const preco = precosFixosQuery.data?.find((p) => String(p.id) === precoFixoSelecionado);
+    if (!preco || !itensQuery.data?.length) return;
+    const somaQuantidades = itensQuery.data.reduce((s, item) => s + item.quantidade, 0);
+    if (somaQuantidades <= 0) return;
+    const precoPorUnidade = preco.valor_fixo / somaQuantidades;
+    const novosPrecos: Record<number, string> = {};
+    for (const item of itensQuery.data) {
+      novosPrecos[item.id] = precoPorUnidade.toFixed(2);
+    }
+    setPrecos(novosPrecos);
+  }
 
   async function verFoto(caminho: string | null) {
     if (!caminho) return;
@@ -239,6 +280,7 @@ export function OrcamentoFinanceiro() {
   function abrirOrcamento(o: Orcamento) {
     setSelecionadoId(o.id);
     setObservacoesFinanceiro(o.observacoes_financeiro ?? '');
+    setPrecoFixoSelecionado('');
     setErro(null);
   }
 
@@ -418,6 +460,37 @@ export function OrcamentoFinanceiro() {
             <h2>
               {orcamentoSelecionado.numero_orcamento} <Badge tono={TONO_STATUS[orcamentoSelecionado.status] ?? 'neutro'}>{orcamentoSelecionado.status}</Badge>
             </h2>
+
+            {(precosFixosQuery.data ?? []).length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'flex-end',
+                  background: 'var(--paper-50)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Valor fixo do contrato (por modelo de ótica)</label>
+                  <select value={precoFixoSelecionado} onChange={(e) => setPrecoFixoSelecionado(e.target.value)}>
+                    <option value="">Selecione o modelo...</option>
+                    {(precosFixosQuery.data ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.catalogo_oticas?.fabricante} - {p.catalogo_oticas?.modelo}
+                        {p.catalogo_oticas?.tipo ? ` (${p.catalogo_oticas.tipo})` : ''} - R$ {Number(p.valor_fixo).toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button className="botao-secundario" onClick={aplicarPrecoFixo} disabled={!precoFixoSelecionado}>
+                  Aplicar aos itens
+                </button>
+              </div>
+            )}
 
             <table className="tabela-crud">
               <thead>
