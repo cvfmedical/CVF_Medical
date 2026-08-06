@@ -6,7 +6,8 @@ import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
-import { STATUS_TRIAGEM, STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
+import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
+import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 
 interface Orcamento {
   id: number;
@@ -55,25 +56,19 @@ export function OrcamentoTecnico() {
   // têm um orçamento em montagem (status "Aguardando Orçamento") - antes
   // só a primeira aparecia aqui, forçando o técnico a ir em "Ver
   // orçamento" em Ordens de Serviço pra continuar um orçamento já
-  // iniciado, o que não era óbvio.
-  const opcoesOSQuery = useQuery({
-    queryKey: ['ordens-servico-para-orcamento-tecnico'],
-    queryFn: async (): Promise<OSOpcao[]> => {
-      const { data, error } = await supabase
-        .from('ordens_servico')
-        .select('id, numero_os, cliente_nome, status_os')
-        .in('status_os', [STATUS_TRIAGEM, STATUS_AGUARDANDO_ORCAMENTO])
-        .order('data_abertura', { ascending: false });
-      if (error) throw error;
-      return (data as { id: number; numero_os: string; cliente_nome: string; status_os: string }[]).map((os) => ({
-        value: String(os.id),
-        label:
-          os.status_os === STATUS_AGUARDANDO_ORCAMENTO
-            ? `${os.numero_os} - ${os.cliente_nome} (orçamento em andamento)`
-            : `${os.numero_os} - ${os.cliente_nome}`,
-      }));
-    },
-  });
+  // iniciado, o que não era óbvio. Query compartilhada com o alerta
+  // flutuante (AlertaOSAguardandoOrcamento).
+  const osAguardandoQuery = useOSAguardandoOrcamento();
+  const opcoesOSQuery = {
+    ...osAguardandoQuery,
+    data: osAguardandoQuery.data?.map((os): OSOpcao => ({
+      value: String(os.id),
+      label:
+        os.status_os === STATUS_AGUARDANDO_ORCAMENTO
+          ? `${os.numero_os} - ${os.cliente_nome} (orçamento em andamento)`
+          : `${os.numero_os} - ${os.cliente_nome}`,
+    })),
+  };
 
   // Pré-seleciona a OS quando vem de "Converter em OS" (Entrada do
   // Equipamento) ou de "Ver orçamento" (Ordens de Serviço) - nesses

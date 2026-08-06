@@ -2,8 +2,12 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
+import { linkEmail } from '../../lib/compartilhar';
+import { STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
+
+const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
 interface ContaReceber {
   id: number;
@@ -17,6 +21,7 @@ interface ContaReceber {
   nf_serie: string | null;
   nf_chave_acesso: string | null;
   nf_data_emissao: string | null;
+  orcamentos: { ordem_servico_id: number; ordens_servico: { status_os: string | null } | null } | null;
 }
 
 const formVazio = {
@@ -39,22 +44,31 @@ export function Faturamento() {
     queryFn: async (): Promise<ContaReceber[]> => {
       const { data, error } = await supabase
         .from('contas_receber')
-        .select('id, numero_conta, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao')
+        .select(
+          'id, numero_conta, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, orcamentos(ordem_servico_id, ordens_servico(status_os))',
+        )
         .neq('status', 'Cancelado')
         .order('data_vencimento', { ascending: false });
       if (error) throw error;
-      return data as ContaReceber[];
+      return data as unknown as ContaReceber[];
     },
   });
 
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes-faturamento'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('clientes').select('id, razao_social');
+      const { data, error } = await supabase.from('clientes').select('id, razao_social, email');
       if (error) throw error;
-      return data as { id: number; razao_social: string }[];
+      return data as { id: number; razao_social: string; email: string | null }[];
     },
   });
+
+  function liberadaParaFaturar(c: ContaReceber): boolean {
+    const statusOS = c.orcamentos?.ordens_servico?.status_os;
+    return !c.nf_numero && (statusOS === STATUS_PRONTO_ENTREGA || statusOS === STATUS_ENTREGUE);
+  }
+
+  const liberadas = (query.data ?? []).filter(liberadaParaFaturar);
 
   function nomeCliente(id: number | null) {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}` : '-';
@@ -114,6 +128,15 @@ export function Faturamento() {
     qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
   }
 
+  // mailto: não anexa arquivo - igual a todo resto do sistema (WhatsApp/
+  // e-mail em outras telas), quem envia precisa anexar o PDF da nota,
+  // laudo e boleto manualmente no próprio cliente de e-mail.
+  function enviarPorEmail(c: ContaReceber) {
+    const email = clientesQuery.data?.find((cl) => cl.id === c.cliente_id)?.email;
+    const corpo = `Olá! Segue a nota fiscal ${c.nf_tipo ?? ''} ${c.nf_numero ?? ''}${c.nf_serie ? '/' + c.nf_serie : ''} referente a "${c.descricao ?? c.numero_conta}". Anexamos o PDF da nota (e do laudo/boleto, quando aplicável) a este e-mail.`;
+    window.open(linkEmail(email, `Q-CVF Medical - Nota fiscal ${c.nf_numero ?? ''}`, corpo), '_blank');
+  }
+
   if (query.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
 
   return (
@@ -123,6 +146,22 @@ export function Faturamento() {
         Controle/registro apenas - a emissão da nota continua sendo feita fora do sistema (Mentora ou o site da
         prefeitura). Aqui só se anota os dados da nota já emitida, ligada à conta a receber correspondente.
       </p>
+
+      {liberadas.length > 0 && (
+        <div
+          style={{
+            background: 'var(--paper-50)',
+            border: '1px solid var(--copper-500)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            marginBottom: 16,
+            fontSize: 13,
+          }}
+        >
+          {liberadas.length} conta{liberadas.length > 1 ? 's' : ''} liberada{liberadas.length > 1 ? 's' : ''} para
+          faturamento (equipamento pronto/entregue, sem NF lançada).
+        </div>
+      )}
 
       <table className="tabela-crud">
         <thead>
@@ -151,14 +190,21 @@ export function Faturamento() {
                       {c.nf_serie ? `/${c.nf_serie}` : ''}
                     </span>
                   </>
+                ) : liberadaParaFaturar(c) ? (
+                  <Badge tono="copper">Liberado</Badge>
                 ) : (
-                  <Badge tono="copper">Não faturado</Badge>
+                  <Badge tono="neutro">Não faturado</Badge>
                 )}
               </td>
               <td className="acoes-tabela">
                 <button className="botao-secundario" onClick={() => abrirLancarNota(c)}>
                   {c.nf_numero ? 'Editar NF' : 'Lançar NF'}
                 </button>
+                {c.nf_numero && (
+                  <button className="botao-secundario" onClick={() => enviarPorEmail(c)}>
+                    Enviar por e-mail
+                  </button>
+                )}
                 {c.nf_numero && (
                   <button className="botao-secundario perigo" onClick={() => removerNota(c)}>
                     Remover NF

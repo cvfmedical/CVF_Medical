@@ -5,6 +5,7 @@ import { MENU, categoriaDoPath } from '../lib/menu';
 import cvfMarca from '../assets/cvf-marca.png';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
+import { AlertaOSAguardandoOrcamento } from './AlertaOSAguardandoOrcamento';
 
 export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
@@ -97,6 +98,7 @@ export function Layout() {
       </div>
 
       <AlertaOrcamentosPendentes />
+      <AlertaOSAguardandoOrcamento />
     </div>
   );
 }

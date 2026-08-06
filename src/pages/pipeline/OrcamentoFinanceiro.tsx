@@ -8,6 +8,7 @@ import { Badge } from '../../components/Badge';
 import { urlAssinadaFoto } from '../../lib/storage';
 import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
+import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -19,7 +20,14 @@ interface Orcamento {
   observacoes_financeiro: string | null;
   aprovacao_manual: boolean | null;
   motivo_aprovacao_manual: string | null;
-  ordens_servico: { numero_os: string; cliente_nome: string; cliente_id: number } | null;
+  ordens_servico: {
+    numero_os: string;
+    cliente_nome: string;
+    cliente_id: number;
+    optica_desc: string | null;
+    optica_fab: string | null;
+    optica_sn: string | null;
+  } | null;
 }
 
 interface ItemOrcamento {
@@ -67,7 +75,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, ordens_servico(numero_os, cliente_nome, cliente_id)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -140,7 +148,37 @@ export function OrcamentoFinanceiro() {
     return `Olá! Segue o orçamento ${orcamentoSelecionado?.numero_orcamento} (OS ${orcamentoSelecionado?.ordens_servico?.numero_os}) no valor de R$ ${total.toFixed(2)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
   }
 
-  function imprimirOrcamento() {
+  async function buscarRegistroEntradaHtml(): Promise<string> {
+    if (!orcamentoSelecionado) return '';
+    const { data: entrada } = await supabase
+      .from('entradas_equipamento')
+      .select(
+        'id, codigo_entrada, condicao_chegada, data_entrada, numero_controle_cliente, nf_remessa_numero, nf_remessa_serie, nf_remessa_cfop, nf_remessa_chave_acesso, nf_remessa_data_emissao, nf_remessa_valor, triagem_avarias',
+      )
+      .eq('ordem_servico_id', orcamentoSelecionado.ordem_servico_id)
+      .maybeSingle();
+
+    if (!entrada) {
+      return `<div class="secao">Registro de Entrada</div><p>Nenhum registro de entrada encontrado para esta OS.</p>`;
+    }
+
+    const { data: fotos } = await supabase
+      .from('fotos_entrada')
+      .select('storage_path')
+      .eq('entrada_id', entrada.id);
+    const urls = fotos ? (await Promise.all(fotos.map((f) => urlAssinadaFoto(f.storage_path)))).filter((u): u is string => !!u) : [];
+
+    const dados: DadosEntradaParaRelatorio = {
+      ...entrada,
+      equipamento_desc: orcamentoSelecionado.ordens_servico?.optica_desc ?? null,
+      equipamento_fab: orcamentoSelecionado.ordens_servico?.optica_fab ?? null,
+      equipamento_sn: orcamentoSelecionado.ordens_servico?.optica_sn ?? null,
+      defeito_relatado: null,
+    };
+    return montarCorpoRegistroEntrada(clienteQuery.data ? { razao_social: clienteQuery.data.razao_social } : undefined, dados, urls);
+  }
+
+  async function imprimirOrcamento() {
     if (!orcamentoSelecionado) return;
     const linhas = (itensQuery.data ?? [])
       .map(
@@ -153,6 +191,8 @@ export function OrcamentoFinanceiro() {
         </tr>`,
       )
       .join('');
+
+    const registroEntradaHtml = await buscarRegistroEntradaHtml();
 
     abrirImpressao(
       `Orçamento ${orcamentoSelecionado.numero_orcamento}`,
@@ -171,6 +211,7 @@ export function OrcamentoFinanceiro() {
       <p style="text-align:right; font-weight:bold; margin-top:12px;">Total: R$ ${total.toFixed(2)}</p>
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>
+      ${registroEntradaHtml}
       `,
       clienteQuery.data
         ? {
@@ -265,7 +306,7 @@ export function OrcamentoFinanceiro() {
         .eq('id', orcamentoSelecionado.ordem_servico_id);
 
       // Abre o relatório pra salvar/imprimir assim que o envio é confirmado.
-      imprimirOrcamento();
+      await imprimirOrcamento();
 
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
@@ -443,7 +484,7 @@ export function OrcamentoFinanceiro() {
 
             <div className="modal-acoes" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="botao-secundario" onClick={imprimirOrcamento}>
+                <button className="botao-secundario" onClick={() => imprimirOrcamento()}>
                   Imprimir
                 </button>
                 <button className="botao-secundario" onClick={() => compartilhar('whatsapp')}>
