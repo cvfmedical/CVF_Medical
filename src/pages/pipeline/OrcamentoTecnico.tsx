@@ -6,7 +6,7 @@ import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
-import { STATUS_TRIAGEM } from '../../lib/statusOS';
+import { STATUS_TRIAGEM, STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 
 interface Orcamento {
   id: number;
@@ -51,22 +51,26 @@ export function OrcamentoTecnico() {
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
   const [fotoItem, setFotoItem] = useState<File | null>(null);
 
-  // Só mostra, no seletor, OS que ainda não passaram da triagem - assim
-  // que o orçamento é criado/finalizado a OS avança de status e some
-  // desta lista (o técnico usa "Ver orçamento" na tela de Ordens de
-  // Serviço para continuar editando um orçamento já em andamento).
+  // Mostra tanto OS ainda em triagem (orçamento novo) quanto OS que já
+  // têm um orçamento em montagem (status "Aguardando Orçamento") - antes
+  // só a primeira aparecia aqui, forçando o técnico a ir em "Ver
+  // orçamento" em Ordens de Serviço pra continuar um orçamento já
+  // iniciado, o que não era óbvio.
   const opcoesOSQuery = useQuery({
-    queryKey: ['ordens-servico-em-triagem'],
+    queryKey: ['ordens-servico-para-orcamento-tecnico'],
     queryFn: async (): Promise<OSOpcao[]> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_nome')
-        .eq('status_os', STATUS_TRIAGEM)
+        .select('id, numero_os, cliente_nome, status_os')
+        .in('status_os', [STATUS_TRIAGEM, STATUS_AGUARDANDO_ORCAMENTO])
         .order('data_abertura', { ascending: false });
       if (error) throw error;
-      return (data as { id: number; numero_os: string; cliente_nome: string }[]).map((os) => ({
+      return (data as { id: number; numero_os: string; cliente_nome: string; status_os: string }[]).map((os) => ({
         value: String(os.id),
-        label: `${os.numero_os} - ${os.cliente_nome}`,
+        label:
+          os.status_os === STATUS_AGUARDANDO_ORCAMENTO
+            ? `${os.numero_os} - ${os.cliente_nome} (orçamento em andamento)`
+            : `${os.numero_os} - ${os.cliente_nome}`,
       }));
     },
   });
@@ -147,7 +151,7 @@ export function OrcamentoTecnico() {
       });
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['orcamento-por-os', osId] });
-      qc.invalidateQueries({ queryKey: ['ordens-servico-em-triagem'] });
+      qc.invalidateQueries({ queryKey: ['ordens-servico-para-orcamento-tecnico'] });
     } catch (e) {
       setErro(mensagemErro(e));
     } finally {
@@ -247,8 +251,7 @@ export function OrcamentoTecnico() {
           ))}
         </select>
         <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-          Só mostra OS ainda em triagem. Para continuar um orçamento já em andamento, use "Ver orçamento" em Ordens
-          de serviço.
+          Mostra OS em triagem (orçamento novo) e OS com orçamento já iniciado, ainda não enviado ao financeiro.
         </p>
       </div>
 
