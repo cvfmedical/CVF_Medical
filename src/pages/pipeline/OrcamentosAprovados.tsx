@@ -1,55 +1,24 @@
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabaseClient';
 import { CarregandoTela } from '../../components/CarregandoTela';
-
-interface OrcamentoAprovado {
-  id: number;
-  numero_orcamento: string;
-  ordem_servico_id: number;
-  data_resposta_cliente: string | null;
-  valor_fixo_contrato: number | null;
-  ordens_servico: {
-    numero_os: string;
-    cliente_nome: string;
-    optica_desc: string | null;
-    optica_fab: string | null;
-    optica_sn: string | null;
-  } | null;
-  orcamento_itens: { quantidade: number; preco_unitario: number | null }[];
-}
+import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
 
 // Consulta para o técnico ver, em ordem de aprovação (quem aprovou
 // primeiro aparece primeiro), quais orçamentos já foram aprovados pelo
 // cliente e estão prontos para iniciar a manutenção. Atualiza sozinha
 // (poll de 30s) conforme novas aprovações chegam pelo portal do cliente
-// ou pela aprovação manual do financeiro.
+// ou pela aprovação manual do financeiro. Query compartilhada com o
+// alerta flutuante (AlertaOrcamentosAprovados).
 export function OrcamentosAprovados() {
   const navigate = useNavigate();
-
-  const query = useQuery({
-    queryKey: ['orcamentos-aprovados'],
-    refetchInterval: 30_000,
-    queryFn: async (): Promise<OrcamentoAprovado[]> => {
-      const { data, error } = await supabase
-        .from('orcamentos')
-        .select(
-          'id, numero_orcamento, ordem_servico_id, data_resposta_cliente, valor_fixo_contrato, ordens_servico(numero_os, cliente_nome, optica_desc, optica_fab, optica_sn), orcamento_itens(quantidade, preco_unitario)',
-        )
-        .eq('status', 'Aprovado')
-        .order('data_resposta_cliente', { ascending: true });
-      if (error) throw error;
-      return data as unknown as OrcamentoAprovado[];
-    },
-  });
+  const query = useOrcamentosAprovados();
 
   function total(o: OrcamentoAprovado) {
     if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
     return o.orcamento_itens.reduce((soma, i) => soma + (i.preco_unitario ?? 0) * i.quantidade, 0);
   }
 
-  function iniciarManutencao(o: OrcamentoAprovado) {
-    navigate(`/manutencao?os=${o.ordem_servico_id}`);
+  function iniciarManutencao(osId: number) {
+    navigate(`/manutencao?os=${osId}`);
   }
 
   if (query.isLoading) return <CarregandoTela />;
@@ -87,7 +56,7 @@ export function OrcamentosAprovados() {
               </td>
               <td>R$ {total(o).toFixed(2)}</td>
               <td className="acoes-tabela">
-                <button className="botao-primario botao-pequeno" onClick={() => iniciarManutencao(o)}>
+                <button className="botao-primario botao-pequeno" onClick={() => iniciarManutencao(o.ordem_servico_id)}>
                   Iniciar manutenção
                 </button>
               </td>

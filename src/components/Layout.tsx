@@ -4,8 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { MENU, categoriaDoPath } from '../lib/menu';
 import cvfMarca from '../assets/cvf-marca.png';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
-import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
-import { AlertaOSAguardandoOrcamento } from './AlertaOSAguardandoOrcamento';
+import { AlertasFlutuantes } from './AlertasFlutuantes';
 
 export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
@@ -97,8 +96,7 @@ export function Layout() {
         </footer>
       </div>
 
-      <AlertaOrcamentosPendentes />
-      <AlertaOSAguardandoOrcamento />
+      <AlertasFlutuantes />
     </div>
   );
 }
