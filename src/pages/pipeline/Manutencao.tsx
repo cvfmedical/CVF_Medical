@@ -82,17 +82,22 @@ export function Manutencao() {
       if (!orcamento) return [];
       const { data, error } = await supabase
         .from('orcamento_itens')
-        .select('id, quantidade, produtos_servicos(nome)')
+        .select('id, quantidade, descricao_servico, produtos_servicos(nome)')
         .eq('orcamento_id', orcamento.id);
       if (error) throw error;
-      return (data as unknown as { id: number; quantidade: number; produtos_servicos: { nome: string } | null }[]).map(
-        (item) => ({
-          item_id: item.id,
-          produto_nome: item.produtos_servicos?.nome ?? '-',
-          quantidade: item.quantidade,
-          substituido: false,
-        }),
-      );
+      return (
+        data as unknown as {
+          id: number;
+          quantidade: number;
+          descricao_servico: string | null;
+          produtos_servicos: { nome: string } | null;
+        }[]
+      ).map((item) => ({
+        item_id: item.id,
+        produto_nome: item.produtos_servicos?.nome ?? item.descricao_servico ?? '-',
+        quantidade: item.quantidade,
+        substituido: false,
+      }));
     },
   });
 

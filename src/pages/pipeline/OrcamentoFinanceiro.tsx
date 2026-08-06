@@ -28,6 +28,7 @@ interface ItemOrcamento {
   quantidade: number;
   preco_unitario: number | null;
   observacao: string | null;
+  descricao_servico: string | null;
   foto_peca_danificada_path: string | null;
   produtos_servicos: { nome: string } | null;
 }
@@ -74,6 +75,10 @@ export function OrcamentoFinanceiro() {
     },
   });
 
+  function nomeItem(item: ItemOrcamento) {
+    return item.produtos_servicos?.nome ?? item.descricao_servico ?? '-';
+  }
+
   const orcamentoSelecionado = orcamentosQuery.data?.find((o) => o.id === selecionadoId);
   const naoEnviado =
     orcamentoSelecionado?.status === 'Aguardando Precificação' ||
@@ -88,7 +93,9 @@ export function OrcamentoFinanceiro() {
     queryFn: async (): Promise<ItemOrcamento[]> => {
       const { data, error } = await supabase
         .from('orcamento_itens')
-        .select('id, produto_servico_id, quantidade, preco_unitario, observacao, foto_peca_danificada_path, produtos_servicos(nome)')
+        .select(
+          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome)',
+        )
         .eq('orcamento_id', selecionadoId!);
       if (error) throw error;
       return data as unknown as ItemOrcamento[];
@@ -139,7 +146,7 @@ export function OrcamentoFinanceiro() {
       .map(
         (item) => `
         <tr>
-          <td>${item.produtos_servicos?.nome ?? ''}</td>
+          <td>${item.produtos_servicos?.nome ?? item.descricao_servico ?? ''}</td>
           <td>${item.quantidade}</td>
           <td>R$ ${(Number(precos[item.id]) || 0).toFixed(2)}</td>
           <td>R$ ${((Number(precos[item.id]) || 0) * item.quantidade).toFixed(2)}</td>
@@ -383,7 +390,7 @@ export function OrcamentoFinanceiro() {
               <tbody>
                 {(itensQuery.data ?? []).map((item) => (
                   <tr key={item.id}>
-                    <td>{item.produtos_servicos?.nome}</td>
+                    <td>{nomeItem(item)}</td>
                     <td>{item.quantidade}</td>
                     <td>
                       <input

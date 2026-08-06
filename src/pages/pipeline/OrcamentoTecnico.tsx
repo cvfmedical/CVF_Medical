@@ -20,6 +20,7 @@ interface ItemOrcamento {
   produto_servico_id: number | null;
   quantidade: number;
   observacao: string | null;
+  descricao_servico: string | null;
   foto_peca_danificada_path: string | null;
 }
 
@@ -45,7 +46,7 @@ export function OrcamentoTecnico() {
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
-  const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1' });
+  const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1', descricao_servico: '' });
   const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
   const [fotoItem, setFotoItem] = useState<File | null>(null);
@@ -127,7 +128,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<ItemOrcamento[]> => {
       const { data, error } = await supabase
         .from('orcamento_itens')
-        .select('id, produto_servico_id, quantidade, observacao, foto_peca_danificada_path')
+        .select('id, produto_servico_id, quantidade, observacao, descricao_servico, foto_peca_danificada_path')
         .eq('orcamento_id', orcamentoQuery.data!.id);
       if (error) throw error;
       return data as ItemOrcamento[];
@@ -155,7 +156,7 @@ export function OrcamentoTecnico() {
   }
 
   function abrirModalItem() {
-    setNovoItem({ produto_servico_id: '', quantidade: '1' });
+    setNovoItem({ produto_servico_id: '', quantidade: '1', descricao_servico: '' });
     setObservacoesSelecionadas([]);
     setObservacaoParaAdicionar('');
     setFotoItem(null);
@@ -176,7 +177,11 @@ export function OrcamentoTecnico() {
   }
 
   async function adicionarItem() {
-    if (!orcamentoQuery.data || !novoItem.produto_servico_id) return;
+    if (!orcamentoQuery.data) return;
+    if (!novoItem.produto_servico_id && !novoItem.descricao_servico.trim()) {
+      setErro('Selecione um produto/serviço do catálogo ou descreva o serviço prestado.');
+      return;
+    }
     setErro(null);
     try {
       let fotoPath: string | null = null;
@@ -185,9 +190,10 @@ export function OrcamentoTecnico() {
       }
       const { error } = await supabase.from('orcamento_itens').insert({
         orcamento_id: orcamentoQuery.data.id,
-        produto_servico_id: Number(novoItem.produto_servico_id),
+        produto_servico_id: novoItem.produto_servico_id ? Number(novoItem.produto_servico_id) : null,
         quantidade: Number(novoItem.quantidade) || 1,
         observacao: observacoesSelecionadas.length ? observacoesSelecionadas.join('; ') : null,
+        descricao_servico: novoItem.descricao_servico.trim() || null,
         foto_peca_danificada_path: fotoPath,
       });
       if (error) throw error;
@@ -221,8 +227,9 @@ export function OrcamentoTecnico() {
     navigate('/ordens-servico');
   }
 
-  function nomeProduto(id: number | null) {
-    return produtosQuery.data?.find((p) => p.id === id)?.nome ?? '-';
+  function nomeItem(item: ItemOrcamento) {
+    if (item.produto_servico_id) return produtosQuery.data?.find((p) => p.id === item.produto_servico_id)?.nome ?? '-';
+    return item.descricao_servico ?? '-';
   }
 
   return (
@@ -279,7 +286,7 @@ export function OrcamentoTecnico() {
             <tbody>
               {(itensQuery.data ?? []).map((item) => (
                 <tr key={item.id}>
-                  <td>{nomeProduto(item.produto_servico_id)}</td>
+                  <td>{nomeItem(item)}</td>
                   <td>{item.quantidade}</td>
                   <td>{item.observacao}</td>
                   <td className="acoes-tabela">
@@ -316,7 +323,7 @@ export function OrcamentoTecnico() {
             <h2>Adicionar item</h2>
 
             <div className="campo-form">
-              <label>Produto/serviço</label>
+              <label>Produto/serviço do catálogo (deixe em branco se for só mão de obra)</label>
               <select
                 value={novoItem.produto_servico_id}
                 onChange={(e) => setNovoItem((f) => ({ ...f, produto_servico_id: e.target.value }))}
@@ -328,6 +335,14 @@ export function OrcamentoTecnico() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="campo-form">
+              <label>Serviço prestado (quando não há troca de peça)</label>
+              <textarea
+                placeholder="Ex: limpeza e ajuste de foco, sem troca de peças"
+                value={novoItem.descricao_servico}
+                onChange={(e) => setNovoItem((f) => ({ ...f, descricao_servico: e.target.value }))}
+              />
             </div>
             <div className="campo-form">
               <label>Quantidade</label>
