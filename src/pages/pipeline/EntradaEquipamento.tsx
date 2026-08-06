@@ -32,6 +32,7 @@ interface Entrada {
   nf_remessa_cfop: string | null;
   nf_remessa_data_emissao: string | null;
   nf_remessa_valor: number | null;
+  numero_controle_cliente: string | null;
 }
 
 interface FotoEntrada {
@@ -86,6 +87,7 @@ const formVazio = {
   nf_remessa_cfop: '',
   nf_remessa_data_emissao: '',
   nf_remessa_valor: '',
+  numero_controle_cliente: '',
 };
 
 export function EntradaEquipamento() {
@@ -206,6 +208,7 @@ export function EntradaEquipamento() {
       nf_remessa_cfop: e.nf_remessa_cfop ?? '',
       nf_remessa_data_emissao: e.nf_remessa_data_emissao ?? '',
       nf_remessa_valor: e.nf_remessa_valor != null ? String(e.nf_remessa_valor) : '',
+      numero_controle_cliente: e.numero_controle_cliente ?? '',
     });
     setAvarias(e.triagem_avarias ?? {});
     setFotos([]);
@@ -275,6 +278,7 @@ export function EntradaEquipamento() {
         nf_remessa_cfop: form.nf_remessa_cfop || null,
         nf_remessa_data_emissao: form.nf_remessa_data_emissao || null,
         nf_remessa_valor: form.nf_remessa_valor ? Number(form.nf_remessa_valor) : null,
+        numero_controle_cliente: form.numero_controle_cliente || null,
       };
 
       if (editando) {
@@ -403,6 +407,7 @@ export function EntradaEquipamento() {
       <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${entrada.condicao_chegada ?? '-'}</div></div>
       <div class="linha"><div class="rotulo">Data</div><div class="valor">${new Date(entrada.data_entrada).toLocaleString('pt-BR')}</div></div>
       <div class="secao">Nota fiscal de remessa para conserto</div>
+      ${entrada.numero_controle_cliente ? `<div class="linha"><div class="rotulo">Nº controle do cliente</div><div class="valor mono">${entrada.numero_controle_cliente}</div></div>` : ''}
       <div class="linha"><div class="rotulo">Número/Série</div><div class="valor mono">${entrada.nf_remessa_numero ?? '-'} / ${entrada.nf_remessa_serie ?? '-'}</div></div>
       <div class="linha"><div class="rotulo">CFOP</div><div class="valor">${entrada.nf_remessa_cfop ?? '-'}</div></div>
       <div class="linha"><div class="rotulo">Chave de acesso</div><div class="valor mono">${entrada.nf_remessa_chave_acesso ?? '-'}</div></div>
@@ -468,7 +473,7 @@ export function EntradaEquipamento() {
               <td>{cliente(e.cliente_id)?.razao_social}</td>
               <td>{e.equipamento_desc}</td>
               <td className="mono">{e.equipamento_sn}</td>
-              <td className="mono">{e.nf_remessa_numero || '-'}</td>
+              <td className="mono">{e.nf_remessa_numero || e.numero_controle_cliente || '-'}</td>
               <td>
                 <Badge tono={e.ordem_servico_id ? 'teal' : 'copper'}>
                   {e.ordem_servico_id ? 'Convertida em OS' : e.status}
@@ -633,6 +638,19 @@ export function EntradaEquipamento() {
               Dados da NF-e emitida pelo cliente para o envio do equipamento (CFOP 5915/6915) - controle interno,
               não emite nota fiscal de verdade.
             </p>
+            <div className="campo-form">
+              <label>Nº de controle interno do cliente (quando não há NF-e)</label>
+              <input
+                type="text"
+                placeholder="Ex: OS 4521"
+                value={form.numero_controle_cliente}
+                onChange={(e) => setForm((f) => ({ ...f, numero_controle_cliente: e.target.value }))}
+              />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Alguns clientes enviam o equipamento só com um documento de controle interno deles, sem NF-e -
+                use "Data de emissão" abaixo para a data desse documento.
+              </p>
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div className="campo-form" style={{ flex: 1 }}>
                 <label>Número</label>
