@@ -8,12 +8,30 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
+import { abrirImpressao } from '../../lib/imprimir';
+import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 
 interface Orcamento {
   id: number;
   numero_orcamento: string;
   status: string;
   observacoes_tecnico: string | null;
+}
+
+interface OSDetalhe {
+  numero_os: string;
+  cliente_id: number;
+  cliente_nome: string;
+  optica_desc: string | null;
+  optica_fab: string | null;
+  optica_sn: string | null;
+  defeito_relatado: string | null;
+}
+
+interface Cliente {
+  razao_social: string;
+  telefone: string | null;
+  email: string | null;
 }
 
 interface ItemOrcamento {
@@ -92,6 +110,34 @@ export function OrcamentoTecnico() {
         .maybeSingle();
       if (error) throw error;
       return data as Orcamento | null;
+    },
+  });
+
+  const osDetalheQuery = useQuery({
+    queryKey: ['os-detalhe-orcamento-tecnico', osId],
+    enabled: !!osId,
+    queryFn: async (): Promise<OSDetalhe> => {
+      const { data, error } = await supabase
+        .from('ordens_servico')
+        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado')
+        .eq('id', Number(osId))
+        .single();
+      if (error) throw error;
+      return data as OSDetalhe;
+    },
+  });
+
+  const clienteQuery = useQuery({
+    queryKey: ['cliente-orcamento-tecnico', osDetalheQuery.data?.cliente_id],
+    enabled: !!osDetalheQuery.data?.cliente_id,
+    queryFn: async (): Promise<Cliente> => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('razao_social, telefone, email')
+        .eq('id', osDetalheQuery.data!.cliente_id)
+        .single();
+      if (error) throw error;
+      return data as Cliente;
     },
   });
 
@@ -226,6 +272,63 @@ export function OrcamentoTecnico() {
     navigate('/ordens-servico');
   }
 
+  // Relatório técnico das avarias identificadas - sem preço (isso é
+  // trabalho do financeiro, na precificação). O técnico usa isso pra
+  // mostrar ao cliente o que foi constatado, antes mesmo do orçamento
+  // ser precificado e enviado.
+  async function imprimirRelatorioTecnico() {
+    if (!orcamentoQuery.data || !osDetalheQuery.data) return;
+    const itensComFoto = await Promise.all(
+      (itensQuery.data ?? []).map(async (item) => ({
+        item,
+        fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
+      })),
+    );
+
+    const linhas = itensComFoto
+      .map(
+        ({ item, fotoUrl }) => `
+        <tr>
+          <td>${nomeItem(item)}</td>
+          <td>${item.quantidade}</td>
+          <td>${item.observacao ?? '-'}</td>
+        </tr>
+        ${fotoUrl ? `<tr><td colspan="3"><div class="fotos"><img src="${fotoUrl}" /></div></td></tr>` : ''}`,
+      )
+      .join('');
+
+    const mensagem = `Olá! Identificamos as avarias abaixo no equipamento ${osDetalheQuery.data.optica_desc ?? ''} (OS ${osDetalheQuery.data.numero_os}). O orçamento será enviado em seguida. Acompanhe pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
+
+    abrirImpressao(
+      `Relatório Técnico ${osDetalheQuery.data.numero_os}`,
+      `
+      <h1>Relatório Técnico - Avarias Identificadas</h1>
+      <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
+      <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${osDetalheQuery.data.numero_os}</div></div>
+      <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${osDetalheQuery.data.cliente_nome}</div></div>
+      <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${osDetalheQuery.data.optica_desc ?? '-'} (${osDetalheQuery.data.optica_fab ?? '-'})</div></div>
+      <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${osDetalheQuery.data.optica_sn ?? '-'}</div></div>
+      <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${osDetalheQuery.data.defeito_relatado ?? '-'}</div></div>
+      <div class="secao">Peças/serviços identificados</div>
+      <table>
+        <thead><tr><th>Item</th><th>Qtd.</th><th>Observação / avaria</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <p style="font-size:12px; color:#666; margin-top:12px;">
+        Este relatório mostra apenas o que foi identificado tecnicamente - os valores são definidos e enviados
+        separadamente pelo setor financeiro, no orçamento.
+      </p>
+      `,
+      clienteQuery.data
+        ? {
+            whatsapp: linkWhatsApp(clienteQuery.data.telefone, mensagem),
+            email: linkEmail(clienteQuery.data.email, `Q-CVF Medical - Relatório Técnico ${osDetalheQuery.data.numero_os}`, mensagem),
+          }
+        : undefined,
+      { assinaturas: ['Q-CVF Medical (Técnico)', 'Cliente (ciência)'] },
+    );
+  }
+
   function nomeItem(item: ItemOrcamento) {
     if (item.produto_servico_id) return produtosQuery.data?.find((p) => p.id === item.produto_servico_id)?.nome ?? '-';
     return item.descricao_servico ?? '-';
@@ -308,7 +411,14 @@ export function OrcamentoTecnico() {
           </table>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <button className="botao-secundario" onClick={finalizar}>
+            <button
+              className="botao-secundario"
+              onClick={imprimirRelatorioTecnico}
+              disabled={(itensQuery.data ?? []).length === 0}
+            >
+              Imprimir relatório técnico
+            </button>
+            <button className="botao-primario" onClick={finalizar}>
               Finalizar identificação de danos
             </button>
           </div>
