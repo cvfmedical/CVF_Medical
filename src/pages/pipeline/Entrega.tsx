@@ -1,7 +1,9 @@
 import { CrudPage } from '../../components/CrudPage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
 
 interface EntregaRow {
   id: number;
@@ -32,6 +34,16 @@ export function Entrega() {
           label: 'OS',
           mono: true,
           render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+        },
+        {
+          chave: 'situacao',
+          label: 'Situação',
+          render: (r) =>
+            porId(r.ordem_servico_id)?.status_os === STATUS_DEVOLUCAO_SEM_REPARO ? (
+              <Badge tono="danger">Devolução sem reparo</Badge>
+            ) : (
+              <Badge tono="teal">Pós-reparo</Badge>
+            ),
         },
         { chave: 'forma_devolucao', label: 'Forma de devolução' },
         { chave: 'nf_devolucao_numero', label: 'NF devolução', mono: true },

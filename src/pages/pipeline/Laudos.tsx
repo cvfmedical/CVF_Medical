@@ -100,13 +100,6 @@ export function Laudos() {
       });
       if (erroInsert) throw erroInsert;
 
-      if (form.resultado === 'Aprovado') {
-        await supabase
-          .from('ordens_servico')
-          .update({ status_os: '10. PRONTO PARA ENTREGA' })
-          .eq('id', Number(form.ordem_servico_id));
-      }
-
       setModalAberto(false);
       setForm({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
       qc.invalidateQueries({ queryKey: ['laudos'] });

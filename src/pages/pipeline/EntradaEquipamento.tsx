@@ -9,7 +9,7 @@ import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconEye, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash, IconX } from '@tabler/icons-react';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
-import { abrirImpressao } from '../../lib/imprimir';
+import { imprimirRegistroEntrada } from '../../lib/relatorioEntrada';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { CapturaFoto } from '../../components/CapturaFoto';
 
@@ -364,7 +364,7 @@ export function EntradaEquipamento() {
         .eq('id', entrada.id);
 
       qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
-      navigate(`/orcamento-tecnico?os=${os.id}`);
+      navigate(`/registro-entrada?os=${os.id}`);
     } catch (e) {
       alert(mensagemErro(e));
     } finally {
@@ -380,55 +380,15 @@ export function EntradaEquipamento() {
       .eq('entrada_id', entrada.id);
 
     const incluirFotos = confirm('Incluir as fotos no relatório impresso? (Cancelar = só os dados, sem fotos)');
-    let fotosHtml = '';
+    let urls: string[] = [];
     if (incluirFotos && fotosEntrada?.length) {
-      const urls = await Promise.all((fotosEntrada as FotoEntrada[]).map((f) => urlAssinadaFoto(f.storage_path)));
-      fotosHtml = `<div class="secao">Fotos</div><div class="fotos">${urls
-        .filter(Boolean)
-        .map((u) => `<img src="${u}" />`)
-        .join('')}</div>`;
+      const urlsBrutas = await Promise.all(
+        (fotosEntrada as FotoEntrada[]).map((f) => urlAssinadaFoto(f.storage_path)),
+      );
+      urls = urlsBrutas.filter((u): u is string => !!u);
     }
 
-    const avariasMarcadas = CHECKLIST_AVARIAS.filter((item) => entrada.triagem_avarias?.[item.key]).map(
-      (item) => item.label,
-    );
-
-    abrirImpressao(
-      `Entrada ${entrada.codigo_entrada}`,
-      `
-      <h1>Relatório de Entrada do Equipamento</h1>
-      <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
-      <div class="linha"><div class="rotulo">Código</div><div class="valor mono">${entrada.codigo_entrada}</div></div>
-      <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${c?.razao_social ?? ''}</div></div>
-      <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${entrada.equipamento_desc ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Fabricante</div><div class="valor">${entrada.equipamento_fab ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${entrada.equipamento_sn ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${entrada.defeito_relatado ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${entrada.condicao_chegada ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Data</div><div class="valor">${new Date(entrada.data_entrada).toLocaleString('pt-BR')}</div></div>
-      <div class="secao">Nota fiscal de remessa para conserto</div>
-      ${entrada.numero_controle_cliente ? `<div class="linha"><div class="rotulo">Nº controle do cliente</div><div class="valor mono">${entrada.numero_controle_cliente}</div></div>` : ''}
-      <div class="linha"><div class="rotulo">Número/Série</div><div class="valor mono">${entrada.nf_remessa_numero ?? '-'} / ${entrada.nf_remessa_serie ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">CFOP</div><div class="valor">${entrada.nf_remessa_cfop ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Chave de acesso</div><div class="valor mono">${entrada.nf_remessa_chave_acesso ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Emissão / Valor</div><div class="valor">${entrada.nf_remessa_data_emissao ?? '-'} ${entrada.nf_remessa_valor ? '- R$ ' + Number(entrada.nf_remessa_valor).toFixed(2) : ''}</div></div>
-      <div class="secao">Avarias identificadas na triagem</div>
-      <div class="valor">${avariasMarcadas.length ? avariasMarcadas.join(', ') : 'Nenhuma avaria marcada'}</div>
-      ${fotosHtml}
-      `,
-      {
-        whatsapp: linkWhatsApp(
-          c?.telefone,
-          `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`,
-        ),
-        email: linkEmail(
-          c?.email,
-          `Q-CVF Medical - Entrada ${entrada.codigo_entrada}`,
-          `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`,
-        ),
-      },
-      { assinaturas: ['Recebido por (Q-CVF Medical)', 'Entregue por (Cliente / Transportadora)'] },
-    );
+    imprimirRegistroEntrada(c, entrada, urls);
   }
 
   function compartilharLink(entrada: Entrada) {

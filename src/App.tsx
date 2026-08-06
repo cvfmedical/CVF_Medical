@@ -20,6 +20,7 @@ import { CategoriasProdutosServicos } from './pages/cadastros/CategoriasProdutos
 import { TiposOtica } from './pages/cadastros/TiposOtica';
 import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
+import { RegistroEntrada } from './pages/pipeline/RegistroEntrada';
 import { OrdemServico } from './pages/pipeline/OrdemServico';
 import { OrdensServicoPanel } from './pages/pipeline/OrdensServicoPanel';
 import { OrcamentoTecnico } from './pages/pipeline/OrcamentoTecnico';
@@ -29,6 +30,7 @@ import { Manutencao } from './pages/pipeline/Manutencao';
 import { Selagem } from './pages/pipeline/Selagem';
 import { TesteEstanqueidade } from './pages/pipeline/TesteEstanqueidade';
 import { TesteAutoclave } from './pages/pipeline/TesteAutoclave';
+import { TesteQualidade } from './pages/pipeline/TesteQualidade';
 import { Entrega } from './pages/pipeline/Entrega';
 import { Laudos } from './pages/pipeline/Laudos';
 import { BancadaVisao } from './pages/pipeline/BancadaVisao';
@@ -58,6 +60,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/tipos-otica': TiposOtica,
   '/condicoes-chegada': CondicoesChegada,
   '/entrada-equipamento': EntradaEquipamento,
+  '/registro-entrada': RegistroEntrada,
   '/ordens-servico/nova': OrdemServico,
   '/ordens-servico': OrdensServicoPanel,
   '/orcamento-tecnico': OrcamentoTecnico,
@@ -67,6 +70,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/selagem': Selagem,
   '/teste-estanqueidade': TesteEstanqueidade,
   '/teste-autoclave': TesteAutoclave,
+  '/teste-qualidade': TesteQualidade,
   '/entrega': Entrega,
   '/laudos': Laudos,
   '/bancada-visao': BancadaVisao,

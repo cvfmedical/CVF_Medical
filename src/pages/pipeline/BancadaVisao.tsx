@@ -20,6 +20,7 @@ import {
   STATUS_SELAGEM,
   STATUS_PRONTO_ENTREGA,
   STATUS_VOLTA_MANUTENCAO,
+  STATUS_TESTE_QUALIDADE,
 } from '../../lib/statusOS';
 
 // Porte de bancada_visao.py + gerador_pdf.py para o navegador - câmera
@@ -62,6 +63,7 @@ export function BancadaVisao() {
   const [gradeLigada, setGradeLigada] = useState(true);
   const [gerando, setGerando] = useState(false);
   const [observacoes, setObservacoes] = useState('');
+  const [precisaSelagem, setPrecisaSelagem] = useState(true);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -322,11 +324,12 @@ export function BancadaVisao() {
         resultado === 'Reprovado'
           ? STATUS_VOLTA_MANUTENCAO
           : etapa === 'checkpoint_a'
-            ? STATUS_SELAGEM
+            ? (precisaSelagem ? STATUS_SELAGEM : STATUS_TESTE_QUALIDADE)
             : STATUS_PRONTO_ENTREGA;
       await supabase.from('ordens_servico').update({ status_os: novoStatus }).eq('id', osSelecionada.id);
 
       pararCamera();
+      setPrecisaSelagem(true);
       qc.invalidateQueries({ queryKey: ['os-bancada-visao'] });
       alert(`Laudo ${numeroLaudo} gerado com sucesso - resultado: ${resultado}.`);
       navigate('/ordens-servico');
@@ -341,6 +344,7 @@ export function BancadaVisao() {
     pararCamera();
     setRodando(false);
     setMetricas(null);
+    setPrecisaSelagem(true);
   }
 
   if (!rodando) {
@@ -419,6 +423,18 @@ export function BancadaVisao() {
         <button className="botao-secundario" onClick={() => setGradeLigada((g) => !g)}>
           Grade: {gradeLigada ? 'Ligada' : 'Desligada'}
         </button>
+        {etapa === 'checkpoint_a' && (
+          <div className="campo-form">
+            <label style={{ color: '#fff' }}>Este equipamento precisa de selagem?</label>
+            <select
+              value={precisaSelagem ? 'sim' : 'nao'}
+              onChange={(e) => setPrecisaSelagem(e.target.value === 'sim')}
+            >
+              <option value="sim">Sim (ótica selável - vai para Selagem)</option>
+              <option value="nao">Não (ex: bomba de infusão - vai para Teste de Qualidade)</option>
+            </select>
+          </div>
+        )}
         <div className="campo-form">
           <label style={{ color: '#fff' }}>Observações</label>
           <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />

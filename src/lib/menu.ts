@@ -51,6 +51,7 @@ export const MENU: CategoriaMenu[] = [
     icone: IconClipboardList,
     itens: [
       { label: 'Entrada do equipamento', path: '/entrada-equipamento', categoria: 'recepcao_os', implementado: false },
+      { label: 'Registro de entrada (revisão)', path: '/registro-entrada', categoria: 'recepcao_os', implementado: false },
       { label: 'Abrir nova OS', path: '/ordens-servico/nova', categoria: 'recepcao_os', implementado: false },
       { label: 'Ordens de serviço', path: '/ordens-servico', categoria: 'recepcao_os', implementado: false },
       { label: 'Entrega ao cliente', path: '/entrega', categoria: 'recepcao_os', implementado: false },
@@ -69,6 +70,7 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Selagem', path: '/selagem', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Teste de estanqueidade', path: '/teste-estanqueidade', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Teste de autoclave', path: '/teste-autoclave', categoria: 'laboratorio_qualidade', implementado: false },
+      { label: 'Teste de qualidade / funcionamento', path: '/teste-qualidade', categoria: 'laboratorio_qualidade', implementado: false },
     ],
   },
   {
