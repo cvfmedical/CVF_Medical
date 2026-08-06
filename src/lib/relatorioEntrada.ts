@@ -40,7 +40,7 @@ export function montarCorpoRegistroEntrada(
     : '';
 
   return `
-    <h1>Registro de Entrada</h1>
+    <h1>Registro de Entrada - Identificação das Peças Danificadas</h1>
     <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
     <div class="linha"><div class="rotulo">Código</div><div class="valor mono">${entrada.codigo_entrada}</div></div>
     <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${cliente?.razao_social ?? ''}</div></div>

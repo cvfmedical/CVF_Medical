@@ -111,6 +111,7 @@ export function abrirImpressao(
         }
         .acoes-impressao button { background: var(--copper-500); color: #fff; border: none; }
         .dica-pdf { font-size: 11px; color: var(--ink-600); margin: 8px 40px 24px; }
+        .quebra-pagina { page-break-before: always; break-before: page; padding-top: 1px; }
         @media print {
           body { background: #fff; }
           .folha { max-width: none; }

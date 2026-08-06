@@ -260,7 +260,7 @@ export function OrcamentoFinanceiro() {
       <p style="text-align:right; font-weight:bold; margin-top:12px;">Total: R$ ${total.toFixed(2)}</p>
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>
-      ${registroEntradaHtml}
+      <div class="quebra-pagina">${registroEntradaHtml}</div>
       `,
       clienteQuery.data
         ? {
