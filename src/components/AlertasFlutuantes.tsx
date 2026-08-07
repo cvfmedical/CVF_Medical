@@ -2,26 +2,31 @@ import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
 import { AlertaOSAguardandoOrcamento } from './AlertaOSAguardandoOrcamento';
 import { AlertaOrcamentosAprovados } from './AlertaOrcamentosAprovados';
 
-// Pilha de alertas flutuantes (cartões ~5cm x 5cm), ancorada no canto
-// inferior direito - com "bottom" fixo e altura automática, a pilha
-// cresce pra cima conforme mais alertas ficam visíveis, sem precisar
-// calcular posição individual de cada cartão.
+// Alertas flutuantes (cartões ~5cm x 5cm) em linha horizontal no rodapé
+// - assim ocupam só uma faixa embaixo e não atrapalham a visão do
+// conteúdo. Cada cartão tem um X pra fechar (reaparece em 10 min).
 export function AlertasFlutuantes() {
   return (
     <div
       style={{
         position: 'fixed',
-        right: 24,
-        bottom: 24,
+        left: 0,
+        right: 0,
+        bottom: 16,
         zIndex: 100,
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'flex-end',
         gap: 12,
+        pointerEvents: 'none',
       }}
     >
-      <AlertaOrcamentosAprovados />
-      <AlertaOSAguardandoOrcamento />
-      <AlertaOrcamentosPendentes />
+      <div style={{ display: 'flex', flexDirection: 'row', gap: 12, pointerEvents: 'auto' }}>
+        <AlertaOrcamentosPendentes />
+        <AlertaOSAguardandoOrcamento />
+        <AlertaOrcamentosAprovados />
+      </div>
     </div>
   );
 }

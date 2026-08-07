@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { AlertaCard } from './AlertaCard';
+import { useAlertaDismissivel } from '../lib/useAlertaDismissivel';
 
 // Contagem de orçamentos aguardando precificação/envio - só aparece
 // para quem tem permissão financeira, some quando a fila está vazia.
@@ -11,6 +12,7 @@ export function AlertaOrcamentosPendentes() {
   const { temPermissao } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('financeiro');
+  const { oculto, fechar } = useAlertaDismissivel();
 
   const query = useQuery({
     queryKey: ['contagem-orcamentos-pendentes'],
@@ -26,13 +28,14 @@ export function AlertaOrcamentosPendentes() {
     },
   });
 
-  if (!podeVer || !query.data) return null;
+  if (!podeVer || !query.data || oculto) return null;
 
   return (
     <AlertaCard
       count={query.data}
       descricao={`orçamento${query.data > 1 ? 's' : ''} aguardando precificação`}
       onClick={() => navigate('/orcamento-financeiro')}
+      onClose={fechar}
     />
   );
 }
