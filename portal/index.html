@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Q-CVF Medical - Portal do Cliente</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+    :root {
+        --azul: #344D95;
+        --vermelho: #BD2A33;
+        --bg: #f8fafc;
+        --texto: #1e293b;
+        --texto-sec: #64748b;
+        --borda: #cbd5e1;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--texto);
+    }
+    header {
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    header h1 {
+        font-size: 18px;
+        color: var(--azul);
+        margin: 0;
+    }
+    #btn-sair {
+        background: #e2e8f0;
+        color: var(--texto);
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        display: none;
+    }
+    main {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 20px;
+    }
+    #tela-login {
+        max-width: 380px;
+        margin: 60px auto;
+        background: white;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        padding: 32px;
+    }
+    #tela-login h2 {
+        text-align: center;
+        color: var(--azul);
+        margin-top: 0;
+    }
+    label {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--texto-sec);
+        display: block;
+        margin: 14px 0 4px;
+    }
+    input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    button.primario {
+        background: var(--azul);
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    button.primario.full { width: 100%; margin-top: 20px; }
+    button.primario:hover { background: var(--vermelho); }
+    button.secundario {
+        background: white;
+        color: var(--texto);
+        border: 1px solid var(--borda);
+        padding: 10px 18px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    #erro-login {
+        color: var(--vermelho);
+        font-size: 13px;
+        margin-top: 10px;
+        text-align: center;
+        display: none;
+    }
+    #tela-portal { display: none; }
+    .card-cliente {
+        background: white;
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+    }
+    .card-cliente h3 { margin: 0 0 4px; color: var(--azul); }
+    .card-cliente p { margin: 0; color: var(--texto-sec); font-size: 13px; }
+    h2.secao {
+        font-size: 15px;
+        color: var(--azul);
+        margin: 32px 0 12px;
+        border-bottom: 1px solid var(--borda);
+        padding-bottom: 6px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    th {
+        background: var(--azul);
+        color: white;
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    td {
+        padding: 10px 12px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 13px;
+    }
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .badge-pronto { background: #dcfce7; color: #15803d; }
+    .badge-andamento { background: #fef9c3; color: #854d0e; }
+    .badge-aprovado { background: #dcfce7; color: #15803d; }
+    .badge-recusado { background: #fee2e2; color: #991b1b; }
+    .vazio { text-align: center; color: var(--texto-sec); padding: 24px; }
+    .card-orcamento {
+        background: white;
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    }
+    .card-orcamento .cabecalho { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .card-orcamento .total { text-align: right; font-weight: bold; margin-top: 8px; }
+    .card-orcamento .acoes { display: flex; gap: 10px; margin-top: 14px; }
+    .fotos-entrada { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .fotos-entrada img { max-width: 140px; max-height: 140px; border: 1px solid var(--borda); border-radius: 6px; }
+    .card-entrada { background: white; border: 1px solid var(--borda); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+    .card-entrada .cabecalho { display: flex; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Q-CVF MEDICAL | Portal do Cliente</h1>
+    <button id="btn-sair">Sair</button>
+</header>
+
+<main>
+    <div id="tela-login">
+        <h2>Acesso do Cliente</h2>
+        <label for="txt-email">E-mail</label>
+        <input type="email" id="txt-email" placeholder="seu@email.com">
+        <label for="txt-senha">Senha</label>
+        <input type="password" id="txt-senha" placeholder="••••••••">
+        <button class="primario full" id="btn-entrar">Entrar</button>
+        <div id="erro-login"></div>
+    </div>
+
+    <div id="tela-portal">
+        <div class="card-cliente" id="card-cliente"></div>
+
+        <h2 class="secao">Orçamentos aguardando sua aprovação</h2>
+        <div id="lista-orcamentos"></div>
+        <div id="vazio-orcamentos" class="vazio" style="display:none;">Nenhum orçamento aguardando aprovação.</div>
+
+        <h2 class="secao">Entradas de equipamento</h2>
+        <div id="lista-entradas"></div>
+        <div id="vazio-entradas" class="vazio" style="display:none;">Nenhuma entrada registrada.</div>
+
+        <h2 class="secao">Ordens de serviço</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nº OS</th>
+                    <th>Equipamento</th>
+                    <th>Status</th>
+                    <th>Abertura</th>
+                </tr>
+            </thead>
+            <tbody id="corpo-tabela"></tbody>
+        </table>
+        <div id="vazio" class="vazio" style="display:none;">Nenhuma Ordem de Serviço encontrada.</div>
+    </div>
+</main>
+
+<script>
+const SUPABASE_URL = "https://wrpylwtamxmaclyqdqmg.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QVIEwDHz2LkLihA2BZrhHA_9zxLaOEA";
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const telaLogin = document.getElementById('tela-login');
+const telaPortal = document.getElementById('tela-portal');
+const btnSair = document.getElementById('btn-sair');
+const erroLogin = document.getElementById('erro-login');
+
+document.getElementById('btn-entrar').addEventListener('click', fazerLogin);
+document.getElementById('txt-senha').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') fazerLogin();
+});
+btnSair.addEventListener('click', fazerLogout);
+
+async function fazerLogin() {
+    erroLogin.style.display = 'none';
+    const email = document.getElementById('txt-email').value.trim();
+    const senha = document.getElementById('txt-senha').value;
+
+    if (!email || !senha) {
+        mostrarErro('Informe e-mail e senha.');
+        return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
+
+    if (error) {
+        mostrarErro('E-mail ou senha incorretos.');
+        return;
+    }
+
+    await carregarPortal();
+}
+
+function mostrarErro(msg) {
+    erroLogin.textContent = msg;
+    erroLogin.style.display = 'block';
+}
+
+async function fazerLogout() {
+    await supabaseClient.auth.signOut();
+    telaPortal.style.display = 'none';
+    telaLogin.style.display = 'block';
+    btnSair.style.display = 'none';
+    document.getElementById('txt-senha').value = '';
+}
+
+function formatarData(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+}
+
+function classeBadge(status) {
+    if (!status) return 'badge-andamento';
+    return status.startsWith('11.') ? 'badge-pronto' : 'badge-andamento';
+}
+
+async function carregarOrdens() {
+    const { data: ordens, error } = await supabaseClient
+        .from('ordens_servico')
+        .select('numero_os, optica_desc, optica_fab, status_os, data_abertura')
+        .order('data_abertura', { ascending: false });
+
+    const corpo = document.getElementById('corpo-tabela');
+    const vazio = document.getElementById('vazio');
+    corpo.innerHTML = '';
+
+    if (error || !ordens || ordens.length === 0) {
+        vazio.style.display = 'block';
+        return;
+    }
+    vazio.style.display = 'none';
+    ordens.forEach(os => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${os.numero_os}</td>
+            <td>${os.optica_desc || '-'} ${os.optica_fab ? '(' + os.optica_fab + ')' : ''}</td>
+            <td><span class="badge ${classeBadge(os.status_os)}">${os.status_os || '-'}</span></td>
+            <td>${formatarData(os.data_abertura)}</td>
+        `;
+        corpo.appendChild(tr);
+    });
+}
+
+async function urlAssinada(caminho) {
+    const { data, error } = await supabaseClient.storage.from('fotos-equipamentos').createSignedUrl(caminho, 3600);
+    if (error) return null;
+    return data.signedUrl;
+}
+
+async function carregarEntradas() {
+    const container = document.getElementById('lista-entradas');
+    const vazio = document.getElementById('vazio-entradas');
+    container.innerHTML = '';
+
+    const { data: entradas, error } = await supabaseClient
+        .from('entradas_equipamento')
+        .select('id, codigo_entrada, equipamento_desc, equipamento_fab, equipamento_sn, defeito_relatado, condicao_chegada, status, data_entrada')
+        .order('data_entrada', { ascending: false });
+
+    if (error || !entradas || entradas.length === 0) {
+        vazio.style.display = 'block';
+        return;
+    }
+    vazio.style.display = 'none';
+
+    for (const entrada of entradas) {
+        const { data: fotos } = await supabaseClient
+            .from('fotos_entrada')
+            .select('storage_path, descricao')
+            .eq('entrada_id', entrada.id);
+
+        let fotosHtml = '';
+        if (fotos && fotos.length > 0) {
+            const urls = await Promise.all(fotos.map(f => urlAssinada(f.storage_path)));
+            fotosHtml = `<div class="fotos-entrada">${urls.filter(Boolean).map(u => `<img src="${u}">`).join('')}</div>`;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card-entrada';
+        card.innerHTML = `
+            <div class="cabecalho">
+                <strong>${entrada.codigo_entrada}</strong>
+                <span class="badge badge-andamento">${entrada.status}</span>
+            </div>
+            <p style="margin:6px 0;">${entrada.equipamento_desc || ''} ${entrada.equipamento_fab ? '(' + entrada.equipamento_fab + ')' : ''} - ${entrada.equipamento_sn || ''}</p>
+            <p style="color:var(--texto-sec); font-size:13px; margin:4px 0;">Defeito relatado: ${entrada.defeito_relatado || '-'}</p>
+            <p style="color:var(--texto-sec); font-size:12px; margin:4px 0;">Recebido em: ${formatarData(entrada.data_entrada)}</p>
+            ${fotosHtml}
+        `;
+        container.appendChild(card);
+    }
+}
+
+async function carregarOrcamentos() {
+    const container = document.getElementById('lista-orcamentos');
+    const vazio = document.getElementById('vazio-orcamentos');
+    container.innerHTML = '';
+
+    const { data: orcamentos, error } = await supabaseClient
+        .from('orcamentos')
+        .select('id, numero_orcamento, status, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
+        .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
+        .order('data_envio', { ascending: false });
+
+    if (error || !orcamentos || orcamentos.length === 0) {
+        vazio.style.display = 'block';
+        return;
+    }
+    vazio.style.display = 'none';
+
+    for (const orc of orcamentos) {
+        const { data: itens } = await supabaseClient
+            .from('orcamento_itens')
+            .select('quantidade, preco_unitario, observacao, produtos_servicos(nome)')
+            .eq('orcamento_id', orc.id);
+
+        const total = (itens || []).reduce((soma, i) => soma + (i.preco_unitario || 0) * i.quantidade, 0);
+        const linhas = (itens || []).map(i => `<tr><td>${i.produtos_servicos ? i.produtos_servicos.nome : ''}</td><td>${i.quantidade}</td><td>R$ ${(i.preco_unitario || 0).toFixed(2)}</td></tr>`).join('');
+
+        const badgeClasse = orc.status === 'Aprovado' ? 'badge-aprovado' : orc.status === 'Recusado' ? 'badge-recusado' : 'badge-andamento';
+
+        const card = document.createElement('div');
+        card.className = 'card-orcamento';
+        card.innerHTML = `
+            <div class="cabecalho">
+                <strong>${orc.numero_orcamento} - OS ${orc.ordens_servico ? orc.ordens_servico.numero_os : ''}</strong>
+                <span class="badge ${badgeClasse}">${orc.status}</span>
+            </div>
+            <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th></tr></thead><tbody>${linhas}</tbody></table>
+            <p class="total">Total: R$ ${total.toFixed(2)}</p>
+            ${orc.observacoes_financeiro ? `<p style="font-size:13px; color:var(--texto-sec);">${orc.observacoes_financeiro}</p>` : ''}
+            ${orc.status === 'Enviado ao Cliente' ? `
+                <div class="acoes">
+                    <button class="primario" data-aprovar="${orc.id}">Aprovar orçamento</button>
+                    <button class="secundario" data-recusar="${orc.id}">Recusar orçamento</button>
+                </div>
+            ` : ''}
+        `;
+        container.appendChild(card);
+    }
+
+    container.querySelectorAll('[data-aprovar]').forEach(btn => {
+        btn.addEventListener('click', () => responderOrcamento(btn.getAttribute('data-aprovar'), 'Aprovado'));
+    });
+    container.querySelectorAll('[data-recusar]').forEach(btn => {
+        btn.addEventListener('click', () => responderOrcamento(btn.getAttribute('data-recusar'), 'Recusado'));
+    });
+}
+
+async function responderOrcamento(orcamentoId, novoStatus) {
+    const confirmMsg = novoStatus === 'Aprovado' ? 'Confirma a aprovação deste orçamento?' : 'Confirma a recusa deste orçamento?';
+    if (!confirm(confirmMsg)) return;
+
+    const { error } = await supabaseClient
+        .from('orcamentos')
+        .update({ status: novoStatus, data_resposta_cliente: new Date().toISOString() })
+        .eq('id', orcamentoId);
+
+    if (error) {
+        alert('Não foi possível registrar sua resposta. Tente novamente.');
+        return;
+    }
+    await carregarOrcamentos();
+}
+
+async function carregarPortal() {
+    const { data: clienteData } = await supabaseClient.from('clientes').select('*').limit(1);
+    const cliente = clienteData && clienteData[0];
+
+    document.getElementById('card-cliente').innerHTML = cliente
+        ? `<h3>${cliente.razao_social}</h3><p>${cliente.hospital_clinica || ''} ${cliente.email ? '| ' + cliente.email : ''}</p>`
+        : '<h3>Cliente</h3>';
+
+    await carregarOrcamentos();
+    await carregarEntradas();
+    await carregarOrdens();
+
+    telaLogin.style.display = 'none';
+    telaPortal.style.display = 'block';
+    btnSair.style.display = 'inline-block';
+}
+
+// Mantém a sessão ao recarregar a página
+(async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) await carregarPortal();
+})();
+</script>
+
+</body>
+</html>
