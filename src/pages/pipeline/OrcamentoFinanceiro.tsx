@@ -9,6 +9,7 @@ import { urlAssinadaFoto } from '../../lib/storage';
 import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
+import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -227,6 +228,32 @@ export function OrcamentoFinanceiro() {
     return montarCorpoRegistroEntrada(clienteQuery.data ? { razao_social: clienteQuery.data.razao_social } : undefined, dados, urls);
   }
 
+  // Relatório da Ordem de Serviço (peças danificadas identificadas pelo
+  // técnico) - montado a partir dos itens do orçamento já carregados,
+  // com as fotos de cada peça.
+  async function buscarRelatorioOSHtml(): Promise<string> {
+    if (!orcamentoSelecionado?.ordens_servico) return '';
+    const itens: ItemRelatorioOS[] = await Promise.all(
+      (itensQuery.data ?? []).map(async (item) => ({
+        nome: item.produtos_servicos?.nome ?? item.descricao_servico ?? '-',
+        quantidade: item.quantidade,
+        observacao: item.observacao,
+        fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
+      })),
+    );
+    return montarCorpoRelatorioOS(
+      {
+        numero_os: orcamentoSelecionado.ordens_servico.numero_os,
+        cliente_nome: orcamentoSelecionado.ordens_servico.cliente_nome,
+        optica_desc: orcamentoSelecionado.ordens_servico.optica_desc,
+        optica_fab: orcamentoSelecionado.ordens_servico.optica_fab,
+        optica_sn: orcamentoSelecionado.ordens_servico.optica_sn,
+        defeito_relatado: null,
+      },
+      itens,
+    );
+  }
+
   async function imprimirOrcamento() {
     if (!orcamentoSelecionado) return;
     const linhas = (itensQuery.data ?? [])
@@ -241,6 +268,7 @@ export function OrcamentoFinanceiro() {
       )
       .join('');
 
+    const relatorioOSHtml = await buscarRelatorioOSHtml();
     const registroEntradaHtml = await buscarRegistroEntradaHtml();
 
     abrirImpressao(
@@ -260,6 +288,7 @@ export function OrcamentoFinanceiro() {
       <p style="text-align:right; font-weight:bold; margin-top:12px;">Total: R$ ${total.toFixed(2)}</p>
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>
+      <div class="quebra-pagina">${relatorioOSHtml}</div>
       <div class="quebra-pagina">${registroEntradaHtml}</div>
       `,
       clienteQuery.data

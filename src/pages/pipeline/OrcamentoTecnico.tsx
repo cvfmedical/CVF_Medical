@@ -8,8 +8,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
-import { abrirImpressao } from '../../lib/imprimir';
-import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
+import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
 
 interface Orcamento {
   id: number;
@@ -278,55 +277,15 @@ export function OrcamentoTecnico() {
   // ser precificado e enviado.
   async function imprimirRelatorioTecnico() {
     if (!orcamentoQuery.data || !osDetalheQuery.data) return;
-    const itensComFoto = await Promise.all(
+    const itens: ItemRelatorioOS[] = await Promise.all(
       (itensQuery.data ?? []).map(async (item) => ({
-        item,
+        nome: nomeItem(item),
+        quantidade: item.quantidade,
+        observacao: item.observacao,
         fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
       })),
     );
-
-    const linhas = itensComFoto
-      .map(
-        ({ item, fotoUrl }) => `
-        <tr>
-          <td>${nomeItem(item)}</td>
-          <td>${item.quantidade}</td>
-          <td>${item.observacao ?? '-'}</td>
-        </tr>
-        ${fotoUrl ? `<tr><td colspan="3"><div class="fotos"><img src="${fotoUrl}" /></div></td></tr>` : ''}`,
-      )
-      .join('');
-
-    const mensagem = `Olá! Identificamos as avarias abaixo no equipamento ${osDetalheQuery.data.optica_desc ?? ''} (OS ${osDetalheQuery.data.numero_os}). O orçamento será enviado em seguida. Acompanhe pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
-
-    abrirImpressao(
-      `Relatório Técnico ${osDetalheQuery.data.numero_os}`,
-      `
-      <h1>Relatório Técnico - Avarias Identificadas</h1>
-      <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
-      <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${osDetalheQuery.data.numero_os}</div></div>
-      <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${osDetalheQuery.data.cliente_nome}</div></div>
-      <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${osDetalheQuery.data.optica_desc ?? '-'} (${osDetalheQuery.data.optica_fab ?? '-'})</div></div>
-      <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${osDetalheQuery.data.optica_sn ?? '-'}</div></div>
-      <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${osDetalheQuery.data.defeito_relatado ?? '-'}</div></div>
-      <div class="secao">Peças/serviços identificados</div>
-      <table>
-        <thead><tr><th>Item</th><th>Qtd.</th><th>Observação / avaria</th></tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-      <p style="font-size:12px; color:#666; margin-top:12px;">
-        Este relatório mostra apenas o que foi identificado tecnicamente - os valores são definidos e enviados
-        separadamente pelo setor financeiro, no orçamento.
-      </p>
-      `,
-      clienteQuery.data
-        ? {
-            whatsapp: linkWhatsApp(clienteQuery.data.telefone, mensagem),
-            email: linkEmail(clienteQuery.data.email, `Q-CVF Medical - Relatório Técnico ${osDetalheQuery.data.numero_os}`, mensagem),
-          }
-        : undefined,
-      { assinaturas: ['Q-CVF Medical (Técnico)', 'Cliente (ciência)'] },
-    );
+    imprimirRelatorioOS(clienteQuery.data, osDetalheQuery.data, itens);
   }
 
   function nomeItem(item: ItemOrcamento) {
