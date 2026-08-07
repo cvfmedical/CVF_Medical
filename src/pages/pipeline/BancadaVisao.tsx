@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { carregarOpenCv } from '../../lib/opencvLoader';
@@ -40,12 +41,7 @@ interface OSResumo {
 }
 
 async function gerarNumeroLaudo(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('laudos')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_laudo', `LAUDO-${hoje}-%`);
-  return `LAUDO-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('LAUDO', 'laudos', 'numero_laudo');
 }
 
 export function BancadaVisao() {

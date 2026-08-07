@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -23,12 +24,7 @@ interface ContaReceber {
 const STATUS_OPCOES = ['Em aberto', 'Recebido', 'Cancelado'];
 
 async function gerarNumeroConta(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('contas_receber')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_conta', `CR-${hoje}-%`);
-  return `CR-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
 }
 
 const formVazio = {

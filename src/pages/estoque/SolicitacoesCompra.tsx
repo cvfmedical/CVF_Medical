@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../../components/Badge';
@@ -30,12 +31,7 @@ const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
 };
 
 async function gerarNumeroSolicitacao(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('solicitacoes_compra')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_solicitacao', `SOL-${hoje}-%`);
-  return `SOL-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('SOL', 'solicitacoes_compra', 'numero_solicitacao');
 }
 
 const formVazio = {

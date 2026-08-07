@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { IconTrash } from '@tabler/icons-react';
 
@@ -21,12 +22,7 @@ interface ContratoManutencao {
 }
 
 async function gerarNumeroContrato(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('contratos_manutencao')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_contrato', `CONT-${hoje}-%`);
-  return `CONT-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('CONT', 'contratos_manutencao', 'numero_contrato');
 }
 
 function statusExibicao(c: ContratoManutencao): { texto: string; tono: 'copper' | 'teal' | 'danger' | 'neutro' } {

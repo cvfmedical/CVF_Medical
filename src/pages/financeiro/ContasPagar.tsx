@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 
 interface ContaPagar {
   id: number;
@@ -18,12 +19,7 @@ interface ContaPagar {
 }
 
 async function gerarNumeroConta(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('contas_pagar')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_conta', `CP-${hoje}-%`);
-  return `CP-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('CP', 'contas_pagar', 'numero_conta');
 }
 
 function statusTono(status: string, dataVencimento: string): 'copper' | 'teal' | 'danger' | 'neutro' {
