@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
@@ -58,21 +59,11 @@ interface Cliente {
 }
 
 async function gerarCodigoEntrada(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('entradas_equipamento')
-    .select('id', { count: 'exact', head: true })
-    .like('codigo_entrada', `ENT-${hoje}-%`);
-  return `ENT-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('ENT', 'entradas_equipamento', 'codigo_entrada');
 }
 
 async function gerarNumeroOS(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('ordens_servico')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_os', `OS-${hoje}-%`);
-  return `OS-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
 }
 
 const formVazio = {

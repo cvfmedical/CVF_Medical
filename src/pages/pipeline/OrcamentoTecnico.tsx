@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -48,12 +49,7 @@ interface OSOpcao {
 }
 
 async function gerarNumeroOrcamento(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('orcamentos')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_orcamento', `ORC-${hoje}-%`);
-  return `ORC-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('ORC', 'orcamentos', 'numero_orcamento');
 }
 
 export function OrcamentoTecnico() {

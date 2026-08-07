@@ -4,14 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
+import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 
 async function gerarNumeroOS(): Promise<string> {
-  const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
-    .from('ordens_servico')
-    .select('id', { count: 'exact', head: true })
-    .like('numero_os', `OS-${hoje}-%`);
-  return `OS-${hoje}-${String((count ?? 0) + 1).padStart(3, '0')}`;
+  return gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
 }
 
 export function OrdemServico() {
