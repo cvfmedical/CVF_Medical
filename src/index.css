@@ -165,6 +165,10 @@ button {
 .rail-logo-img {
   width: 44px;
   height: auto;
+  /* A rail tem fundo escuro (--graphite-900); o logo azul/vermelho some.
+     brightness(0) + invert(1) renderiza o logo em branco sólido, que
+     contrasta bem no escuro. O logo colorido continua no cabeçalho claro. */
+  filter: brightness(0) invert(1);
 }
 
 .rail-nav {
