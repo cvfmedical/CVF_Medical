@@ -106,7 +106,13 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const { data: convite, error: conviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(cliente.email);
+  // O cliente define a senha no PORTAL (não no sistema interno), então o
+  // link do convite redireciona para portal.cvfmedical.com.br, onde a tela
+  // "Definir sua senha" trata o token (type=invite) do #hash.
+  const { data: convite, error: conviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    cliente.email,
+    { redirectTo: 'https://portal.cvfmedical.com.br' },
+  );
   if (conviteError || !convite.user) {
     return new Response(JSON.stringify({ error: conviteError?.message ?? 'Erro ao enviar convite.' }), {
       status: 500,

@@ -188,6 +188,17 @@
         <div id="erro-login"></div>
     </div>
 
+    <div id="tela-definir-senha" style="display:none;">
+        <h2>Definir sua senha</h2>
+        <p style="color:var(--texto-sec); font-size:14px; margin-bottom:12px;">Bem-vindo(a)! Crie uma senha para acessar o portal do cliente.</p>
+        <label for="txt-nova-senha">Nova senha</label>
+        <input type="password" id="txt-nova-senha" placeholder="mínimo 6 caracteres">
+        <label for="txt-confirma-senha">Confirmar senha</label>
+        <input type="password" id="txt-confirma-senha" placeholder="repita a senha">
+        <button class="primario full" id="btn-definir-senha">Salvar senha e entrar</button>
+        <div id="erro-senha"></div>
+    </div>
+
     <div id="tela-portal">
         <div class="card-cliente" id="card-cliente"></div>
 
@@ -231,6 +242,38 @@ document.getElementById('txt-senha').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fazerLogin();
 });
 btnSair.addEventListener('click', fazerLogout);
+
+// Detecta se o cliente chegou por um link de convite / redefinição de
+// senha (o Supabase coloca type=invite ou type=recovery no #hash). Lido
+// de forma síncrona antes do supabase-js limpar o hash.
+const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+const tipoAuth = hashParams.get('type');
+const precisaDefinirSenha = tipoAuth === 'invite' || tipoAuth === 'recovery';
+const erroHashLink = hashParams.get('error_description') || hashParams.get('error');
+
+document.getElementById('btn-definir-senha').addEventListener('click', definirSenha);
+
+async function definirSenha() {
+    const erro = document.getElementById('erro-senha');
+    erro.style.display = 'none';
+    const s1 = document.getElementById('txt-nova-senha').value;
+    const s2 = document.getElementById('txt-confirma-senha').value;
+    if (s1.length < 6) return mostrarErroSenha('A senha deve ter ao menos 6 caracteres.');
+    if (s1 !== s2) return mostrarErroSenha('As senhas não conferem.');
+
+    const { error } = await supabaseClient.auth.updateUser({ password: s1 });
+    if (error) return mostrarErroSenha('Não foi possível salvar a senha. Tente pelo link do e-mail novamente.');
+
+    document.getElementById('tela-definir-senha').style.display = 'none';
+    await carregarPortal();
+}
+
+function mostrarErroSenha(msg) {
+    const erro = document.getElementById('erro-senha');
+    erro.textContent = msg;
+    erro.style.color = 'var(--vermelho)';
+    erro.style.display = 'block';
+}
 
 async function fazerLogin() {
     erroLogin.style.display = 'none';
@@ -442,8 +485,17 @@ async function carregarPortal() {
     btnSair.style.display = 'inline-block';
 }
 
-// Mantém a sessão ao recarregar a página
+// Inicialização: convite/redefinição de senha, ou sessão existente.
 (async () => {
+    if (erroHashLink) {
+        mostrarErro('O link expirou ou já foi usado. Peça um novo convite à CVF Medical.');
+        return;
+    }
+    if (precisaDefinirSenha) {
+        telaLogin.style.display = 'none';
+        document.getElementById('tela-definir-senha').style.display = 'block';
+        return;
+    }
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (session) await carregarPortal();
 })();
