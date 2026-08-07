@@ -10,7 +10,9 @@ export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
   const location = useLocation();
 
-  const categoriasVisiveis = MENU.filter((cat) => cat.itens.some((item) => temPermissao(item.categoria)));
+  const categoriasVisiveis = MENU.filter((cat) =>
+    cat.itens.some((item) => temPermissao(item.categoria) && !item.oculto),
+  );
   const categoriaAtual = categoriaDoPath(location.pathname);
   const noDashboard = location.pathname === '/';
 
@@ -34,7 +36,7 @@ export function Layout() {
           {categoriasVisiveis.map((cat) => {
             const IconeCategoria = cat.icone;
             const ativo = categoriaAtual?.titulo === cat.titulo;
-            const primeiroItemPermitido = cat.itens.find((item) => temPermissao(item.categoria));
+            const primeiroItemPermitido = cat.itens.find((item) => temPermissao(item.categoria) && !item.oculto);
             return (
               <NavLink
                 key={cat.titulo}
@@ -70,7 +72,7 @@ export function Layout() {
           {categoriaAtual && (
             <nav className="abas-categoria">
               {categoriaAtual.itens
-                .filter((item) => temPermissao(item.categoria))
+                .filter((item) => temPermissao(item.categoria) && !item.oculto)
                 .map((item) => (
                   <NavLink
                     key={item.path}
