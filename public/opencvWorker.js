@@ -98,10 +98,26 @@ function calcularMetrologiaOptica(cv, frame, gray, fatorCalib) {
       desvioCor = (Math.sqrt(somaQuad / 3.0) / 255.0) * 100.0;
     }
 
-    const perimetro = cv.arcLength(maiorContorno, true);
-    if (perimetro > 0) {
-      const circularidade = (4 * Math.PI * area) / (perimetro * perimetro);
-      distorcao = Math.abs(1.0 - circularidade) * 100.0;
+    // Distorção geométrica = quanto o contorno do campo desvia de um círculo
+    // perfeito (coef. de variação do raio em torno do centro). Robusto a
+    // rugosidade de borda, ao contrário da circularidade por perímetro.
+    const pts = maiorContorno.data32S;
+    const n = pts.length / 2;
+    if (n > 8) {
+      let somaR = 0;
+      const raios = new Array(n);
+      for (let k = 0; k < n; k++) {
+        const dx = pts[k * 2] - xCentro;
+        const dy = pts[k * 2 + 1] - yCentro;
+        raios[k] = Math.sqrt(dx * dx + dy * dy);
+        somaR += raios[k];
+      }
+      const rMedio = somaR / n;
+      if (rMedio > 0) {
+        let varSum = 0;
+        for (let k = 0; k < n; k++) varSum += (raios[k] - rMedio) ** 2;
+        distorcao = (Math.sqrt(varSum / n) / rMedio) * 100.0;
+      }
     }
 
     maskCentro.delete();
