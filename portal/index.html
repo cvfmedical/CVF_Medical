@@ -221,6 +221,7 @@
     <div id="tela-portal">
         <div class="card-cliente" id="card-cliente"></div>
 
+        <div id="dados-cliente">
         <h2 class="secao">Orçamentos aguardando sua aprovação</h2>
         <div id="lista-orcamentos"></div>
         <div id="vazio-orcamentos" class="vazio" style="display:none;">Nenhum orçamento aguardando aprovação.</div>
@@ -242,6 +243,7 @@
             <tbody id="corpo-tabela"></tbody>
         </table>
         <div id="vazio" class="vazio" style="display:none;">Nenhuma Ordem de Serviço encontrada.</div>
+        </div>
     </div>
 </main>
 
@@ -528,20 +530,37 @@ async function responderOrcamento(orcamentoId, novoStatus) {
 }
 
 async function carregarPortal() {
-    const { data: clienteData } = await supabaseClient.from('clientes').select('*').limit(1);
+    telaLogin.style.display = 'none';
+    telaCadastro.style.display = 'none';
+    document.getElementById('tela-definir-senha').style.display = 'none';
+    telaPortal.style.display = 'block';
+    btnSair.style.display = 'inline-block';
+
+    // Busca SÓ o cliente vinculado a este login (não confia em .limit(1),
+    // porque um usuário da equipe/staff enxergaria todos os clientes pelo
+    // RLS de staff). Sem vínculo => não é um cliente => não mostra dados.
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: clienteData } = await supabaseClient
+        .from('clientes').select('*')
+        .eq('auth_user_id', user ? user.id : '00000000-0000-0000-0000-000000000000')
+        .limit(1);
     const cliente = clienteData && clienteData[0];
 
-    document.getElementById('card-cliente').innerHTML = cliente
-        ? `<h3>${cliente.razao_social}</h3><p>${cliente.hospital_clinica || ''} ${cliente.email ? '| ' + cliente.email : ''}</p>`
-        : '<h3>Acesso ainda não vinculado</h3><p>Seu login ainda não está ligado a um cadastro. Confirme se usou o mesmo e-mail informado à CVF Medical, ou entre em contato com a CVF.</p>';
+    const dados = document.getElementById('dados-cliente');
+    if (!cliente) {
+        document.getElementById('card-cliente').innerHTML =
+            '<h3>Acesso não vinculado a um cliente</h3><p>Esta área é exclusiva para clientes. Se você é cliente, cadastre-se com o <strong>mesmo e-mail</strong> informado à CVF Medical. Se você é da equipe CVF, acesse o sistema em <strong>cvf-medical.pages.dev</strong>.</p>';
+        dados.style.display = 'none';
+        return;
+    }
+
+    dados.style.display = 'block';
+    document.getElementById('card-cliente').innerHTML =
+        `<h3>${cliente.razao_social}</h3><p>${cliente.hospital_clinica || ''} ${cliente.email ? '| ' + cliente.email : ''}</p>`;
 
     await carregarOrcamentos();
     await carregarEntradas();
     await carregarOrdens();
-
-    telaLogin.style.display = 'none';
-    telaPortal.style.display = 'block';
-    btnSair.style.display = 'inline-block';
 }
 
 // Inicialização: convite/redefinição de senha, ou sessão existente.
