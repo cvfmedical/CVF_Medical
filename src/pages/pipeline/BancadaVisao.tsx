@@ -108,16 +108,24 @@ export function BancadaVisao() {
   });
 
   const [cvErro, setCvErro] = useState<string | null>(null);
-  useEffect(() => {
+  const [cvCarregando, setCvCarregando] = useState(false);
+  // Resultado definido pelo técnico (inspeção visual). A medição automática
+  // por OpenCV é OPCIONAL e carregada só sob demanda - ela é pesada e trava
+  // máquinas mais lentas, então NÃO carrega sozinha ao abrir a tela.
+  const [resultadoManual, setResultadoManual] = useState<'Aprovado' | 'Reprovado'>('Aprovado');
+
+  function ativarMedicaoAutomatica() {
+    if (cvPronto || cvCarregando) return;
+    setCvErro(null);
+    setCvCarregando(true);
     carregarOpenCv()
       .then((cv) => {
         cvRef.current = cv;
         setCvPronto(true);
       })
-      .catch(() => {
-        setCvErro('Não foi possível carregar o motor de análise de imagem (OpenCV). Verifique a conexão com a internet e recarregue a página.');
-      });
-  }, []);
+      .catch(() => setCvErro('Não foi possível carregar o motor de análise de imagem (OpenCV).'))
+      .finally(() => setCvCarregando(false));
+  }
 
   useEffect(() => {
     return () => {
@@ -266,16 +274,20 @@ export function BancadaVisao() {
   }
 
   async function gerarLaudo() {
-    const cv = cvRef.current;
-    if (!cv || !osSelecionada) return;
+    if (!osSelecionada) return;
     setErro(null);
     setGerando(true);
     try {
+      const cv = cvRef.current;
       const imageData = capturarFrame();
-      if (!imageData) throw new Error('Nenhuma imagem capturada da bancada.');
-      const metricasFinal = calcularMetricas(cv, imageData, fatorCalibRef.current);
-      const st = statusMetricas(metricasFinal);
-      const resultado = st.conforme ? 'Aprovado' : 'Reprovado';
+      // Se o OpenCV estiver carregado, calcula as métricas e deriva o
+      // resultado; senão, é inspeção manual e usa o resultado do técnico.
+      const metricasFinal = cv && imageData ? calcularMetricas(cv, imageData, fatorCalibRef.current) : null;
+      const resultado: 'Aprovado' | 'Reprovado' = metricasFinal
+        ? statusMetricas(metricasFinal).conforme
+          ? 'Aprovado'
+          : 'Reprovado'
+        : resultadoManual;
 
       const imagemDataUrl = capturaRef.current?.toDataURL('image/jpeg', 0.85) ?? null;
 
@@ -297,6 +309,7 @@ export function BancadaVisao() {
             equipamentoFab: osSelecionada.optica_fab ?? '',
             equipamentoSn: osSelecionada.optica_sn ?? '',
             metricas: metricasFinal,
+            resultado,
             imagemDataUrl,
             tecnicoResponsavel: funcionario?.nome ?? '',
             observacoes,
@@ -382,17 +395,14 @@ export function BancadaVisao() {
           )}
         </div>
 
-        {!cvPronto && !cvErro && (
-          <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
-            Carregando o motor de análise de imagem (OpenCV)... A primeira vez leva de <strong>10 a 20 segundos</strong>
-            (baixa um arquivo grande, uma vez só). Depois fica rápido. Aguarde — o botão "Iniciar inspeção" libera sozinho.
-          </p>
-        )}
-        {cvErro && <p className="erro-login">{cvErro}</p>}
+        <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+          A inspeção registra o resultado e gera o laudo. A medição automática por imagem (OpenCV) é opcional e
+          pode ser ativada dentro da inspeção.
+        </p>
         {cameraErro && <p className="erro-login">{cameraErro}</p>}
         {erro && <p className="erro-login">{erro}</p>}
 
-        <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!cvPronto || !osId}>
+        <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
           Iniciar inspeção
         </button>
       </div>
@@ -416,13 +426,33 @@ export function BancadaVisao() {
         <p style={{ color: '#fff', fontSize: 13 }}>
           {osSelecionada?.numero_os} - {osSelecionada?.cliente_nome}
         </p>
+        <div className="campo-form">
+          <label style={{ color: '#fff' }}>Resultado da inspeção</label>
+          <select
+            value={resultadoManual}
+            onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
+            disabled={!!metricas}
+          >
+            <option value="Aprovado">Aprovado</option>
+            <option value="Reprovado">Reprovado</option>
+          </select>
+          {metricas && (
+            <p style={{ color: '#94a3b8', fontSize: 11 }}>Definido pela medição automática (OpenCV).</p>
+          )}
+        </div>
+        {!cvPronto && (
+          <button className="botao-secundario" onClick={ativarMedicaoAutomatica} disabled={cvCarregando}>
+            {cvCarregando ? 'Carregando OpenCV (~10-20s)...' : 'Ativar medição automática (opcional)'}
+          </button>
+        )}
+        {cvErro && <p className="erro-login">{cvErro}</p>}
         <button className="botao-secundario" onClick={fechar}>
           Fechar
         </button>
-        <button className="botao-primario" onClick={gerarLaudo} disabled={gerando || !metricas}>
+        <button className="botao-primario" onClick={gerarLaudo} disabled={gerando}>
           {gerando ? 'Gerando...' : 'Gerar laudo'}
         </button>
-        <button className="botao-secundario" onClick={calibrar}>
+        <button className="botao-secundario" onClick={calibrar} disabled={!cvPronto}>
           Calibrar
         </button>
         <button className="botao-secundario" onClick={() => setGradeLigada((g) => !g)}>

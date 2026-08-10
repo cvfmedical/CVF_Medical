@@ -62,7 +62,10 @@ export interface DadosBancadaPdf {
   equipamentoDesc: string;
   equipamentoFab: string;
   equipamentoSn: string;
-  metricas: MetricasOticas;
+  // null quando a inspeção foi manual (sem medição automática por OpenCV).
+  metricas: MetricasOticas | null;
+  // Resultado definido pelo técnico (usado quando não há medição automática).
+  resultado?: 'Aprovado' | 'Reprovado';
   imagemDataUrl: string | null;
   tecnicoResponsavel: string;
   observacoes: string;
@@ -70,7 +73,8 @@ export interface DadosBancadaPdf {
 
 export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
   const m = dados.metricas;
-  const st = statusMetricas(m);
+  const st = m ? statusMetricas(m) : null;
+  const conforme = m && st ? st.conforme : dados.resultado === 'Aprovado';
   const etapaLabel = dados.etapa === 'checkpoint_a' ? 'Checkpoint A (pré-selagem)' : 'Checkpoint B (pós-autoclave, final)';
 
   return (
@@ -215,6 +219,7 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
           </View>
         ))}
 
+        {m && st ? (<>
         <Text style={styles.faixa}>7. RESULTADOS - RESOLUÇÃO E NITIDEZ ÓPTICA (ISO 8600-5)</Text>
         <View style={styles.tabelaCabecalho}>
           <Text style={[styles.celula, { flex: 2 }]}>Região de análise</Text>
@@ -277,6 +282,17 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
             </Text>
           </View>
         ))}
+        </>) : (
+          <>
+            <Text style={styles.faixa}>7 a 9. ENSAIOS DE MEDIÇÃO POR IMAGEM</Text>
+            <View style={styles.caixa}>
+              <Text>
+                Medição automática por imagem não realizada nesta inspeção (inspeção visual manual). A conclusão
+                baseia-se na avaliação do técnico responsável, conforme item 12.
+              </Text>
+            </View>
+          </>
+        )}
 
         <Text style={styles.faixa}>10. REGISTRO DAS OBSERVAÇÕES TÉCNICAS</Text>
         <View style={styles.caixa}>
@@ -306,10 +322,10 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
             <View style={[styles.caixa, styles.linhaZebra]}>
               <Text>
                 <Text style={styles.bold}>Situação: </Text>
-                <StatusTexto conforme={st.conforme} />
+                <StatusTexto conforme={conforme} />
                 {'\n\n'}
                 <Text style={styles.bold}>Síntese: </Text>
-                {st.conforme
+                {conforme
                   ? 'O equipamento atende a todos os critérios normativos auditados.'
                   : 'Foram detectadas divergências técnicas nos parâmetros auditados.'}
               </Text>
@@ -321,7 +337,7 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
         <View style={styles.caixa}>
           <Text>
             <Text style={styles.bold}>Destinação sugerida: </Text>
-            {st.conforme
+            {conforme
               ? dados.etapa === 'checkpoint_a'
                 ? 'Seguir para selagem'
                 : 'Liberar para entrega ao cliente'
