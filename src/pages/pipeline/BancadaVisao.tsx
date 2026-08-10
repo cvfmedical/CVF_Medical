@@ -6,14 +6,12 @@ import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
-import { carregarOpenCv } from '../../lib/opencvLoader';
 import {
-  calcularMetricas,
-  detectarDiametroAlvo,
-  statusMetricas,
-  FATOR_CALIB_PADRAO,
-  type MetricasOticas,
-} from '../../lib/metrologiaOptica';
+  iniciarOpenCvWorker,
+  calcularMetricasWorker,
+  detectarDiametroWorker,
+} from '../../lib/opencvWorkerClient';
+import { statusMetricas, FATOR_CALIB_PADRAO, type MetricasOticas } from '../../lib/metrologiaOptica';
 import { BancadaVisaoPdf } from './BancadaVisaoPdf';
 import {
   STATUS_CHECKPOINT_A,
@@ -65,7 +63,8 @@ export function BancadaVisao() {
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const capturaRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const cvRef = useRef<Awaited<ReturnType<typeof carregarOpenCv>> | null>(null);
+  const cvProntoRef = useRef(false);
+  const processandoRef = useRef(false);
   const intervalRef = useRef<number | null>(null);
   // Refs para valores lidos dentro do setInterval (evita closure
   // desatualizada - o interval é criado uma vez em iniciarInspecao).
@@ -118,9 +117,9 @@ export function BancadaVisao() {
     if (cvPronto || cvCarregando) return;
     setCvErro(null);
     setCvCarregando(true);
-    carregarOpenCv()
-      .then((cv) => {
-        cvRef.current = cv;
+    iniciarOpenCvWorker()
+      .then(() => {
+        cvProntoRef.current = true;
         setCvPronto(true);
       })
       .catch(() => setCvErro('Não foi possível carregar o motor de análise de imagem (OpenCV).'))
@@ -213,17 +212,21 @@ export function BancadaVisao() {
     linha(`Distorção: ${m.distorcao.toFixed(1)}%`, st.stDistorcao ? '#4ade80' : '#f87171');
   }
 
-  function processarFrame() {
-    const cv = cvRef.current;
-    if (!cv) return;
+  async function processarFrame() {
+    // Análise no worker (thread de fundo). O guard evita empilhar frames
+    // se o worker ainda estiver processando o anterior.
+    if (!cvProntoRef.current || processandoRef.current) return;
     const imageData = capturarFrame();
     if (!imageData) return;
+    processandoRef.current = true;
     try {
-      const m = calcularMetricas(cv, imageData, fatorCalibRef.current);
+      const m = await calcularMetricasWorker(imageData, fatorCalibRef.current);
       setMetricas(m);
       desenharOverlay(m);
     } catch {
-      // frame ocasionalmente inválido (ex: durante troca de resolução) - ignora, tenta de novo no próximo tick
+      // frame ocasionalmente inválido - ignora, tenta de novo no próximo tick
+    } finally {
+      processandoRef.current = false;
     }
   }
 
@@ -245,20 +248,22 @@ export function BancadaVisao() {
       }
       setRodando(true);
       intervalRef.current = window.setInterval(processarFrame, 250);
+      // Carrega o OpenCV no worker (thread de fundo) - a análise ISO 8600
+      // aparece sozinha quando ficar pronta, sem travar a tela.
+      ativarMedicaoAutomatica();
     } catch {
       setCameraErro('Não foi possível acessar a câmera (verifique a permissão do navegador).');
     }
   }
 
-  function calibrar() {
-    const cv = cvRef.current;
-    if (!cv) return;
+  async function calibrar() {
+    if (!cvProntoRef.current) return;
     const imageData = capturarFrame();
     if (!imageData) {
       alert('Nenhuma imagem capturada para calibrar.');
       return;
     }
-    const diametroPx = detectarDiametroAlvo(cv, imageData);
+    const diametroPx = await detectarDiametroWorker(imageData);
     if (!diametroPx || diametroPx < 50) {
       alert('Alvo óptico não detectado ou muito pequeno. Aproxime a ótica do alvo.');
       return;
@@ -278,11 +283,11 @@ export function BancadaVisao() {
     setErro(null);
     setGerando(true);
     try {
-      const cv = cvRef.current;
       const imageData = capturarFrame();
-      // Se o OpenCV estiver carregado, calcula as métricas e deriva o
-      // resultado; senão, é inspeção manual e usa o resultado do técnico.
-      const metricasFinal = cv && imageData ? calcularMetricas(cv, imageData, fatorCalibRef.current) : null;
+      // Se a medição automática estiver ativa, calcula as métricas no worker
+      // e deriva o resultado; senão, é inspeção manual (resultado do técnico).
+      const metricasFinal =
+        cvProntoRef.current && imageData ? await calcularMetricasWorker(imageData, fatorCalibRef.current) : null;
       const resultado: 'Aprovado' | 'Reprovado' = metricasFinal
         ? statusMetricas(metricasFinal).conforme
           ? 'Aprovado'
