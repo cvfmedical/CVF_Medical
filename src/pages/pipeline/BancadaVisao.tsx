@@ -395,16 +395,49 @@ export function BancadaVisao() {
           )}
         </div>
 
-        <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
-          A inspeção registra o resultado e gera o laudo. A medição automática por imagem (OpenCV) é opcional e
-          pode ser ativada dentro da inspeção.
-        </p>
+        <div className="campo-form" style={{ maxWidth: 420 }}>
+          <label>Resultado da inspeção</label>
+          <select
+            value={resultadoManual}
+            onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
+          >
+            <option value="Aprovado">Aprovado</option>
+            <option value="Reprovado">Reprovado</option>
+          </select>
+        </div>
+        {etapa === 'checkpoint_a' && (
+          <div className="campo-form" style={{ maxWidth: 420 }}>
+            <label>Este equipamento precisa de selagem?</label>
+            <select
+              value={precisaSelagem ? 'sim' : 'nao'}
+              onChange={(e) => setPrecisaSelagem(e.target.value === 'sim')}
+            >
+              <option value="sim">Sim (ótica selável - vai para Selagem)</option>
+              <option value="nao">Não (ex: bomba de infusão - vai para Teste de Qualidade)</option>
+            </select>
+          </div>
+        )}
+        <div className="campo-form" style={{ maxWidth: 420 }}>
+          <label>Observações</label>
+          <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
+        </div>
+
         {cameraErro && <p className="erro-login">{cameraErro}</p>}
+        {cvErro && <p className="erro-login">{cvErro}</p>}
         {erro && <p className="erro-login">{erro}</p>}
 
-        <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
-          Iniciar inspeção
-        </button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 420 }}>
+          <button className="botao-primario botao-pequeno" onClick={gerarLaudo} disabled={gerando || !osId}>
+            {gerando ? 'Gerando...' : 'Gerar laudo (inspeção manual)'}
+          </button>
+          <button className="botao-secundario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
+            Abrir câmera (opcional)
+          </button>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 420, marginTop: 4 }}>
+          "Gerar laudo (inspeção manual)" registra o resultado e avança a OS <strong>sem usar câmera nem OpenCV</strong>.
+          Use "Abrir câmera" só se quiser anexar foto ou a medição automática.
+        </p>
       </div>
     );
   }
