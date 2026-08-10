@@ -383,7 +383,10 @@ export function BancadaVisao() {
         </div>
 
         {!cvPronto && !cvErro && (
-          <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Carregando motor de análise de imagem (OpenCV)...</p>
+          <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+            Carregando o motor de análise de imagem (OpenCV)... A primeira vez leva de <strong>10 a 20 segundos</strong>
+            (baixa um arquivo grande, uma vez só). Depois fica rápido. Aguarde — o botão "Iniciar inspeção" libera sozinho.
+          </p>
         )}
         {cvErro && <p className="erro-login">{cvErro}</p>}
         {cameraErro && <p className="erro-login">{cameraErro}</p>}
