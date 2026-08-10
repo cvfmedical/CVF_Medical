@@ -431,17 +431,17 @@ export function BancadaVisao() {
         {cvErro && <p className="erro-login">{cvErro}</p>}
         {erro && <p className="erro-login">{erro}</p>}
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 420 }}>
-          <button className="botao-primario botao-pequeno" onClick={gerarLaudo} disabled={gerando || !osId}>
-            {gerando ? 'Gerando...' : 'Gerar laudo (inspeção manual)'}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 460 }}>
+          <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
+            Iniciar inspeção (medição automática ISO 8600)
           </button>
-          <button className="botao-secundario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
-            Abrir câmera (opcional)
+          <button className="botao-secundario botao-pequeno" onClick={gerarLaudo} disabled={gerando || !osId}>
+            {gerando ? 'Gerando...' : 'Registrar sem câmera (manual)'}
           </button>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 420, marginTop: 4 }}>
-          "Gerar laudo (inspeção manual)" registra o resultado e avança a OS <strong>sem usar câmera nem OpenCV</strong>.
-          Use "Abrir câmera" só se quiser anexar foto ou a medição automática.
+        <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 460, marginTop: 4 }}>
+          "Iniciar inspeção" abre a câmera e faz a medição automática ISO 8600 em segundo plano (não trava a tela).
+          "Registrar sem câmera" gera um laudo só com o resultado que você marcar, sem câmera nem medição.
         </p>
       </div>
     );
