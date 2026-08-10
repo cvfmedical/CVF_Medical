@@ -186,6 +186,25 @@
         <input type="password" id="txt-senha" placeholder="••••••••">
         <button class="primario full" id="btn-entrar">Entrar</button>
         <div id="erro-login"></div>
+        <p style="text-align:center; margin-top:14px; font-size:14px;">
+            Primeiro acesso? <a href="#" id="link-cadastro" style="color:var(--azul); font-weight:600;">Criar cadastro</a>
+        </p>
+    </div>
+
+    <div id="tela-cadastro" style="display:none;">
+        <h2>Criar cadastro</h2>
+        <p style="color:var(--texto-sec); font-size:14px; margin-bottom:12px;">Use o <strong>mesmo e-mail</strong> que você informou à CVF Medical.</p>
+        <label for="cad-email">E-mail</label>
+        <input type="email" id="cad-email" placeholder="seu@email.com">
+        <label for="cad-senha">Senha</label>
+        <input type="password" id="cad-senha" placeholder="mínimo 6 caracteres">
+        <label for="cad-confirma">Confirmar senha</label>
+        <input type="password" id="cad-confirma" placeholder="repita a senha">
+        <button class="primario full" id="btn-cadastrar">Criar cadastro</button>
+        <div id="msg-cadastro"></div>
+        <p style="text-align:center; margin-top:14px; font-size:14px;">
+            Já tem cadastro? <a href="#" id="link-login" style="color:var(--azul); font-weight:600;">Entrar</a>
+        </p>
     </div>
 
     <div id="tela-definir-senha" style="display:none;">
@@ -273,6 +292,46 @@ function mostrarErroSenha(msg) {
     erro.textContent = msg;
     erro.style.color = 'var(--vermelho)';
     erro.style.display = 'block';
+}
+
+// --- Auto-cadastro do cliente ---
+const telaCadastro = document.getElementById('tela-cadastro');
+document.getElementById('link-cadastro').addEventListener('click', (e) => {
+    e.preventDefault();
+    telaLogin.style.display = 'none';
+    telaCadastro.style.display = 'block';
+});
+document.getElementById('link-login').addEventListener('click', (e) => {
+    e.preventDefault();
+    telaCadastro.style.display = 'none';
+    telaLogin.style.display = 'block';
+});
+document.getElementById('btn-cadastrar').addEventListener('click', cadastrar);
+
+async function cadastrar() {
+    const email = document.getElementById('cad-email').value.trim();
+    const s1 = document.getElementById('cad-senha').value;
+    const s2 = document.getElementById('cad-confirma').value;
+    if (!email) return mostrarMsgCadastro('Informe seu e-mail.', true);
+    if (s1.length < 6) return mostrarMsgCadastro('A senha deve ter ao menos 6 caracteres.', true);
+    if (s1 !== s2) return mostrarMsgCadastro('As senhas não conferem.', true);
+
+    const { error } = await supabaseClient.auth.signUp({
+        email,
+        password: s1,
+        options: { emailRedirectTo: 'https://portal.cvfmedical.com.br' },
+    });
+    if (error) return mostrarMsgCadastro('Não foi possível cadastrar: ' + error.message, true);
+
+    mostrarMsgCadastro('Cadastro criado! Enviamos um e-mail de confirmação para ' + email +
+        '. Clique no link do e-mail para ativar seu acesso e depois volte aqui para entrar.', false);
+}
+
+function mostrarMsgCadastro(txt, erro) {
+    const msg = document.getElementById('msg-cadastro');
+    msg.textContent = txt;
+    msg.style.color = erro ? 'var(--vermelho)' : '#15803d';
+    msg.style.display = 'block';
 }
 
 async function fazerLogin() {
@@ -474,7 +533,7 @@ async function carregarPortal() {
 
     document.getElementById('card-cliente').innerHTML = cliente
         ? `<h3>${cliente.razao_social}</h3><p>${cliente.hospital_clinica || ''} ${cliente.email ? '| ' + cliente.email : ''}</p>`
-        : '<h3>Cliente</h3>';
+        : '<h3>Acesso ainda não vinculado</h3><p>Seu login ainda não está ligado a um cadastro. Confirme se usou o mesmo e-mail informado à CVF Medical, ou entre em contato com a CVF.</p>';
 
     await carregarOrcamentos();
     await carregarEntradas();
