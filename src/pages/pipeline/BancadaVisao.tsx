@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { pdf } from '@react-pdf/renderer';
@@ -278,23 +278,66 @@ export function BancadaVisao() {
     }
   }
 
-  async function gerarLaudo() {
+  // Analisa uma imagem de arquivo (sem câmera) com o mesmo motor ISO 8600
+  // do worker e gera o laudo. Útil para bancadas sem câmera no navegador ou
+  // para reprocessar uma foto capturada do endoscópio.
+  async function analisarImagemArquivo(ev: ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    ev.target.value = '';
+    if (!file || !osSelecionada) return;
+    setErro(null);
+    setGerando(true);
+    try {
+      await iniciarOpenCvWorker();
+      cvProntoRef.current = true;
+      setCvPronto(true);
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+        img.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas indisponível.');
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const metricasFinal = await calcularMetricasWorker(imageData, fatorCalibRef.current);
+      const imagemDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      await gerarLaudo({ metricas: metricasFinal, imagemDataUrl });
+    } catch (e) {
+      setErro(mensagemErro(e));
+      setGerando(false);
+    }
+  }
+
+  async function gerarLaudo(override?: { metricas: MetricasOticas | null; imagemDataUrl: string | null }) {
     if (!osSelecionada) return;
     setErro(null);
     setGerando(true);
     try {
-      const imageData = capturarFrame();
-      // Se a medição automática estiver ativa, calcula as métricas no worker
-      // e deriva o resultado; senão, é inspeção manual (resultado do técnico).
-      const metricasFinal =
-        cvProntoRef.current && imageData ? await calcularMetricasWorker(imageData, fatorCalibRef.current) : null;
+      let metricasFinal: MetricasOticas | null;
+      let imagemDataUrl: string | null;
+      if (override) {
+        // Análise a partir de uma imagem de arquivo (já processada no worker).
+        metricasFinal = override.metricas;
+        imagemDataUrl = override.imagemDataUrl;
+      } else {
+        // Fluxo da câmera: captura o frame e mede no worker (se ativo).
+        const imageData = capturarFrame();
+        metricasFinal =
+          cvProntoRef.current && imageData ? await calcularMetricasWorker(imageData, fatorCalibRef.current) : null;
+        imagemDataUrl = capturaRef.current?.toDataURL('image/jpeg', 0.85) ?? null;
+      }
       const resultado: 'Aprovado' | 'Reprovado' = metricasFinal
         ? statusMetricas(metricasFinal).conforme
           ? 'Aprovado'
           : 'Reprovado'
         : resultadoManual;
-
-      const imagemDataUrl = capturaRef.current?.toDataURL('image/jpeg', 0.85) ?? null;
 
       const numeroLaudo = await gerarNumeroLaudo();
       const blob = await pdf(
@@ -435,12 +478,26 @@ export function BancadaVisao() {
           <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
             Iniciar inspeção (medição automática ISO 8600)
           </button>
-          <button className="botao-secundario botao-pequeno" onClick={gerarLaudo} disabled={gerando || !osId}>
+          <button className="botao-secundario botao-pequeno" onClick={() => gerarLaudo()} disabled={gerando || !osId}>
             {gerando ? 'Gerando...' : 'Registrar sem câmera (manual)'}
           </button>
         </div>
+        <label
+          className="botao-secundario botao-pequeno"
+          style={{ display: 'inline-block', cursor: osId && !gerando ? 'pointer' : 'not-allowed', maxWidth: 460, marginTop: 8, opacity: osId && !gerando ? 1 : 0.6 }}
+        >
+          {gerando ? 'Analisando imagem...' : 'Analisar imagem ISO 8600 (arquivo, sem câmera)'}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={analisarImagemArquivo}
+            disabled={gerando || !osId}
+            style={{ display: 'none' }}
+          />
+        </label>
         <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 460, marginTop: 4 }}>
           "Iniciar inspeção" abre a câmera e faz a medição automática ISO 8600 em segundo plano (não trava a tela).
+          "Analisar imagem" roda a mesma medição sobre uma foto (útil para testar ou sem câmera).
           "Registrar sem câmera" gera um laudo só com o resultado que você marcar, sem câmera nem medição.
         </p>
       </div>
@@ -487,7 +544,7 @@ export function BancadaVisao() {
         <button className="botao-secundario" onClick={fechar}>
           Fechar
         </button>
-        <button className="botao-primario" onClick={gerarLaudo} disabled={gerando}>
+        <button className="botao-primario" onClick={() => gerarLaudo()} disabled={gerando}>
           {gerando ? 'Gerando...' : 'Gerar laudo'}
         </button>
         <button className="botao-secundario" onClick={calibrar} disabled={!cvPronto}>
