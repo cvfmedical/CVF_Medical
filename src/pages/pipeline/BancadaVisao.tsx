@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { pdf } from '@react-pdf/renderer';
@@ -6,11 +6,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  iniciarOpenCvWorker,
-  calcularMetricasWorker,
-  detectarDiametroWorker,
-} from '../../lib/opencvWorkerClient';
+import { iniciarOpenCvWorker, calcularMetricasWorker } from '../../lib/opencvWorkerClient';
 import { statusMetricas, FATOR_CALIB_PADRAO, type MetricasOticas } from '../../lib/metrologiaOptica';
 import { BancadaVisaoPdf } from './BancadaVisaoPdf';
 import {
@@ -71,9 +67,56 @@ export function BancadaVisao() {
   const fatorCalibRef = useRef(FATOR_CALIB_PADRAO);
   const gradeLigadaRef = useRef(true);
 
+  // Calibração por 2 pontos (método exato, padrão de metrologia): o técnico
+  // clica em duas marcas da régua com distância conhecida -> fator pixel->mm
+  // exato. Fica salvo (localStorage) para reuso.
+  const [modoCalib, setModoCalib] = useState(false);
+  const [pontosCalib, setPontosCalib] = useState<{ x: number; y: number }[]>([]);
+  const [fatorAtual, setFatorAtual] = useState(FATOR_CALIB_PADRAO);
+  const frameCalibRef = useRef<HTMLCanvasElement | null>(null);
+  const calibCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   useEffect(() => {
     gradeLigadaRef.current = gradeLigada;
   }, [gradeLigada]);
+
+  // Carrega a última calibração salva ao abrir a tela.
+  useEffect(() => {
+    const salvo = localStorage.getItem('cvf_fator_calib');
+    const n = salvo ? Number(salvo) : NaN;
+    if (n > 0) {
+      fatorCalibRef.current = n;
+      setFatorAtual(n);
+    }
+  }, []);
+
+  // Redesenha o frame congelado + os pontos marcados no modo de calibração.
+  useEffect(() => {
+    if (!modoCalib) return;
+    const canvas = calibCanvasRef.current;
+    const frame = frameCalibRef.current;
+    if (!canvas || !frame) return;
+    canvas.width = frame.width;
+    canvas.height = frame.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(frame, 0, 0);
+    ctx.lineWidth = Math.max(2, frame.width / 500);
+    ctx.strokeStyle = '#22c55e';
+    ctx.fillStyle = '#22c55e';
+    const r = Math.max(4, frame.width / 200);
+    pontosCalib.forEach((p) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    if (pontosCalib.length === 2) {
+      ctx.beginPath();
+      ctx.moveTo(pontosCalib[0].x, pontosCalib[0].y);
+      ctx.lineTo(pontosCalib[1].x, pontosCalib[1].y);
+      ctx.stroke();
+    }
+  }, [modoCalib, pontosCalib]);
 
   // Conecta o stream da câmera ao <video> quando a tela de inspeção
   // renderiza (rodando=true). Feito aqui, e não em iniciarInspecao, porque
@@ -266,26 +309,73 @@ export function BancadaVisao() {
     }
   }
 
-  async function calibrar() {
-    if (!cvProntoRef.current) return;
-    const imageData = capturarFrame();
-    if (!imageData) {
-      alert('Nenhuma imagem capturada para calibrar.');
+  // Calibração por 2 pontos (exata): congela o frame atual para o técnico
+  // clicar em duas marcas da régua com distância conhecida.
+  function iniciarCalibracao() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      alert('Inicie a câmera e posicione a régua no campo antes de calibrar.');
       return;
     }
-    const diametroPx = await detectarDiametroWorker(imageData);
-    if (!diametroPx || diametroPx < 50) {
-      alert('Alvo óptico não detectado ou muito pequeno. Aproxime a ótica do alvo.');
+    const off = document.createElement('canvas');
+    off.width = video.videoWidth;
+    off.height = video.videoHeight;
+    const ctx = off.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    frameCalibRef.current = off;
+    setPontosCalib([]);
+    setModoCalib(true);
+  }
+
+  function cancelarCalibracao() {
+    setModoCalib(false);
+    setPontosCalib([]);
+    frameCalibRef.current = null;
+  }
+
+  function cliqueCalibracao(e: ReactMouseEvent<HTMLCanvasElement>) {
+    const canvas = calibCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    // O canvas é exibido com escala uniforme (aspecto preservado), então o
+    // mapeamento tela->pixel do frame é direto.
+    const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const novos = [...pontosCalib, { x, y }];
+    if (novos.length < 2) {
+      setPontosCalib(novos);
       return;
     }
-    const real = prompt(
-      `Alvo detectado com ${diametroPx.toFixed(1)} pixels de diâmetro.\n\nQual é o diâmetro REAL deste alvo em milímetros (mm)?`,
+    const [a, b] = novos.slice(-2);
+    const distPx = Math.hypot(a.x - b.x, a.y - b.y);
+    setPontosCalib([a, b]);
+    if (distPx < 5) {
+      alert('Os dois pontos estão muito próximos. Clique em marcas mais distantes na régua.');
+      setPontosCalib([]);
+      return;
+    }
+    const mmStr = prompt(
+      `Distância medida na imagem: ${distPx.toFixed(1)} pixels.\n\n` +
+        'Qual a distância REAL entre os dois pontos, em mm? (leia na régua)\n' +
+        'Dica: quanto maior a distância usada, mais precisa a calibração.',
     );
-    const valor = real ? Number(real.replace(',', '.')) : null;
-    if (valor && valor > 0) {
-      fatorCalibRef.current = valor / diametroPx;
-      alert(`Novo fator definido:\n1 pixel = ${(valor / diametroPx).toFixed(5)} mm`);
+    const mm = mmStr ? Number(mmStr.replace(',', '.')) : null;
+    if (!mm || mm <= 0) {
+      setPontosCalib([]);
+      return;
     }
+    const fator = mm / distPx;
+    fatorCalibRef.current = fator;
+    setFatorAtual(fator);
+    localStorage.setItem('cvf_fator_calib', String(fator));
+    setModoCalib(false);
+    setPontosCalib([]);
+    frameCalibRef.current = null;
+    alert(
+      `Calibração salva com precisão.\n${mm} mm = ${distPx.toFixed(1)} px\n1 pixel = ${fator.toFixed(5)} mm\n\n` +
+        'O valor fica salvo e será reutilizado nas próximas inspeções.',
+    );
   }
 
   // Analisa uma imagem de arquivo (sem câmera) com o mesmo motor ISO 8600
@@ -517,7 +607,7 @@ export function BancadaVisao() {
   const st = metricas ? statusMetricas(metricas) : null;
 
   return (
-    <div style={{ background: '#000', margin: -24, minHeight: 'calc(100vh - 48px)', display: 'flex' }}>
+    <div style={{ background: '#000', margin: -24, minHeight: 'calc(100vh - 48px)', display: 'flex', position: 'relative' }}>
       <div style={{ position: 'relative', flex: 1 }}>
         <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         <canvas
@@ -557,9 +647,13 @@ export function BancadaVisao() {
         <button className="botao-primario" onClick={() => gerarLaudo()} disabled={gerando}>
           {gerando ? 'Gerando...' : 'Gerar laudo'}
         </button>
-        <button className="botao-secundario" onClick={calibrar} disabled={!cvPronto}>
-          Calibrar
+        <button className="botao-secundario" onClick={iniciarCalibracao}>
+          Calibrar (régua, 2 pontos)
         </button>
+        <p style={{ color: '#94a3b8', fontSize: 11, margin: 0 }}>
+          Fator: 1 px = {fatorAtual.toFixed(5)} mm
+          {fatorAtual === FATOR_CALIB_PADRAO ? ' — padrão, calibre com a régua!' : ' (calibrado/salvo)'}
+        </p>
         <button className="botao-secundario" onClick={() => setGradeLigada((g) => !g)}>
           Grade: {gradeLigada ? 'Ligada' : 'Desligada'}
         </button>
@@ -586,6 +680,47 @@ export function BancadaVisao() {
         )}
         {erro && <p className="erro-login">{erro}</p>}
       </div>
+
+      {modoCalib && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.96)',
+            zIndex: 30,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div
+            style={{
+              padding: 10,
+              color: '#fff',
+              background: '#0f172a',
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <strong>Calibração por 2 pontos.</strong>
+            <span>
+              Clique em <strong>duas marcas da régua</strong> com distância conhecida (quanto mais longe, mais preciso).
+              Marcados: {pontosCalib.length}/2
+            </span>
+            <button className="botao-secundario botao-pequeno" onClick={cancelarCalibracao}>
+              Cancelar
+            </button>
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 8 }}>
+            <canvas
+              ref={calibCanvasRef}
+              onClick={cliqueCalibracao}
+              style={{ maxWidth: '100%', maxHeight: '100%', cursor: 'crosshair' }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
