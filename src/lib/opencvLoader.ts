@@ -9,7 +9,10 @@
 // A tipagem real fica a cargo de quem consome (metrologiaOptica.ts), que
 // documenta os métodos usados — aqui tratamos como `any` de propósito.
 
-const OPENCV_CDN_URL = 'https://docs.opencv.org/4.8.0/opencv.js';
+// Hospedado no próprio site (public/opencv.js), servido pela mesma CDN
+// do Cloudflare - carrega rápido e sem depender de um domínio externo.
+// É o build oficial do OpenCV 4.8.0 (docs.opencv.org).
+const OPENCV_CDN_URL = '/opencv.js';
 const SCRIPT_ID = 'opencv-js-cdn';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
