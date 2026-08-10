@@ -75,6 +75,17 @@ export function BancadaVisao() {
     gradeLigadaRef.current = gradeLigada;
   }, [gradeLigada]);
 
+  // Conecta o stream da câmera ao <video> quando a tela de inspeção
+  // renderiza (rodando=true). Feito aqui, e não em iniciarInspecao, porque
+  // o elemento de vídeo ainda não existe no momento do getUserMedia.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (rodando && v && streamRef.current) {
+      v.srcObject = streamRef.current;
+      v.play().catch(() => {});
+    }
+  }, [rodando]);
+
   const statusAlvo = etapa === 'checkpoint_a' ? STATUS_CHECKPOINT_A : STATUS_CHECKPOINT_B;
 
   const osQuery = useQuery({
@@ -242,10 +253,9 @@ export function BancadaVisao() {
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      // O elemento <video> só é renderizado depois de rodando=true; um
+      // useEffect (abaixo) conecta o stream quando a tela de inspeção aparece.
+      // Fazer aqui direto não funciona (videoRef ainda é null) -> tela preta.
       setRodando(true);
       intervalRef.current = window.setInterval(processarFrame, 250);
       // Carrega o OpenCV no worker (thread de fundo) - a análise ISO 8600
