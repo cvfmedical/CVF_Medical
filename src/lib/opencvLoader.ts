@@ -1,31 +1,54 @@
-// Carrega o OpenCV.js (WebAssembly) sob demanda - só é importado pela
-// tela de Bancada de Visão, então não pesa no bundle principal do app
-// (a lib inteira tem alguns MB). Mesmo padrão de inicialização
-// recomendado pelo pacote @techstark/opencv-js.
+// Carrega o OpenCV.js OFICIAL via <script> do CDN (docs.opencv.org).
 //
-// O pacote não exporta um tipo TS utilizável para o módulo default (só
-// declara os tipos das classes individuais do OpenCV) - tratamos como
-// `any` aqui de propósito; a tipagem de uso real fica a cargo de quem
-// consome (metrologiaOptica.ts), que documenta os métodos usados.
+// Antes usávamos o pacote @techstark/opencv-js importado pelo bundler.
+// Depois do build/minify do Vite, o runtime WebAssembly não inicializava
+// de forma confiável (o objeto `cv` ficava sem `Mat`/`calledRun`), então
+// a Bancada de Visão travava em "Carregando motor...". O build oficial,
+// carregado por script separado, inicializa via `onRuntimeInitialized`.
+//
+// A tipagem real fica a cargo de quem consome (metrologiaOptica.ts), que
+// documenta os métodos usados — aqui tratamos como `any` de propósito.
+
+const OPENCV_CDN_URL = 'https://docs.opencv.org/4.8.0/opencv.js';
+const SCRIPT_ID = 'opencv-js-cdn';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cvPromise: Promise<any> | null = null;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function carregarOpenCv(): Promise<any> {
-  if (!cvPromise) {
-    cvPromise = (async () => {
-      const mod = await import('@techstark/opencv-js');
-      const cvModule = mod.default as unknown as { Mat?: unknown; onRuntimeInitialized?: () => void; then?: unknown };
-      if (cvModule && typeof cvModule.then === 'function') {
-        return await (cvModule as unknown as Promise<unknown>);
+export function carregarOpenCv(): Promise<any> {
+  if (cvPromise) return cvPromise;
+
+  cvPromise = new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+
+    const quandoPronto = () => resolve(w.cv);
+
+    // Já carregado e com runtime inicializado.
+    if (w.cv && w.cv.Mat) return resolve(w.cv);
+
+    // Script já injetado (carregando) - só aguardar o runtime.
+    if (document.getElementById(SCRIPT_ID)) {
+      if (w.cv) w.cv.onRuntimeInitialized = quandoPronto;
+      return;
+    }
+
+    const s = document.createElement('script');
+    s.id = SCRIPT_ID;
+    s.async = true;
+    s.src = OPENCV_CDN_URL;
+    s.onload = () => {
+      if (w.cv && w.cv.Mat) return quandoPronto();
+      if (w.cv) {
+        w.cv.onRuntimeInitialized = quandoPronto;
+        return;
       }
-      if (!cvModule.Mat) {
-        await new Promise<void>((resolve) => {
-          cvModule.onRuntimeInitialized = () => resolve();
-        });
-      }
-      return cvModule;
-    })();
-  }
+      reject(new Error('OpenCV carregou mas não expôs o objeto "cv".'));
+    };
+    s.onerror = () => reject(new Error('Falha ao carregar o OpenCV do CDN.'));
+    document.head.appendChild(s);
+  });
+
   return cvPromise;
 }

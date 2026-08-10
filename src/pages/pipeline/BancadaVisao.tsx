@@ -107,11 +107,16 @@ export function BancadaVisao() {
     },
   });
 
+  const [cvErro, setCvErro] = useState<string | null>(null);
   useEffect(() => {
-    carregarOpenCv().then((cv) => {
-      cvRef.current = cv;
-      setCvPronto(true);
-    });
+    carregarOpenCv()
+      .then((cv) => {
+        cvRef.current = cv;
+        setCvPronto(true);
+      })
+      .catch(() => {
+        setCvErro('Não foi possível carregar o motor de análise de imagem (OpenCV). Verifique a conexão com a internet e recarregue a página.');
+      });
   }, []);
 
   useEffect(() => {
@@ -377,9 +382,10 @@ export function BancadaVisao() {
           )}
         </div>
 
-        {!cvPronto && (
+        {!cvPronto && !cvErro && (
           <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Carregando motor de análise de imagem (OpenCV)...</p>
         )}
+        {cvErro && <p className="erro-login">{cvErro}</p>}
         {cameraErro && <p className="erro-login">{cameraErro}</p>}
         {erro && <p className="erro-login">{erro}</p>}
 
