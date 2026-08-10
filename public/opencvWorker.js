@@ -69,7 +69,8 @@ function calcularMetrologiaOptica(cv, frame, gray, fatorCalib) {
     if (desvioMm === 0.0 && distanciaPx > 0) desvioMm = 0.01;
 
     const raioMm = raioPx * fatorCalib;
-    if (raioMm > 0) fovCalculado = 2 * Math.atan(raioMm / 20.0) * (180 / Math.PI);
+    // Distância de referência ISO 8600-3 do alvo Método A da CVF = 50 mm.
+    if (raioMm > 0) fovCalculado = 2 * Math.atan(raioMm / 50.0) * (180 / Math.PI);
 
     const maskCentro = cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
     cv.circle(maskCentro, new cv.Point(xCentro, yCentro), Math.max(1, Math.round(raioPx * 0.3)), new cv.Scalar(255), -1);

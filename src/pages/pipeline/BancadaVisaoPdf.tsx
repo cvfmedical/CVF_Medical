@@ -194,7 +194,7 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
         <View style={styles.caixa}>
           <Text>
             Câmera de vídeo digital (navegador/getUserMedia), acoplador óptico padrão C-Mount, fonte de luz LED,
-            alvo de calibração dinâmico. Distância ponta-alvo (d): 20.0 mm (ISO 8600-3). Montagem: eixo óptico
+            alvo de calibração dinâmico. Distância ponta-alvo (d): 50.0 mm (ISO 8600-3). Montagem: eixo óptico
             perpendicular ao alvo.
           </Text>
         </View>
