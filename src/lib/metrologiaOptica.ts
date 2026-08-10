@@ -48,14 +48,19 @@ function calcularMetrologiaOptica(cv: Cv, frame: Mat, gray: Mat, fatorCalib: num
   const cyTela = h / 2.0;
 
   const blurred = new cv.Mat();
-  cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+  cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
 
+  // Isola o campo iluminado do endoscópio (claro) do fundo escuro por Otsu,
+  // ignorando a textura interna (anéis, régua, texto).
   const thresh = new cv.Mat();
-  cv.adaptiveThreshold(blurred, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+  cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+  const kernel = cv.Mat.ones(9, 9, cv.CV_8U);
+  cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
 
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+  kernel.delete();
 
   let fovCalculado = 0.0;
   let desvioMm = 0.0;
@@ -68,7 +73,7 @@ function calcularMetrologiaOptica(cv: Cv, frame: Mat, gray: Mat, fatorCalib: num
   for (let i = 0; i < contours.size(); i++) {
     const c = contours.get(i);
     const area = cv.contourArea(c);
-    if (area > w * h * 0.01 && area < w * h * 0.9 && area > maiorArea) {
+    if (area > w * h * 0.05 && area < w * h * 0.98 && area > maiorArea) {
       maiorArea = area;
       maiorContorno = c;
     }
