@@ -17,6 +17,7 @@ import { ProdutosServicos } from './pages/cadastros/ProdutosServicos';
 import { PadroesCalibracao } from './pages/cadastros/PadroesCalibracao';
 import { AmostrasPadrao } from './pages/cadastros/AmostrasPadrao';
 import { TesteResolucao } from './pages/pipeline/TesteResolucao';
+import { AutoValidacao } from './pages/pipeline/AutoValidacao';
 import { ObservacoesDefeito } from './pages/cadastros/ObservacoesDefeito';
 import { CategoriasProdutosServicos } from './pages/cadastros/CategoriasProdutosServicos';
 import { TiposOtica } from './pages/cadastros/TiposOtica';
@@ -59,6 +60,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/padroes-calibracao': PadroesCalibracao,
   '/amostras-padrao': AmostrasPadrao,
   '/teste-resolucao': TesteResolucao,
+  '/auto-validacao': AutoValidacao,
   '/observacoes-defeito': ObservacoesDefeito,
   '/categorias-produtos-servicos': CategoriasProdutosServicos,
   '/tipos-otica': TiposOtica,
