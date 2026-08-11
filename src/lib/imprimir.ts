@@ -15,6 +15,12 @@ export interface OpcoesImpressao {
   // Rótulos dos dois campos de assinatura no rodapé do relatório -
   // padrão cobre o caso genérico (equipe Q-CVF / cliente).
   assinaturas?: [string, string];
+  // Não renderar o bloco de assinaturas (ex.: documentos informativos
+  // como a orientação de esterilização).
+  semAssinaturas?: boolean;
+  // Conteúdo anexado APÓS as assinaturas, em página nova (ex.: anexar a
+  // orientação de esterilização ao final do orçamento).
+  anexoHtml?: string;
 }
 
 const ASSINATURAS_PADRAO: [string, string] = ['Q-CVF Medical', 'Cliente'];
@@ -35,6 +41,8 @@ export function abrirImpressao(
     return;
   }
   const [assinaturaA, assinaturaB] = opcoes?.assinaturas ?? ASSINATURAS_PADRAO;
+  const semAssinaturas = opcoes?.semAssinaturas ?? false;
+  const anexoHtml = opcoes?.anexoHtml ?? '';
 
   const botoesCompartilhar = `
     ${links?.whatsapp ? `<a class="botao-acao" href="${links.whatsapp}" target="_blank" rel="noopener">Enviar por WhatsApp</a>` : ''}
@@ -104,6 +112,25 @@ export function abrirImpressao(
         .mvv-rot { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; color: var(--copper-800); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
         .mvv-txt { font-size: 12.5px; color: var(--ink-600); line-height: 1.55; }
         .tag-secao { display: inline-block; font-size: 11px; font-weight: 600; color: #fff; background: var(--copper-500); border-radius: 20px; padding: 3px 12px; margin-bottom: 10px; letter-spacing: .03em; }
+        /* --- Orientação de esterilização (documento informativo) --- */
+        .secao .num { display: inline-block; background: var(--copper-500); color: #fff; border-radius: 50%; width: 20px; height: 20px; line-height: 20px; text-align: center; font-size: 11px; margin-right: 8px; }
+        table.metodo { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        table.metodo th { background: var(--graphite-900); color: #fff; font-weight: 500; text-align: left; padding: 8px 10px; font-size: 12px; }
+        table.metodo td { border-bottom: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
+        .alerta { background: #fbeee8; border: 1px solid #d99b7a; border-left: 4px solid #8a3b1a; border-radius: 6px; padding: 12px 16px; margin: 14px 0; color: #8a3b1a; }
+        .alerta strong { color: #8a3b1a; }
+        ul.check { list-style: none; padding-left: 0; margin: 6px 0; }
+        ul.check li { padding: 3px 0 3px 24px; position: relative; }
+        ul.check li::before { content: "\\2713"; position: absolute; left: 0; color: var(--teal-500); font-weight: 700; }
+        ul.nunca li::before { content: "\\2715"; color: #8a3b1a; }
+        ol.passos { margin: 6px 0; padding-left: 20px; }
+        ol.passos li { margin-bottom: 5px; }
+        .ref-doc { background: var(--paper-50); border: 1px solid var(--border); border-radius: 6px; padding: 14px 18px; font-size: 12px; color: var(--ink-600); }
+        .ref-doc ol { margin: 0; padding-left: 18px; line-height: 1.7; }
+        .ref-doc .quote { font-style: italic; color: var(--ink-900); border-left: 3px solid var(--copper-500); padding-left: 10px; margin: 8px 0; }
+        .observacao-box { border: 2px solid var(--graphite-900); border-radius: 8px; padding: 14px 18px; margin-top: 22px; }
+        .observacao-box .titulo { font-weight: 700; color: var(--graphite-900); text-transform: uppercase; letter-spacing: .03em; font-size: 12px; margin-bottom: 6px; }
+        .observacao-box p { margin: 0; font-size: 12px; color: var(--ink-900); line-height: 1.6; }
         .rodape {
           padding: 10px 40px 16px; border-top: 1px solid var(--border);
           font-size: 9.5px; color: var(--ink-600); line-height: 1.5; text-align: center;
@@ -175,7 +202,10 @@ export function abrirImpressao(
             <tr><td>
               <div class="corpo">
                 ${corpoHtml}
-                <div class="assinaturas">
+                ${
+                  semAssinaturas
+                    ? ''
+                    : `<div class="assinaturas">
                   <div class="assinatura-bloco">
                     <div class="assinatura-linha">${assinaturaA}</div>
                     <div class="assinatura-data">Data: ____/____/________</div>
@@ -184,7 +214,9 @@ export function abrirImpressao(
                     <div class="assinatura-linha">${assinaturaB}</div>
                     <div class="assinatura-data">Data: ____/____/________</div>
                   </div>
-                </div>
+                </div>`
+                }
+                ${anexoHtml ? `<div class="quebra-pagina">${anexoHtml}</div>` : ''}
               </div>
             </td></tr>
           </tbody>

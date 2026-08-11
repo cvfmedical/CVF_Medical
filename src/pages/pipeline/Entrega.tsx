@@ -4,6 +4,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
+import { imprimirOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 
 interface EntregaRow {
   id: number;
@@ -32,7 +33,13 @@ export function Entrega() {
   const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)));
 
   return (
-    <CrudPage<EntregaRow>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <button className="botao-secundario" onClick={imprimirOrientacaoEsterilizacao}>
+          Orientação de esterilização (PDF)
+        </button>
+      </div>
+      <CrudPage<EntregaRow>
       titulo="Entrega ao cliente"
       tabela="entregas"
       ordenarPor="id"
@@ -94,5 +101,6 @@ export function Entrega() {
           .eq('id', dados.ordem_servico_id as number);
       }}
     />
+    </div>
   );
 }

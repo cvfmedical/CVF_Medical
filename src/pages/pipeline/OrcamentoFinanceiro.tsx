@@ -11,6 +11,7 @@ import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartil
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
 import { formatarMoeda, MISSAO_VISAO_VALORES, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
+import { montarCorpoOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -76,6 +77,7 @@ export function OrcamentoFinanceiro() {
   const [validadeProposta, setValidadeProposta] = useState('');
   const [condicoesPagamento, setCondicoesPagamento] = useState('');
   const [prazoEntrega, setPrazoEntrega] = useState('');
+  const [anexarOrientacao, setAnexarOrientacao] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -354,7 +356,10 @@ export function OrcamentoFinanceiro() {
             email: linkEmail(clienteQuery.data.email, `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`, mensagemCompartilhar()),
           }
         : undefined,
-      { assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'] },
+      {
+        assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'],
+        anexoHtml: anexarOrientacao ? montarCorpoOrientacaoEsterilizacao() : undefined,
+      },
     );
   }
 
@@ -379,6 +384,7 @@ export function OrcamentoFinanceiro() {
     setPrazoEntrega(o.prazo_entrega ?? CONDICOES_COMERCIAIS_PADRAO.prazoEntrega);
     setPrecoFixoSelecionado('');
     setValorFixoContrato(o.valor_fixo_contrato ?? null);
+    setAnexarOrientacao(false);
     setErro(null);
   }
 
@@ -674,6 +680,21 @@ export function OrcamentoFinanceiro() {
             <div className="campo-form">
               <label>Observações do financeiro</label>
               <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />
+            </div>
+
+            <div className="campo-form">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={anexarOrientacao}
+                  onChange={(e) => setAnexarOrientacao(e.target.checked)}
+                  style={{ width: 'auto' }}
+                />
+                Anexar a orientação de esterilização ao relatório
+              </label>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Inclui, ao final, a orientação de manuseio/limpeza/esterilização das ópticas (para o cliente repassar ao hospital).
+              </p>
             </div>
             {orcamentoSelecionado.observacoes_tecnico && (
               <div className="campo-form">
