@@ -10,6 +10,7 @@ import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
+import { formatarMoeda } from '../../lib/formato';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -202,7 +203,7 @@ export function OrcamentoFinanceiro() {
   }
 
   function mensagemCompartilhar() {
-    return `Olá! Segue o orçamento ${orcamentoSelecionado?.numero_orcamento} (OS ${orcamentoSelecionado?.ordens_servico?.numero_os}) no valor de R$ ${total.toFixed(2)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
+    return `Olá! Segue o orçamento ${orcamentoSelecionado?.numero_orcamento} (OS ${orcamentoSelecionado?.ordens_servico?.numero_os}) no valor de ${formatarMoeda(total)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
   }
 
   async function buscarRegistroEntradaHtml(): Promise<string> {
@@ -269,8 +270,8 @@ export function OrcamentoFinanceiro() {
         <tr>
           <td>${item.produtos_servicos?.nome ?? item.descricao_servico ?? ''}</td>
           <td>${item.quantidade}</td>
-          <td>R$ ${(Number(precos[item.id]) || 0).toFixed(2)}</td>
-          <td>R$ ${((Number(precos[item.id]) || 0) * item.quantidade).toFixed(2)}</td>
+          <td>${formatarMoeda(Number(precos[item.id]) || 0)}</td>
+          <td>${formatarMoeda((Number(precos[item.id]) || 0) * item.quantidade)}</td>
         </tr>`,
       )
       .join('');
@@ -288,11 +289,11 @@ export function OrcamentoFinanceiro() {
       <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${orcamentoSelecionado.ordens_servico?.cliente_nome}</div></div>
       <div class="linha"><div class="rotulo">Status</div><div class="valor">${orcamentoSelecionado.status}</div></div>
       <div class="secao">Itens</div>
-      <table>
+      <table class="dados">
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
         <tbody>${linhas}</tbody>
       </table>
-      <p style="text-align:right; font-weight:bold; margin-top:12px;">Total: R$ ${total.toFixed(2)}</p>
+      <p class="total-linha">Total: ${formatarMoeda(total)}</p>
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>
       <div class="quebra-pagina">${relatorioOSHtml}</div>
@@ -526,7 +527,7 @@ export function OrcamentoFinanceiro() {
                     {(precosFixosQuery.data ?? []).map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.catalogo_oticas?.fabricante} - {p.catalogo_oticas?.modelo}
-                        {p.catalogo_oticas?.tipo ? ` (${p.catalogo_oticas.tipo})` : ''} - R$ {Number(p.valor_fixo).toFixed(2)}
+                        {p.catalogo_oticas?.tipo ? ` (${p.catalogo_oticas.tipo})` : ''} - {formatarMoeda(p.valor_fixo)}
                       </option>
                     ))}
                   </select>
@@ -545,7 +546,7 @@ export function OrcamentoFinanceiro() {
 
             {valorFixoContrato != null && (
               <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 12 }}>
-                Valor fixo de contrato aplicado (R$ {valorFixoContrato.toFixed(2)}) - os preços dos itens abaixo
+                Valor fixo de contrato aplicado ({formatarMoeda(valorFixoContrato)}) - os preços dos itens abaixo
                 ficam só de referência, não somam no total.
               </p>
             )}
@@ -597,7 +598,7 @@ export function OrcamentoFinanceiro() {
               O preço unitário já vem sugerido do catálogo (valor de venda) quando o item está cadastrado — ajuste
               livremente antes de salvar/enviar.
             </p>
-            <p style={{ textAlign: 'right', fontWeight: 500 }}>Total: R$ {total.toFixed(2)}</p>
+            <p style={{ textAlign: 'right', fontWeight: 500 }}>Total: {formatarMoeda(total)}</p>
 
             <div className="campo-form">
               <label>Observações do financeiro</label>
