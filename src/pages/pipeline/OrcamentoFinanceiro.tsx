@@ -10,7 +10,7 @@ import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
-import { formatarMoeda } from '../../lib/formato';
+import { formatarMoeda, MISSAO_VISAO_VALORES } from '../../lib/formato';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -278,16 +278,39 @@ export function OrcamentoFinanceiro() {
 
     const relatorioOSHtml = await buscarRelatorioOSHtml();
     const registroEntradaHtml = await buscarRegistroEntradaHtml();
+    const os = orcamentoSelecionado.ordens_servico;
 
-    abrirImpressao(
-      `Orçamento ${orcamentoSelecionado.numero_orcamento}`,
-      `
+    // Capa: identifica o documento (ficha do cliente/equipamento), traz o
+    // sumário do que vem nas próximas páginas e a missão/visão/valores da
+    // CVF. O valor total aparece na página do Orçamento (não na capa).
+    const capaHtml = `
+      <h1 class="capa-titulo">Relatório de Manutenção e Orçamento</h1>
+      <div class="ficha">
+        <div class="ficha-linha"><span class="ficha-rot">Cliente</span><span class="ficha-val">${os?.cliente_nome ?? '-'}</span></div>
+        <div class="ficha-linha"><span class="ficha-rot">Data</span><span class="ficha-val">${new Date().toLocaleDateString('pt-BR')}</span></div>
+        <div class="ficha-linha"><span class="ficha-rot">Equipamento</span><span class="ficha-val">${os?.optica_desc ?? '-'}${os?.optica_fab ? ' (' + os.optica_fab + ')' : ''}</span></div>
+        <div class="ficha-linha"><span class="ficha-rot">Nº de série</span><span class="ficha-val mono">${os?.optica_sn ?? '-'}</span></div>
+        <div class="ficha-linha"><span class="ficha-rot">Nº da OS</span><span class="ficha-val mono">${os?.numero_os ?? '-'}</span></div>
+        <div class="ficha-linha"><span class="ficha-rot">Nº do orçamento</span><span class="ficha-val mono">${orcamentoSelecionado.numero_orcamento}</span></div>
+      </div>
+      <div class="sumario">
+        <h3>Conteúdo deste documento</h3>
+        <ol>
+          <li><strong>Registro de Entrada</strong> — equipamento recebido, NF de remessa e avarias na triagem</li>
+          <li><strong>Ordem de Serviço</strong> — peças/serviços identificados pelo técnico</li>
+          <li><strong>Orçamento</strong> — valores e aprovação</li>
+        </ol>
+      </div>
+      <div class="mvv">
+        ${MISSAO_VISAO_VALORES.map(
+          (m) => `<div class="mvv-item"><div class="mvv-rot">${m.rotulo}</div><div class="mvv-txt">${m.texto}</div></div>`,
+        ).join('')}
+      </div>`;
+
+    const orcamentoHtml = `
+      <span class="tag-secao">3 · Orçamento</span>
       <h1>Orçamento de Manutenção</h1>
-      <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
-      <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor mono">${orcamentoSelecionado.numero_orcamento}</div></div>
-      <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${orcamentoSelecionado.ordens_servico?.numero_os}</div></div>
-      <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${orcamentoSelecionado.ordens_servico?.cliente_nome}</div></div>
-      <div class="linha"><div class="rotulo">Status</div><div class="valor">${orcamentoSelecionado.status}</div></div>
+      <p class="subtitulo">Nº ${orcamentoSelecionado.numero_orcamento} · OS ${os?.numero_os ?? '-'}</p>
       <div class="secao">Itens</div>
       <table class="dados">
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
@@ -295,9 +318,15 @@ export function OrcamentoFinanceiro() {
       </table>
       <p class="total-linha">Total: ${formatarMoeda(total)}</p>
       <div class="secao">Observações</div>
-      <div class="valor">${observacoesFinanceiro || '-'}</div>
-      <div class="quebra-pagina">${relatorioOSHtml}</div>
-      <div class="quebra-pagina">${registroEntradaHtml}</div>
+      <div class="valor">${observacoesFinanceiro || '-'}</div>`;
+
+    abrirImpressao(
+      `Relatório e Orçamento ${orcamentoSelecionado.numero_orcamento}`,
+      `
+      ${capaHtml}
+      <div class="quebra-pagina"><span class="tag-secao">1 · Entrada</span>${registroEntradaHtml}</div>
+      <div class="quebra-pagina"><span class="tag-secao">2 · Ordem de Serviço</span>${relatorioOSHtml}</div>
+      <div class="quebra-pagina">${orcamentoHtml}</div>
       `,
       clienteQuery.data
         ? {

@@ -1,6 +1,7 @@
 import { abrirImpressao } from './imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from './compartilhar';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from './checklistAvarias';
+import { formatarMoeda } from './formato';
 
 // Extraído de EntradaEquipamento.tsx::imprimirRelatorio - usado tanto
 // pela tela de Entrada quanto pela tela de Registro de Entrada
@@ -55,7 +56,7 @@ export function montarCorpoRegistroEntrada(
     <div class="linha"><div class="rotulo">Número/Série</div><div class="valor mono">${entrada.nf_remessa_numero ?? '-'} / ${entrada.nf_remessa_serie ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">CFOP</div><div class="valor">${entrada.nf_remessa_cfop ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Chave de acesso</div><div class="valor mono">${entrada.nf_remessa_chave_acesso ?? '-'}</div></div>
-    <div class="linha"><div class="rotulo">Emissão / Valor</div><div class="valor">${entrada.nf_remessa_data_emissao ?? '-'} ${entrada.nf_remessa_valor ? '- R$ ' + Number(entrada.nf_remessa_valor).toFixed(2) : ''}</div></div>
+    <div class="linha"><div class="rotulo">Emissão / Valor</div><div class="valor">${entrada.nf_remessa_data_emissao ?? '-'} ${entrada.nf_remessa_valor ? '- ' + formatarMoeda(entrada.nf_remessa_valor) : ''}</div></div>
     <div class="secao">Avarias identificadas na triagem</div>
     <div class="valor">${avariasMarcadas.length ? avariasMarcadas.join(', ') : 'Nenhuma avaria marcada'}</div>
     ${fotosHtml}

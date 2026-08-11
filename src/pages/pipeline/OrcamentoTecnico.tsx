@@ -63,6 +63,7 @@ export function OrcamentoTecnico() {
   const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1', descricao_servico: '' });
   const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
+  const [justificativaLivre, setJustificativaLivre] = useState('');
   const [fotoItem, setFotoItem] = useState<File | null>(null);
 
   // Mostra tanto OS ainda em triagem (orçamento novo) quanto OS que já
@@ -199,6 +200,7 @@ export function OrcamentoTecnico() {
     setNovoItem({ produto_servico_id: '', quantidade: '1', descricao_servico: '' });
     setObservacoesSelecionadas([]);
     setObservacaoParaAdicionar('');
+    setJustificativaLivre('');
     setFotoItem(null);
     setErro(null);
     setModalAberto(true);
@@ -228,11 +230,17 @@ export function OrcamentoTecnico() {
       if (fotoItem) {
         fotoPath = await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, fotoItem);
       }
+      // Junta as etiquetas de defeito (lista fixa) com a justificativa em
+      // texto livre - o resultado vira a "Observação / motivo da troca" que
+      // aparece no relatório da OS enviado ao cliente.
+      const etiquetas = observacoesSelecionadas.join('; ');
+      const justificativa = justificativaLivre.trim();
+      const observacaoFinal = [etiquetas, justificativa].filter(Boolean).join(' — ') || null;
       const { error } = await supabase.from('orcamento_itens').insert({
         orcamento_id: orcamentoQuery.data.id,
         produto_servico_id: novoItem.produto_servico_id ? Number(novoItem.produto_servico_id) : null,
         quantidade: Number(novoItem.quantidade) || 1,
-        observacao: observacoesSelecionadas.length ? observacoesSelecionadas.join('; ') : null,
+        observacao: observacaoFinal,
         descricao_servico: novoItem.descricao_servico.trim() || null,
         foto_peca_danificada_path: fotoPath,
       });
@@ -467,6 +475,17 @@ export function OrcamentoTecnico() {
               )}
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                 Não achou a observação certa? Cadastre em "Observações de defeito" (Cadastros Gerais).
+              </p>
+            </div>
+            <div className="campo-form">
+              <label>Justificativa / motivo da troca (texto livre, opcional)</label>
+              <textarea
+                placeholder="Ex: infiltração comprometeu o conjunto de lentes - troca recomendada"
+                value={justificativaLivre}
+                onChange={(e) => setJustificativaLivre(e.target.value)}
+              />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Complementa as etiquetas acima e aparece junto delas no relatório enviado ao cliente.
               </p>
             </div>
             <div className="campo-form">

@@ -1,5 +1,10 @@
-import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 import { EMPRESA } from './formato';
+
+// Cabeçalho institucional: faixa grafite + logomarca + slogan + faixa de
+// gradiente (cobre->teal). SVG inline (sem dependência externa) para
+// repetir no <thead> de cada página impressa. viewBox recortado no fim
+// da faixa de gradiente (sem espaço morto embaixo).
+const CABECALHO_SVG = `<div class="cabecalho-svg"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 133" style="width:100%;height:auto;display:block"><defs><linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#C2703D"/><stop offset="100%" stop-color="#2A9D8F"/></linearGradient><clipPath id="cornerClip"><rect x="0" y="0" width="920" height="128"/></clipPath></defs><rect x="0" y="0" width="920" height="128" fill="#4A4F57"/><g transform="translate(40,24) scale(0.42)"><path d="M 141.50,144.75 L 142.75,147.50 L 152.25,147.50 L 153.25,145.25 Z M 318.50,135.50 L 318.75,155.25 L 337.00,156.25 L 336.75,153.00 L 321.75,152.50 L 321.50,135.75 Z M 280.25,138.00 L 277.25,143.25 L 277.50,156.00 L 280.25,155.50 L 281.50,150.75 L 293.25,150.75 L 294.75,155.50 L 297.25,156.00 L 297.25,135.75 L 284.75,135.50 Z M 280.75,142.50 L 286.25,138.50 L 293.50,138.50 L 294.75,146.25 L 281.25,147.75 Z M 240.75,136.50 L 239.00,140.25 L 240.00,154.25 L 257.25,156.00 L 256.75,153.00 L 242.50,152.25 L 242.00,140.25 L 243.50,138.50 L 257.00,138.50 L 257.50,135.75 Z M 216.75,135.25 L 215.25,155.25 L 218.00,156.00 L 218.50,135.75 Z M 175.75,135.50 L 175.00,155.25 L 188.00,156.00 L 193.25,153.50 L 195.50,149.00 L 193.50,138.25 L 187.50,135.25 Z M 178.25,138.75 L 190.75,140.00 L 192.25,149.00 L 189.75,152.25 L 177.75,152.25 Z M 137.00,135.50 L 136.25,153.25 L 140.00,156.00 L 154.25,156.00 L 154.00,153.00 L 139.50,152.00 L 139.25,139.75 L 154.00,138.50 L 154.75,135.75 Z M 91.50,135.75 L 91.50,156.00 L 94.50,155.25 L 95.25,144.50 L 103.50,156.50 L 111.75,144.75 L 112.25,155.50 L 115.25,156.00 L 115.00,135.50 L 112.50,136.00 L 103.50,150.75 L 94.25,136.00 Z M 268.75,127.50 L 277.50,125.75 L 284.75,118.50 L 287.75,97.00 L 315.50,94.50 L 322.75,86.75 L 324.50,79.00 L 270.00,79.75 Z M 270.25,68.00 L 323.50,68.00 L 332.75,62.25 L 337.50,50.75 L 287.50,51.25 L 276.75,57.00 Z M 92.50,111.25 L 100.75,122.75 L 111.25,127.50 L 168.00,128.00 L 164.50,117.00 L 155.75,110.75 L 116.00,110.00 L 109.50,104.00 L 109.50,74.00 L 112.00,69.75 L 167.75,68.50 L 174.50,74.50 L 176.25,124.25 L 182.50,128.25 L 208.00,124.25 L 228.25,113.25 L 243.50,98.00 L 255.75,79.25 L 267.50,50.50 L 258.25,50.25 L 249.25,54.75 L 235.00,79.75 L 223.75,94.00 L 210.50,104.50 L 198.00,109.25 L 192.75,108.25 L 192.50,62.50 L 185.00,52.50 L 179.50,50.25 L 108.75,51.25 L 97.50,58.75 L 92.25,68.50 Z" fill="#FFFFFF" fill-rule="evenodd"/></g><line x1="200" y1="26" x2="200" y2="102" stroke="#6B7078" stroke-width="1"/><text x="222" y="64" font-family="Arial, Helvetica, sans-serif" font-style="italic" font-size="26" fill="#E8A870" dominant-baseline="middle">Sua imagem, nossa visão.</text><g clip-path="url(#cornerClip)" stroke="#5FC4B5" fill="none"><circle cx="905" cy="30" r="58" stroke-width="1"/><circle cx="905" cy="30" r="44" stroke-width="1"/><circle cx="905" cy="30" r="30" stroke-width="1"/><circle cx="905" cy="30" r="17" stroke-width="1"/></g><rect x="0" y="128" width="920" height="5" fill="url(#accentGrad)"/></svg></div>`;
 
 export interface LinksCompartilharImpressao {
   whatsapp?: string;
@@ -37,7 +42,7 @@ export function abrirImpressao(
   `;
 
   const contatoRodape = [
-    EMPRESA.telefone ? `Tel.: ${EMPRESA.telefone}` : '',
+    EMPRESA.telefone ? `Tel. / WhatsApp: ${EMPRESA.telefone}` : '',
     `E-mail: ${EMPRESA.email}`,
   ]
     .filter(Boolean)
@@ -74,14 +79,31 @@ export function abrirImpressao(
         .folha { max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
         table.pagina { width: 100%; border-collapse: collapse; }
         /* thead/tfoot repetem em todas as páginas na impressão */
-        .cabecalho {
-          display: flex; align-items: center; gap: 16px;
-          padding: 22px 40px 14px; border-bottom: 3px solid var(--copper-500);
-        }
-        .cabecalho img { height: 46px; width: auto; }
-        .cabecalho .identidade { font-size: 10px; color: var(--ink-400); line-height: 1.55; }
-        .cabecalho .identidade strong { color: var(--ink-600); font-size: 10.5px; }
+        .cabecalho-svg { line-height: 0; }
+        .cabecalho-svg svg { width: 100%; height: auto; display: block; }
         .corpo { padding: 22px 40px 8px; }
+        /* --- Capa do relatório combinado --- */
+        .capa-titulo {
+          font-family: 'Space Grotesk', sans-serif; font-size: 27px; color: var(--graphite-900);
+          margin: 28px 0 20px; line-height: 1.15; max-width: 520px;
+        }
+        .ficha {
+          display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border);
+          border-radius: 8px; overflow: hidden; margin-bottom: 24px;
+        }
+        .ficha-linha { display: flex; flex-direction: column; padding: 11px 18px; border-bottom: 1px solid var(--border); }
+        .ficha-linha:nth-child(odd) { border-right: 1px solid var(--border); }
+        .ficha-linha:nth-last-child(-n+2) { border-bottom: none; }
+        .ficha-rot { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-400); margin-bottom: 3px; }
+        .ficha-val { font-size: 14px; font-weight: 600; color: var(--ink-900); }
+        .sumario { background: var(--paper-50); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; }
+        .sumario h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-600); }
+        .sumario ol { margin: 0; padding-left: 20px; line-height: 1.9; }
+        .mvv { border-top: 2px solid var(--copper-500); padding-top: 16px; margin-top: 6px; }
+        .mvv-item { margin-bottom: 14px; }
+        .mvv-rot { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; color: var(--copper-800); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+        .mvv-txt { font-size: 12.5px; color: var(--ink-600); line-height: 1.55; }
+        .tag-secao { display: inline-block; font-size: 11px; font-weight: 600; color: #fff; background: var(--copper-500); border-radius: 20px; padding: 3px 12px; margin-bottom: 10px; letter-spacing: .03em; }
         .rodape {
           padding: 10px 40px 16px; border-top: 1px solid var(--border);
           font-size: 9.5px; color: var(--ink-600); line-height: 1.5; text-align: center;
@@ -139,13 +161,7 @@ export function abrirImpressao(
         <table class="pagina">
           <thead>
             <tr><td>
-              <div class="cabecalho">
-                <img src="${cvfLogoCompleto}" alt="Q-CVF Medical" />
-                <div class="identidade">
-                  <strong>${EMPRESA.razaoSocial}</strong><br>
-                  CNPJ: ${EMPRESA.cnpj} &nbsp;|&nbsp; ${EMPRESA.endereco}
-                </div>
-              </div>
+              ${CABECALHO_SVG}
             </td></tr>
           </thead>
           <tbody>
