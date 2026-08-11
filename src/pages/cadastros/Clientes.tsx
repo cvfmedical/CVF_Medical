@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
-import { validarCnpj, formatarCnpj } from '../../lib/cnpj';
+import { validarCnpj, formatarCnpj, somenteDigitos } from '../../lib/cnpj';
 import { consultarCnpj } from '../../lib/consultaCnpj';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconPencil, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
@@ -122,15 +122,35 @@ export function Clientes() {
     qc.invalidateQueries({ queryKey: ['clientes'] });
   }
 
-  async function buscarPorCnpj() {
-    if (!validarCnpj(form.cnpj)) return;
+  // manual=true quando o usuário clica em "Buscar" (mostra avisos de CNPJ
+  // incompleto/inválido); no onBlur (manual=false) fica quieto se ainda não
+  // há 14 dígitos válidos, pra não poluir com erro enquanto digita.
+  async function buscarPorCnpj(manual = false) {
+    if (somenteDigitos(form.cnpj).length !== 14) {
+      if (manual) setErro('Digite o CNPJ completo (14 dígitos) para buscar.');
+      return;
+    }
+    if (!validarCnpj(form.cnpj)) {
+      if (manual) setErro('CNPJ inválido (dígitos verificadores não conferem).');
+      return;
+    }
     setConsultando(true);
+    setErro(null);
     try {
-      const dados = await consultarCnpj(form.cnpj);
-      if (!dados) {
-        setErro('Não foi possível consultar este CNPJ automaticamente - preencha os dados manualmente.');
+      const r = await consultarCnpj(form.cnpj);
+      if (!r.ok) {
+        setErro(
+          r.motivo === 'limite'
+            ? 'Limite da consulta gratuita atingido. Aguarde alguns instantes e clique em "Buscar" de novo, ou preencha manualmente.'
+            : r.motivo === 'nao_encontrado'
+              ? 'CNPJ não encontrado na base pública. Preencha os dados manualmente.'
+              : r.motivo === 'cnpj_invalido'
+                ? 'CNPJ incompleto ou inválido.'
+                : 'Não foi possível consultar agora (rede/serviço indisponível). Tente novamente ou preencha manualmente.',
+        );
         return;
       }
+      const dados = r.dados;
       setErro(null);
       setForm((f) => ({
         ...f,
@@ -249,10 +269,10 @@ export function Clientes() {
                   type="text"
                   value={form.cnpj}
                   onChange={(e) => setForm((f) => ({ ...f, cnpj: e.target.value }))}
-                  onBlur={buscarPorCnpj}
+                  onBlur={() => buscarPorCnpj(false)}
                   placeholder="Só números ou com máscara"
                 />
-                <button className="botao-secundario" onClick={buscarPorCnpj} disabled={consultando}>
+                <button className="botao-secundario" onClick={() => buscarPorCnpj(true)} disabled={consultando}>
                   <IconSearch size={14} /> {consultando ? 'Consultando...' : 'Buscar'}
                 </button>
               </div>
