@@ -10,7 +10,7 @@ import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
-import { formatarMoeda, MISSAO_VISAO_VALORES, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF } from '../../lib/formato';
+import { formatarMoeda, MISSAO_VISAO_VALORES, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -333,6 +333,10 @@ export function OrcamentoFinanceiro() {
       <ol style="margin:0;padding-left:20px;line-height:1.6;font-size:12px;color:var(--ink-600);">
         ${GARANTIA_CVF.itens.map((i) => `<li>${i}</li>`).join('')}
       </ol>
+      <div class="secao">Condições gerais</div>
+      ${CLAUSULAS_GERAIS.map(
+        (c) => `<p style="margin:0 0 8px;font-size:12px;"><strong>${c.titulo}.</strong> ${c.texto}</p>`,
+      ).join('')}
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>`;
 

@@ -54,6 +54,26 @@ export const GARANTIA_CVF = {
   ],
 };
 
+// Condições gerais (confidencialidade/LGPD e responsabilidade) - texto
+// institucional fixo impresso na página do Orçamento do relatório ao cliente.
+export const CLAUSULAS_GERAIS: { titulo: string; texto: string }[] = [
+  {
+    titulo: 'Confidencialidade e proteção de dados (LGPD)',
+    texto:
+      'As partes obrigam-se a manter sigilo sobre as informações a que tiverem acesso em razão deste orçamento e da prestação dos serviços, tratando eventuais dados pessoais em conformidade com a Lei nº 13.709/2018 (LGPD), exclusivamente para as finalidades necessárias à execução do serviço.',
+  },
+  {
+    titulo: 'Limitação de responsabilidade',
+    texto:
+      'A CONTRATADA não responderá por perdas e danos, lucros cessantes, danos emergentes ou insucessos comerciais advindos de falhas havidas no serviço objeto deste orçamento.',
+  },
+  {
+    titulo: 'Responsabilidade da CONTRATANTE',
+    texto:
+      'É de total responsabilidade da CONTRATANTE a relação profissional mantida com o profissional habilitado, respondendo por todos os encargos relativos à relação, bem como por toda a responsabilidade civil e criminal por eventuais danos causados a terceiros atendidos nos procedimentos que envolvam o objeto do presente orçamento.',
+  },
+];
+
 const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtNumero = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
