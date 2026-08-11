@@ -10,7 +10,7 @@ import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
-import { formatarMoeda, MISSAO_VISAO_VALORES } from '../../lib/formato';
+import { formatarMoeda, MISSAO_VISAO_VALORES, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF } from '../../lib/formato';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -23,6 +23,9 @@ interface Orcamento {
   aprovacao_manual: boolean | null;
   motivo_aprovacao_manual: string | null;
   valor_fixo_contrato: number | null;
+  validade_proposta: string | null;
+  condicoes_pagamento: string | null;
+  prazo_entrega: string | null;
   ordens_servico: {
     numero_os: string;
     cliente_nome: string;
@@ -70,6 +73,9 @@ export function OrcamentoFinanceiro() {
   const qc = useQueryClient();
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
   const [observacoesFinanceiro, setObservacoesFinanceiro] = useState('');
+  const [validadeProposta, setValidadeProposta] = useState('');
+  const [condicoesPagamento, setCondicoesPagamento] = useState('');
+  const [prazoEntrega, setPrazoEntrega] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -89,7 +95,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -317,6 +323,16 @@ export function OrcamentoFinanceiro() {
         <tbody>${linhas}</tbody>
       </table>
       <p class="total-linha">Total: ${formatarMoeda(total)}</p>
+      <div class="secao">Condições comerciais</div>
+      <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
+      <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${condicoesPagamento || '-'}</div></div>
+      <div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${prazoEntrega || '-'}</div></div>
+      <div class="secao">Garantia</div>
+      <div class="valor">${GARANTIA_CVF.resumo}</div>
+      <p style="margin:8px 0 4px;">${GARANTIA_CVF.intro}</p>
+      <ol style="margin:0;padding-left:20px;line-height:1.6;font-size:12px;color:var(--ink-600);">
+        ${GARANTIA_CVF.itens.map((i) => `<li>${i}</li>`).join('')}
+      </ol>
       <div class="secao">Observações</div>
       <div class="valor">${observacoesFinanceiro || '-'}</div>`;
 
@@ -354,6 +370,9 @@ export function OrcamentoFinanceiro() {
   function abrirOrcamento(o: Orcamento) {
     setSelecionadoId(o.id);
     setObservacoesFinanceiro(o.observacoes_financeiro ?? '');
+    setValidadeProposta(o.validade_proposta ?? CONDICOES_COMERCIAIS_PADRAO.validadeProposta);
+    setCondicoesPagamento(o.condicoes_pagamento ?? CONDICOES_COMERCIAIS_PADRAO.condicoesPagamento);
+    setPrazoEntrega(o.prazo_entrega ?? CONDICOES_COMERCIAIS_PADRAO.prazoEntrega);
     setPrecoFixoSelecionado('');
     setValorFixoContrato(o.valor_fixo_contrato ?? null);
     setErro(null);
@@ -370,7 +389,13 @@ export function OrcamentoFinanceiro() {
     }
     const { error } = await supabase
       .from('orcamentos')
-      .update({ observacoes_financeiro: observacoesFinanceiro || null, valor_fixo_contrato: valorFixoContrato })
+      .update({
+        observacoes_financeiro: observacoesFinanceiro || null,
+        valor_fixo_contrato: valorFixoContrato,
+        validade_proposta: validadeProposta || null,
+        condicoes_pagamento: condicoesPagamento || null,
+        prazo_entrega: prazoEntrega || null,
+      })
       .eq('id', selecionadoId!);
     if (error) throw error;
   }
@@ -628,6 +653,19 @@ export function OrcamentoFinanceiro() {
               livremente antes de salvar/enviar.
             </p>
             <p style={{ textAlign: 'right', fontWeight: 500 }}>Total: {formatarMoeda(total)}</p>
+
+            <div className="campo-form">
+              <label>Validade da proposta</label>
+              <input value={validadeProposta} onChange={(e) => setValidadeProposta(e.target.value)} />
+            </div>
+            <div className="campo-form">
+              <label>Condições de pagamento</label>
+              <textarea value={condicoesPagamento} onChange={(e) => setCondicoesPagamento(e.target.value)} />
+            </div>
+            <div className="campo-form">
+              <label>Prazo de entrega</label>
+              <input value={prazoEntrega} onChange={(e) => setPrazoEntrega(e.target.value)} />
+            </div>
 
             <div className="campo-form">
               <label>Observações do financeiro</label>

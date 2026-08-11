@@ -29,6 +29,31 @@ export const MISSAO_VISAO_VALORES: { rotulo: string; texto: string }[] = [
   },
 ];
 
+// Condições comerciais padrão do orçamento (o financeiro pode editar por
+// orçamento; usadas como valor inicial quando o campo está vazio).
+export const CONDICOES_COMERCIAIS_PADRAO = {
+  validadeProposta: '30 dias após a emissão da proposta.',
+  condicoesPagamento: '50% de sinal; 50% em 15 DDL no faturamento.',
+  prazoEntrega: '45 dias após a confirmação do recebimento do sinal.',
+};
+
+// Garantia institucional da CVF - texto fixo impresso no relatório ao
+// cliente. Como a CVF presta manutenção, a garantia é sobre o serviço
+// executado e as peças substituídas (não sobre fabricação).
+export const GARANTIA_CVF = {
+  resumo:
+    'A CVF Medical garante os serviços de manutenção executados e as peças substituídas pelo prazo de 90 (noventa) dias, contados a partir da data de entrega do equipamento.',
+  intro: 'Para a validade da garantia, são condições indispensáveis:',
+  itens: [
+    'Que a falha decorra do serviço executado ou de peça substituída pela CVF Medical; falhas de qualquer outra origem não estão incluídas.',
+    'Que o equipamento tenha sido utilizado conforme as instruções do fabricante e as recomendações da CVF Medical.',
+    'Que sejam respeitadas as condições de uso, limpeza, esterilização e armazenamento indicadas para o equipamento.',
+    'Que a CVF Medical seja comunicada de imediato sobre qualquer falha, no prazo máximo de 10 (dez) dias a partir de sua constatação.',
+    'A garantia não cobre danos por mau uso, quedas, esterilização inadequada ou reparos por terceiros, nem danos contingentes ou lucros cessantes.',
+    'A garantia cobre a substituição das peças e a mão de obra dos técnicos. Custos de transporte e deslocamento não estão incluídos.',
+  ],
+};
+
 const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtNumero = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
