@@ -53,7 +53,7 @@ export interface DadosBancadaPdf {
   numeroOS: string;
   dataEmissao: string;
   dataEnsaio: string;
-  etapa: 'checkpoint_a' | 'checkpoint_b';
+  etapa: 'checkpoint_a' | 'checkpoint_b' | 'resolucao';
   clienteNome: string;
   clienteCnpj: string;
   clienteFantasia: string;
@@ -88,6 +88,15 @@ export interface DadosBancadaPdf {
     direcaoConforme: boolean | null;
     calibracao: string | null;
   };
+  // Resolução óptica (ISO 8600-5, e-SFR). Presente em laudos de resolução.
+  resolucao?: {
+    modeloNome: string;
+    mtf50: number;
+    mtf50Referencia: number | null;
+    tolerancia: number; // %
+    anguloBorda: number;
+    conforme: boolean | null;
+  };
 }
 
 export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
@@ -99,7 +108,12 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
     : m && st
       ? st.conforme
       : dados.resultado === 'Aprovado';
-  const etapaLabel = dados.etapa === 'checkpoint_a' ? 'Checkpoint A (pré-selagem)' : 'Checkpoint B (pós-autoclave, final)';
+  const etapaLabel =
+    dados.etapa === 'checkpoint_a'
+      ? 'Checkpoint A (pré-selagem)'
+      : dados.etapa === 'resolucao'
+        ? 'Resolução óptica (ISO 8600-5)'
+        : 'Checkpoint B (pós-autoclave, final)';
 
   return (
     <Document>
@@ -324,7 +338,7 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
             )}
           </>
         ) : (
-          !iso && (
+          !iso && !dados.resolucao && (
             <>
               <Text style={styles.faixa}>7 a 9. ENSAIOS DE MEDIÇÃO POR IMAGEM</Text>
               <View style={styles.caixa}>
@@ -335,6 +349,40 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
               </View>
             </>
           )
+        )}
+
+        {dados.resolucao && (
+          <>
+            <Text style={styles.faixa}>{iso ? '7B. RESOLUÇÃO ÓPTICA (ISO 8600-5)' : '7. RESOLUÇÃO ÓPTICA (ISO 8600-5)'}</Text>
+            <View style={styles.tabelaCabecalho}>
+              <Text style={[styles.celula, { flex: 2 }]}>Parâmetro</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Medido</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Referência</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Tolerância</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Situação</Text>
+            </View>
+            <View style={styles.tabelaLinha}>
+              <Text style={[styles.celula, { flex: 2 }]}>Resolução (MTF50 — borda inclinada)</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>{dados.resolucao.mtf50.toFixed(4)} c/px</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>
+                {dados.resolucao.mtf50Referencia != null ? `${dados.resolucao.mtf50Referencia.toFixed(4)} c/px` : '-'}
+              </Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>
+                {dados.resolucao.mtf50Referencia != null ? `≥ ${(100 - dados.resolucao.tolerancia).toFixed(0)}% do ref.` : '-'}
+              </Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>
+                {dados.resolucao.conforme == null ? '-' : <StatusTexto conforme={dados.resolucao.conforme} />}
+              </Text>
+            </View>
+            <View style={styles.caixa}>
+              <Text style={{ fontSize: 7 }}>
+                Método: e-SFR (borda inclinada — ISO 12233 / ISO 8600-5). Ângulo da borda:{' '}
+                {dados.resolucao.anguloBorda.toFixed(2)}° | Modelo: {dados.resolucao.modeloNome}.
+                {'\n'}Critério: MTF50 medido ≥ {(100 - dados.resolucao.tolerancia).toFixed(0)}% do valor de
+                referência (golden sample).
+              </Text>
+            </View>
+          </>
         )}
 
         <Text style={styles.faixa}>10. REGISTRO DAS OBSERVAÇÕES TÉCNICAS</Text>
@@ -380,11 +428,15 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
         <View style={styles.caixa}>
           <Text>
             <Text style={styles.bold}>Destinação sugerida: </Text>
-            {conforme
-              ? dados.etapa === 'checkpoint_a'
-                ? 'Seguir para selagem'
-                : 'Liberar para entrega ao cliente'
-              : 'Retornar para manutenção / ajuste'}
+            {dados.etapa === 'resolucao'
+              ? conforme
+                ? 'Resolução conforme (ISO 8600-5)'
+                : 'Reprovado na resolução — retornar para avaliação'
+              : conforme
+                ? dados.etapa === 'checkpoint_a'
+                  ? 'Seguir para selagem'
+                  : 'Liberar para entrega ao cliente'
+                : 'Retornar para manutenção / ajuste'}
             {'\n'}
             <Text style={styles.bold}>Prazo recomendado: </Text>
             Imediato

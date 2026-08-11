@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { iniciarOpenCvWorker, calcularMetricasWorker } from '../../lib/opencvWorkerClient';
 import { statusMetricas, FATOR_CALIB_PADRAO, type MetricasOticas } from '../../lib/metrologiaOptica';
 import { conformeFov, conformeDirecao, desvioFovPct } from '../../lib/iso8600';
+import { lerLeituras, estatisticaRepetibilidade } from '../../lib/incerteza';
 import { BancadaVisaoPdf, type DadosBancadaPdf } from './BancadaVisaoPdf';
 import {
   STATUS_CHECKPOINT_A,
@@ -183,6 +184,8 @@ export function BancadaVisao() {
   // --- Ensaio ISO 8600 (FOV + direção de visão) ---
   const [modeloId, setModeloId] = useState('');
   const [fovMedido, setFovMedido] = useState('');
+  // Leituras repetidas de FOV (opcional) -> incerteza de medição (tipo A).
+  const [fovLeituras, setFovLeituras] = useState('');
   const [distanciaMedicao, setDistanciaMedicao] = useState('50');
   const [direcaoMedida, setDirecaoMedida] = useState('');
   const [calibracaoId, setCalibracaoId] = useState('');
@@ -485,6 +488,10 @@ export function BancadaVisao() {
   async function gerarLaudo(override?: { metricas: MetricasOticas | null; imagemDataUrl: string | null }) {
     if (!osSelecionada) return;
     setErro(null);
+    // Repetibilidade: se o técnico informou N leituras de FOV, a média é o
+    // valor reportado e o desvio vira a incerteza (tipo A, k=2).
+    const estFov = estatisticaRepetibilidade(lerLeituras(fovLeituras));
+    const fovInformado = fovMedido !== '' || estFov != null;
     // Porteiras ISO 8600: só bloqueiam quando o técnico ESCOLHEU um modelo
     // (intenção de emitir laudo conforme). Sem modelo, os fluxos antigos
     // (OpenCV / manual) seguem inalterados.
@@ -492,11 +499,11 @@ export function BancadaVisao() {
       setErro('Modelo sem golden sample (FOV de referência). Cadastre em "Amostras-padrão" antes de emitir o laudo.');
       return;
     }
-    if (modeloId && fovMedido !== '' && calibsValidas.length === 0) {
+    if (modeloId && fovInformado && calibsValidas.length === 0) {
       setErro('Nenhum padrão de calibração válido (ativo e na validade). Atualize em "Calibração de padrões" antes do laudo.');
       return;
     }
-    if (modeloId && fovMedido !== '' && !calibracaoId) {
+    if (modeloId && fovInformado && !calibracaoId) {
       setErro('Selecione o padrão de calibração (alvo) usado no ensaio.');
       return;
     }
@@ -518,12 +525,13 @@ export function BancadaVisao() {
       // Veredito ISO 8600 (prioritário): modelo com golden sample + FOV medido
       // -> aplica ±15% (FOV, §4.5) e ±10° (direção, §4.6). Senão, cai no OpenCV
       // (complementar) ou no resultado manual.
-      const usarIso = !!spec && spec.fov_referencia_graus != null && fovMedido !== '';
+      const usarIso = !!spec && spec.fov_referencia_graus != null && fovInformado;
       let isoCampos: Record<string, unknown> = {};
       let isoProp: DadosBancadaPdf['iso'] = undefined;
       let resultado: 'Aprovado' | 'Reprovado';
       if (usarIso && spec) {
-        const fovM = Number(fovMedido);
+        const fovM = estFov ? estFov.media : Number(fovMedido);
+        const fovIncerteza = estFov ? Number(estFov.incertezaExpandida.toFixed(3)) : null;
         const dvM = direcaoMedida !== '' ? Number(direcaoMedida) : null;
         const fovRef = spec.fov_referencia_graus as number;
         const fovConf = conformeFov(fovM, fovRef, spec.tolerancia_fov_pct ?? 15);
@@ -541,6 +549,7 @@ export function BancadaVisao() {
           fov_referencia_graus: fovRef,
           fov_desvio_pct: Number(desvioFovPct(fovM, fovRef).toFixed(2)),
           fov_conforme: fovConf,
+          fov_incerteza_graus: fovIncerteza,
           direcao_medida_graus: dvM,
           direcao_nominal_graus: spec.angulo_graus,
           direcao_conforme: dvConf,
@@ -555,7 +564,7 @@ export function BancadaVisao() {
           fovDesvioPct: Number(desvioFovPct(fovM, fovRef).toFixed(2)),
           fovTolPct: spec.tolerancia_fov_pct ?? 15,
           fovConforme: fovConf,
-          fovIncerteza: null,
+          fovIncerteza,
           direcaoMedida: dvM,
           direcaoNominal: spec.angulo_graus,
           direcaoTolGraus: spec.tolerancia_direcao_graus ?? 10,
@@ -727,6 +736,15 @@ export function BancadaVisao() {
           <div className="campo-form">
             <label>FOV medido (°) — leia o anel que a borda do campo alcança</label>
             <input type="number" value={fovMedido} onChange={(e) => setFovMedido(e.target.value)} />
+          </div>
+          <div className="campo-form">
+            <label>Leituras repetidas de FOV (opcional, p/ incerteza) — ex.: 89,5 90 90,5</label>
+            <input
+              type="text"
+              value={fovLeituras}
+              onChange={(e) => setFovLeituras(e.target.value)}
+              placeholder="informe 2+ leituras separadas por espaço/vírgula → usa a média ± incerteza (k=2)"
+            />
           </div>
           <div className="campo-form">
             <label>Distância de medição (mm)</label>

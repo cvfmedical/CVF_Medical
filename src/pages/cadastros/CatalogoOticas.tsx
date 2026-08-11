@@ -14,6 +14,8 @@ interface CatalogoOtica {
   tolerancia_direcao_graus: number | null;
   distancia_medicao_mm: number | null;
   metodo_iso: string | null;
+  mtf50_referencia_ciclos_px: number | null; // golden sample de resolução (ISO 8600-5)
+  resolucao_tolerancia_pct: number | null;
 }
 
 export function CatalogoOticas() {
@@ -43,6 +45,7 @@ export function CatalogoOticas() {
         tolerancia_direcao_graus: 10,
         distancia_medicao_mm: 50,
         metodo_iso: 'A',
+        resolucao_tolerancia_pct: 20,
       }}
       colunas={[
         { chave: 'fabricante', label: 'Fabricante' },
@@ -93,6 +96,16 @@ export function CatalogoOticas() {
             { value: 'B', label: 'B — pupila de entrada' },
           ],
         },
+        {
+          name: 'mtf50_referencia_ciclos_px',
+          label: 'MTF50 de referência (ciclos/px) — resolução (golden sample, ISO 8600-5)',
+          type: 'number',
+        },
+        {
+          name: 'resolucao_tolerancia_pct',
+          label: 'Tolerância de resolução (%) — mínimo aceitável vs referência',
+          type: 'number',
+        },
       ]}
       validar={(d) => {
         if (!d.fabricante) return 'Informe o fabricante.';
@@ -118,6 +131,14 @@ export function CatalogoOticas() {
             ? Number(d.distancia_medicao_mm)
             : 50,
         metodo_iso: d.metodo_iso || 'A',
+        mtf50_referencia_ciclos_px:
+          d.mtf50_referencia_ciclos_px !== '' && d.mtf50_referencia_ciclos_px != null
+            ? Number(d.mtf50_referencia_ciclos_px)
+            : null,
+        resolucao_tolerancia_pct:
+          d.resolucao_tolerancia_pct !== '' && d.resolucao_tolerancia_pct != null
+            ? Number(d.resolucao_tolerancia_pct)
+            : 20,
       })}
     />
   );
