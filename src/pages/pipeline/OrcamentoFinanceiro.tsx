@@ -40,7 +40,7 @@ interface ItemOrcamento {
   observacao: string | null;
   descricao_servico: string | null;
   foto_peca_danificada_path: string | null;
-  produtos_servicos: { nome: string } | null;
+  produtos_servicos: { nome: string; preco_unitario: number | null } | null;
 }
 
 interface Cliente {
@@ -115,7 +115,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome)',
+          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario)',
         )
         .eq('orcamento_id', selecionadoId!);
       if (error) throw error;
@@ -158,7 +158,14 @@ export function OrcamentoFinanceiro() {
     if (!itensQuery.data) return;
     const iniciais: Record<number, string> = {};
     for (const item of itensQuery.data) {
-      iniciais[item.id] = item.preco_unitario != null ? String(item.preco_unitario) : '';
+      // Já precificado -> usa o valor salvo. Ainda não precificado -> sugere o
+      // preço de venda do catálogo (produtos_servicos.preco_unitario), editável.
+      iniciais[item.id] =
+        item.preco_unitario != null
+          ? String(item.preco_unitario)
+          : item.produtos_servicos?.preco_unitario != null
+            ? String(item.produtos_servicos.preco_unitario)
+            : '';
     }
     setPrecos(iniciais);
   }, [itensQuery.data]);
@@ -586,6 +593,10 @@ export function OrcamentoFinanceiro() {
               </tbody>
             </table>
 
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', margin: '2px 0 0' }}>
+              O preço unitário já vem sugerido do catálogo (valor de venda) quando o item está cadastrado — ajuste
+              livremente antes de salvar/enviar.
+            </p>
             <p style={{ textAlign: 'right', fontWeight: 500 }}>Total: R$ {total.toFixed(2)}</p>
 
             <div className="campo-form">
