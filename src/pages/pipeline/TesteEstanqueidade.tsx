@@ -10,12 +10,21 @@ interface TesteEstanqueidadeRow {
   id: number;
   ordem_servico_id: number;
   pressao_aplicada_kpa: number;
+  pressao_maxima_fabricante_kpa: number | null;
   tempo_segundos: number;
   temperatura_celsius: number | null;
   imersao_total: boolean;
+  metodo_observacao: string | null;
   resultado: string;
   ponto_vazamento: string | null;
 }
+
+// Método de observação conforme ISO 8600-7: as bolhas devem ser observadas
+// com o endoscópio pressurizado internamente E submerso ao mesmo tempo. O
+// método de câmara pré-pressurizada (pressuriza a câmara, despressuriza e só
+// então submerge) é um DESVIO da norma e é sinalizado no laudo.
+const METODO_ISO = 'ISO 8600-7 (pressurizado e submerso)';
+const METODO_CAMARA = 'Câmara pré-pressurizada (desvio da norma)';
 
 export function TesteEstanqueidade() {
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
@@ -52,6 +61,18 @@ export function TesteEstanqueidade() {
           { chave: 'temperatura_celsius', label: 'Temp. (°C)' },
           { chave: 'imersao_total', label: 'Imersão total', render: (r) => (r.imersao_total ? 'Sim' : 'Não') },
           {
+            chave: 'metodo_observacao',
+            label: 'Método',
+            render: (r) =>
+              r.metodo_observacao === METODO_ISO ? (
+                <Badge tono="teal">ISO</Badge>
+              ) : r.metodo_observacao ? (
+                <Badge tono="copper">Desvio</Badge>
+              ) : (
+                '-'
+              ),
+          },
+          {
             chave: 'resultado',
             label: 'Resultado',
             render: (r) => <Badge tono={r.resultado === 'Aprovado' ? 'teal' : 'danger'}>{r.resultado}</Badge>,
@@ -59,15 +80,28 @@ export function TesteEstanqueidade() {
         ]}
         campos={[
           { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
-          { name: 'pressao_aplicada_kpa', label: 'Pressão aplicada (kPa) - mínimo 20', type: 'number', obrigatorio: true },
-          { name: 'tempo_segundos', label: 'Tempo com pressão mantida (segundos) - mínimo 60', type: 'number', obrigatorio: true },
+          {
+            name: 'metodo_observacao',
+            label: 'Método de observação das bolhas',
+            type: 'select',
+            opcoes: [METODO_ISO, METODO_CAMARA],
+            obrigatorio: true,
+          },
+          { name: 'pressao_aplicada_kpa', label: 'Pressão aplicada / lida no manômetro (kPa) - mínimo 20', type: 'number', obrigatorio: true },
+          {
+            name: 'pressao_maxima_fabricante_kpa',
+            label: 'Pressão máx. segura do fabricante/RT (kPa) - trava de sobrepressão',
+            type: 'number',
+          },
+          { name: 'tempo_segundos', label: 'Tempo com pressão mantida e imerso (segundos) - mínimo 60', type: 'number', obrigatorio: true },
           { name: 'temperatura_celsius', label: 'Temperatura da água (°C) - entre 10 e 40 (ISO 8600-7)', type: 'number', obrigatorio: true },
           { name: 'imersao_total', label: 'Endoscópio totalmente imerso (obrigatório)', type: 'checkbox' },
           {
             name: 'calibracao_id',
-            label: 'Padrão de calibração (manômetro)',
+            label: 'Padrão de calibração (manômetro) - obrigatório',
             type: 'select',
             opcoes: (padroesQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.identificacao })),
+            obrigatorio: true,
           },
           {
             name: 'resultado',
@@ -81,21 +115,34 @@ export function TesteEstanqueidade() {
         ]}
         validar={(d) => {
           if (!d.ordem_servico_id) return 'Selecione a ordem de serviço.';
+          if (!d.metodo_observacao) return 'Selecione o método de observação das bolhas.';
           if (!d.pressao_aplicada_kpa || Number(d.pressao_aplicada_kpa) < 20)
             return 'A pressão aplicada precisa ser de no mínimo 20 kPa (ISO 8600-7).';
+          const pMax = Number(d.pressao_maxima_fabricante_kpa);
+          if (d.pressao_maxima_fabricante_kpa !== '' && d.pressao_maxima_fabricante_kpa != null && pMax > 0
+            && Number(d.pressao_aplicada_kpa) > pMax)
+            return `A pressão aplicada (${d.pressao_aplicada_kpa} kPa) excede a máxima segura do fabricante (${pMax} kPa). Risco de dano à ótica - reduza a pressão.`;
           if (!d.tempo_segundos || Number(d.tempo_segundos) < 60)
             return 'O tempo com pressão mantida precisa ser de no mínimo 60 segundos (1 minuto).';
           const t = Number(d.temperatura_celsius);
           if (d.temperatura_celsius === '' || d.temperatura_celsius == null || t < 10 || t > 40)
             return 'A temperatura da água deve estar entre 10 e 40 °C (ISO 8600-7 §4).';
           if (!d.imersao_total) return 'O ensaio exige imersão total do endoscópio (ISO 8600-7). Marque a imersão total.';
+          if (!d.calibracao_id) return 'Selecione o padrão de calibração do manômetro (rastreabilidade ISO/IEC 17025).';
           if (!d.resultado) return 'Selecione o resultado do teste.';
+          if (d.metodo_observacao === METODO_CAMARA && d.resultado === 'Aprovado'
+            && !String(d.observacoes ?? '').trim())
+            return 'Método de câmara pré-pressurizada é um desvio da ISO 8600-7 (as bolhas devem ser observadas com o scope pressurizado E submerso). Registre o motivo do desvio em Observações antes de aprovar.';
           return null;
         }}
         antesDeEnviar={(d) => ({
           ...d,
           ordem_servico_id: Number(d.ordem_servico_id),
           pressao_aplicada_kpa: Number(d.pressao_aplicada_kpa),
+          pressao_maxima_fabricante_kpa:
+            d.pressao_maxima_fabricante_kpa !== '' && d.pressao_maxima_fabricante_kpa != null
+              ? Number(d.pressao_maxima_fabricante_kpa)
+              : null,
           tempo_segundos: Number(d.tempo_segundos),
           temperatura_celsius: d.temperatura_celsius !== '' && d.temperatura_celsius != null ? Number(d.temperatura_celsius) : null,
           calibracao_id: d.calibracao_id ? Number(d.calibracao_id) : null,
@@ -110,8 +157,12 @@ export function TesteEstanqueidade() {
         }}
       />
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 8 }}>
-        ISO 8600-7: pressão &ge; 20 kPa, &ge; 1 min, imersão total, água a 10-40 °C. Bolhas presas por tensão
-        superficial não contam - só fluxo constante saindo de um ponto. Reprovado volta para "Em manutenção".
+        ISO 8600-7: pressão &ge; 20 kPa, &ge; 1 min, imersão total, água a 10-40 °C, com o endoscópio
+        <strong> pressurizado internamente E submerso ao mesmo tempo</strong> (método ISO). O método de câmara
+        pré-pressurizada é um desvio - exige justificativa em Observações. Informe a pressão máx. do fabricante
+        para travar sobrepressão (ex.: 2 kgf/cm² &asymp; 200 kPa &eacute; ~10&times; o mínimo). Manômetro com
+        calibração rastreável obrigatória. Bolhas presas por tensão superficial não contam - só fluxo constante
+        saindo de um ponto. Reprovado volta para "Em manutenção".
       </p>
     </div>
   );
