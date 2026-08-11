@@ -46,9 +46,9 @@ export const GARANTIA_CVF = {
   intro: 'Para a validade da garantia, são condições indispensáveis:',
   itens: [
     'Que a falha decorra do serviço executado ou de peça substituída pela CVF Medical; falhas de qualquer outra origem não estão incluídas.',
-    'Que o equipamento tenha sido utilizado conforme as instruções do fabricante e as recomendações da CVF Medical.',
+    'Que o equipamento tenha sido utilizado conforme as instruções do fabricante.',
     'Que sejam respeitadas as condições de uso, limpeza, esterilização e armazenamento indicadas para o equipamento.',
-    'Que a CVF Medical seja comunicada de imediato sobre qualquer falha, no prazo máximo de 10 (dez) dias a partir de sua constatação.',
+    'Que a CVF Medical seja comunicada de imediato sobre qualquer falha, no prazo máximo de 2 (dois) dias a partir do recebimento do equipamento.',
     'A garantia não cobre danos por mau uso, quedas, esterilização inadequada ou reparos por terceiros, nem danos contingentes ou lucros cessantes.',
     'A garantia cobre a substituição das peças e a mão de obra dos técnicos. Custos de transporte e deslocamento não estão incluídos.',
   ],
