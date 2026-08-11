@@ -68,6 +68,7 @@ export const MENU: CategoriaMenu[] = [
     icone: IconMicroscope,
     itens: [
       { label: 'Bancada de visão (ISO 8600)', path: '/bancada-visao', categoria: 'laboratorio_qualidade', implementado: false },
+      { label: 'Teste de resolução (ISO 8600-5)', path: '/teste-resolucao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Emissão de laudos PDF', path: '/laudos', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Amostras-padrão (golden sample)', path: '/amostras-padrao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Calibração de padrões (17025)', path: '/padroes-calibracao', categoria: 'laboratorio_qualidade', implementado: false },
