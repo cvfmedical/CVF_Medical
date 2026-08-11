@@ -128,6 +128,13 @@ export function abrirImpressao(
         /* alinha valores monetários à direita (colunas de preço/subtotal) */
         table.dados td:nth-child(n+3), table.dados th:nth-child(n+3) { text-align: right; }
         .total-linha { text-align: right; font-weight: 600; font-size: 14px; margin-top: 12px; }
+        /* Tabela de peças da OS: foto na mesma linha do item/observação */
+        table.itens-os { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        table.itens-os th { background: var(--graphite-900); color: #fff; font-weight: 500; text-align: left; padding: 8px 10px; font-size: 12px; }
+        table.itens-os td { border-bottom: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
+        table.itens-os .col-qtd { text-align: center; width: 48px; }
+        table.itens-os .col-foto { width: 150px; }
+        table.itens-os .foto-item { max-width: 130px; max-height: 100px; border: 1px solid var(--border); border-radius: 4px; display: block; }
         .assinaturas { display: flex; gap: 48px; margin-top: 56px; }
         .assinatura-bloco { flex: 1; text-align: center; }
         .assinatura-linha { border-top: 1px solid var(--ink-900); margin-top: 48px; padding-top: 6px; font-size: 12px; }

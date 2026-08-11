@@ -28,10 +28,10 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
       (item) => `
       <tr>
         <td>${item.nome}</td>
-        <td>${item.quantidade}</td>
+        <td class="col-qtd">${item.quantidade}</td>
         <td>${item.observacao ?? '-'}</td>
-      </tr>
-      ${item.fotoUrl ? `<tr><td colspan="3"><div class="fotos"><img src="${item.fotoUrl}" /></div></td></tr>` : ''}`,
+        <td class="col-foto">${item.fotoUrl ? `<img class="foto-item" src="${item.fotoUrl}" />` : '-'}</td>
+      </tr>`,
     )
     .join('');
 
@@ -44,8 +44,8 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
     <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${os.optica_sn ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${os.defeito_relatado ?? '-'}</div></div>
     <div class="secao">Peças/serviços identificados</div>
-    <table>
-      <thead><tr><th>Item</th><th>Qtd.</th><th>Observação / avaria</th></tr></thead>
+    <table class="itens-os">
+      <thead><tr><th>Item</th><th class="col-qtd">Qtd.</th><th>Observação / avaria</th><th class="col-foto">Foto</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     <p style="font-size:12px; color:#666; margin-top:12px;">
