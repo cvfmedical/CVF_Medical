@@ -80,6 +80,8 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Teste de estanqueidade', path: '/teste-estanqueidade', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Teste de autoclave', path: '/teste-autoclave', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Teste de qualidade / funcionamento', path: '/teste-qualidade', categoria: 'laboratorio_qualidade', implementado: false },
+      { label: 'Teste de luz / transmissão', path: '/teste-luz', categoria: 'laboratorio_qualidade', implementado: false },
+      { label: 'Medição dimensional (ISO 8600-4)', path: '/medicao-dimensional', categoria: 'laboratorio_qualidade', implementado: false },
     ],
   },
   {

@@ -96,6 +96,7 @@ export interface DadosBancadaPdf {
     tolerancia: number; // %
     anguloBorda: number;
     conforme: boolean | null;
+    incerteza?: number | null; // U (k=2) em ciclos/px, se houve repetibilidade
   };
 }
 
@@ -378,6 +379,9 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
               <Text style={{ fontSize: 7 }}>
                 Método: e-SFR (borda inclinada — ISO 12233 / ISO 8600-5). Ângulo da borda:{' '}
                 {dados.resolucao.anguloBorda.toFixed(2)}° | Modelo: {dados.resolucao.modeloNome}.
+                {dados.resolucao.incerteza != null
+                  ? ` | Incerteza (k=2): ±${dados.resolucao.incerteza.toFixed(4)} c/px.`
+                  : ''}
                 {'\n'}Critério: MTF50 medido ≥ {(100 - dados.resolucao.tolerancia).toFixed(0)}% do valor de
                 referência (golden sample).
               </Text>

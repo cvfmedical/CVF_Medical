@@ -28,8 +28,12 @@ export function LaudoPdf({ dados }: { dados: DadosLaudoPdf }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.titulo}>Q-CVF Medical - Laudo Técnico</Text>
+        <Text style={styles.titulo}>Q-CVF Medical - Nota Técnica Interna</Text>
         <Text style={styles.subtitulo}>Manutenção em Equipamentos Cirúrgicos</Text>
+        <Text style={{ fontSize: 8.5, color: '#991b1b', marginBottom: 16 }}>
+          Documento interno simplificado - NÃO substitui o laudo de conformidade ISO 8600 (gerado na Bancada de
+          Visão / Teste de resolução), que contém as medições e critérios normativos.
+        </Text>
 
         <View style={styles.linha}>
           <Text style={styles.rotulo}>Nº do laudo</Text>

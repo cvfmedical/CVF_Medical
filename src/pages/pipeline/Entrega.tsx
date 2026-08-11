@@ -3,7 +3,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
-import { STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
+import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 
 interface EntregaRow {
   id: number;
@@ -22,6 +22,14 @@ interface EntregaRow {
 export function Entrega() {
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   if (isLoading) return <CarregandoTela />;
+
+  // Porteira: só entra na entrega quem terminou o fluxo ("Pronto para entrega")
+  // ou saiu por devolução sem reparo (orçamento recusado).
+  const podeEntregar = (osId: number) => {
+    const s = porId(osId)?.status_os;
+    return s === STATUS_PRONTO_ENTREGA || s === STATUS_DEVOLUCAO_SEM_REPARO;
+  };
+  const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)));
 
   return (
     <CrudPage<EntregaRow>
@@ -51,7 +59,7 @@ export function Entrega() {
         { chave: 'detalhes', label: 'Detalhes' },
       ]}
       campos={[
-        { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
+        { name: 'ordem_servico_id', label: 'Ordem de serviço (só liberadas p/ entrega)', type: 'select', opcoes: opcoesEntrega, obrigatorio: true },
         {
           name: 'forma_devolucao',
           label: 'Forma de devolução',
@@ -69,6 +77,8 @@ export function Entrega() {
       ]}
       validar={(d) => {
         if (!d.ordem_servico_id) return 'Selecione a ordem de serviço.';
+        if (!podeEntregar(Number(d.ordem_servico_id)))
+          return 'Esta OS ainda não está liberada para entrega (precisa estar em "Pronto para entrega" ou "Devolução sem reparo").';
         if (!d.forma_devolucao) return 'Selecione a forma de devolução.';
         return null;
       }}

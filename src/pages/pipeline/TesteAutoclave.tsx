@@ -57,6 +57,10 @@ export function TesteAutoclave() {
         ]}
         validar={(d) => {
           if (!d.ordem_servico_id) return 'Selecione a ordem de serviço.';
+          if (d.temperatura_celsius === '' || d.temperatura_celsius == null)
+            return 'Informe a temperatura do ciclo (°C) para registro.';
+          if (d.tempo_minutos === '' || d.tempo_minutos == null)
+            return 'Informe o tempo do ciclo (minutos) para registro.';
           if (!d.resultado) return 'Selecione o resultado do teste.';
           return null;
         }}

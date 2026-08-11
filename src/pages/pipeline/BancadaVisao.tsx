@@ -507,6 +507,10 @@ export function BancadaVisao() {
       setErro('Selecione o padrão de calibração (alvo) usado no ensaio.');
       return;
     }
+    if (modeloId && spec?.angulo_graus != null && fovInformado && direcaoMedida === '') {
+      setErro('Informe a direção de visão medida — este modelo tem direção nominal (ISO 8600-1 §4.6).');
+      return;
+    }
     setGerando(true);
     try {
       let metricasFinal: MetricasOticas | null;

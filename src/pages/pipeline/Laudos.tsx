@@ -111,11 +111,16 @@ export function Laudos() {
   return (
     <div>
       <div className="crud-cabecalho">
-        <h1>Emissão de laudos PDF</h1>
+        <h1>Laudos e notas técnicas</h1>
         <button className="botao-primario botao-pequeno" onClick={() => setModalAberto(true)}>
-          Novo laudo
+          Nova nota interna
         </button>
       </div>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: '0 0 12px', maxWidth: 760 }}>
+        Os <strong>laudos de conformidade ISO 8600</strong> (com medições e critérios) são gerados na
+        <strong> Bancada de Visão</strong> e no <strong>Teste de resolução</strong>. Este botão cria apenas uma
+        <strong> nota interna simplificada</strong> (sem medições) e todos os documentos aparecem na lista abaixo.
+      </p>
 
       <table className="tabela-crud">
         <thead>
@@ -156,7 +161,7 @@ export function Laudos() {
       {modalAberto && (
         <div className="modal-fundo" onClick={() => setModalAberto(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Novo laudo</h2>
+            <h2>Nova nota técnica interna</h2>
 
             <div className="campo-form">
               <label>Ordem de serviço *</label>
@@ -194,7 +199,7 @@ export function Laudos() {
                 Cancelar
               </button>
               <button className="botao-primario" onClick={gerarLaudo} disabled={gerando}>
-                {gerando ? 'Gerando...' : 'Gerar e salvar laudo'}
+                {gerando ? 'Gerando...' : 'Gerar nota interna'}
               </button>
             </div>
           </div>

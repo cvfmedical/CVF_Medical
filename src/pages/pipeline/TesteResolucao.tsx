@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { calcularMtfSlantedEdge, paraCiclosPorMm, type ResultadoMtf, type Roi } from '../../lib/esfr';
+import { lerLeituras, estatisticaRepetibilidade } from '../../lib/incerteza';
 import { BancadaVisaoPdf } from './BancadaVisaoPdf';
 
 // Teste de resolução óptica (ISO 8600-5, e-SFR / borda inclinada) integrado à
@@ -46,6 +47,7 @@ export function TesteResolucao() {
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [escalaPxMm, setEscalaPxMm] = useState('');
+  const [mtfLeituras, setMtfLeituras] = useState('');
   const [osId, setOsId] = useState('');
   const [modeloId, setModeloId] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -90,9 +92,13 @@ export function TesteResolucao() {
   });
 
   const tol = modelo?.resolucao_tolerancia_pct ?? 20;
+  // Repetibilidade opcional: N leituras de MTF50 -> média (valor reportado) + incerteza.
+  const estMtf = estatisticaRepetibilidade(lerLeituras(mtfLeituras));
+  const mtfEfetivo = resultado ? (estMtf ? estMtf.media : resultado.mtf50) : null;
+  const mtfInc = estMtf ? estMtf.incertezaExpandida : null;
   const conforme =
-    resultado && modelo?.mtf50_referencia_ciclos_px != null
-      ? resultado.mtf50 >= modelo.mtf50_referencia_ciclos_px * (1 - tol / 100)
+    mtfEfetivo != null && modelo?.mtf50_referencia_ciclos_px != null
+      ? mtfEfetivo >= modelo.mtf50_referencia_ciclos_px * (1 - tol / 100)
       : null;
 
   function desenhar(roiAtual: Roi | null) {
@@ -230,6 +236,7 @@ export function TesteResolucao() {
     try {
       const numeroLaudo = await gerarNumeroSequencial('LAUDO', 'laudos', 'numero_laudo');
       const cliente = clienteQuery.data;
+      const mtfM = mtfEfetivo ?? resultado.mtf50;
       const blob = await pdf(
         <BancadaVisaoPdf
           dados={{
@@ -253,11 +260,12 @@ export function TesteResolucao() {
             observacoes: '',
             resolucao: {
               modeloNome: `${modelo.fabricante} ${modelo.modelo}`,
-              mtf50: resultado.mtf50,
+              mtf50: mtfM,
               mtf50Referencia: modelo.mtf50_referencia_ciclos_px,
               tolerancia: tol,
               anguloBorda: resultado.anguloBordaGraus,
               conforme,
+              incerteza: mtfInc != null ? Number(mtfInc.toFixed(4)) : null,
             },
           }}
         />,
@@ -277,9 +285,10 @@ export function TesteResolucao() {
         etapa: 'resolucao',
         catalogo_otica_id: Number(modeloId),
         numero_serie_otica: os.optica_sn ?? null,
-        mtf50_medido_ciclos_px: Number(resultado.mtf50.toFixed(4)),
+        mtf50_medido_ciclos_px: Number(mtfM.toFixed(4)),
         mtf50_referencia_ciclos_px: modelo.mtf50_referencia_ciclos_px,
         resolucao_angulo_borda_graus: Number(resultado.anguloBordaGraus.toFixed(2)),
+        resolucao_incerteza_ciclos_px: mtfInc != null ? Number(mtfInc.toFixed(4)) : null,
         resolucao_conforme: conforme,
       });
       if (eIns) throw eIns;
@@ -294,8 +303,7 @@ export function TesteResolucao() {
   const anguloAbs = resultado ? Math.abs(resultado.anguloBordaGraus) : 0;
   const anguloOk = resultado ? anguloAbs >= 2 && anguloAbs <= 15 : true;
   const escNum = Number(escalaPxMm.replace(',', '.'));
-  const mtf50CicloMm =
-    resultado && escNum > 0 && Number.isFinite(resultado.mtf50) ? paraCiclosPorMm(resultado.mtf50, escNum) : null;
+  const mtf50CicloMm = mtfEfetivo != null && escNum > 0 ? paraCiclosPorMm(mtfEfetivo, escNum) : null;
   const curva = resultado ? construirCurva(resultado) : '';
 
   return (
@@ -372,7 +380,10 @@ export function TesteResolucao() {
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 8 }}>
             <div>
               <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>MTF50</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{resultado.mtf50.toFixed(4)} ciclos/px</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>
+                {(mtfEfetivo ?? resultado.mtf50).toFixed(4)} ciclos/px
+                {mtfInc != null ? ` ± ${mtfInc.toFixed(4)} (k=2)` : ''}
+              </div>
               {mtf50CicloMm != null && (
                 <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>≈ {mtf50CicloMm.toFixed(1)} ciclos/mm (objeto)</div>
               )}
@@ -397,6 +408,15 @@ export function TesteResolucao() {
           <div className="campo-form" style={{ maxWidth: 320 }}>
             <label>Escala do objeto (px/mm) — opcional, p/ ciclos/mm</label>
             <input type="number" value={escalaPxMm} onChange={(e) => setEscalaPxMm(e.target.value)} />
+          </div>
+          <div className="campo-form" style={{ maxWidth: 420 }}>
+            <label>MTF50 de leituras repetidas (opcional, p/ incerteza) — ex.: 0,18 0,19 0,185</label>
+            <input
+              type="text"
+              value={mtfLeituras}
+              onChange={(e) => setMtfLeituras(e.target.value)}
+              placeholder="2+ leituras -> usa a média ± incerteza (k=2)"
+            />
           </div>
 
           <div style={{ marginTop: 8 }}>
