@@ -8,7 +8,8 @@ import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { iniciarOpenCvWorker, calcularMetricasWorker } from '../../lib/opencvWorkerClient';
 import { statusMetricas, FATOR_CALIB_PADRAO, type MetricasOticas } from '../../lib/metrologiaOptica';
-import { BancadaVisaoPdf } from './BancadaVisaoPdf';
+import { conformeFov, conformeDirecao, desvioFovPct } from '../../lib/iso8600';
+import { BancadaVisaoPdf, type DadosBancadaPdf } from './BancadaVisaoPdf';
 import {
   STATUS_CHECKPOINT_A,
   STATUS_CHECKPOINT_B,
@@ -32,6 +33,18 @@ interface OSResumo {
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
+}
+
+interface CatalogoOticaSpec {
+  id: number;
+  fabricante: string;
+  modelo: string;
+  angulo_graus: number | null; // direção de visão nominal (ISO 8600-1 §4.6)
+  fov_referencia_graus: number | null; // golden sample (ISO 8600-1 §4.5)
+  tolerancia_fov_pct: number | null;
+  tolerancia_direcao_graus: number | null;
+  distancia_medicao_mm: number | null;
+  metodo_iso: string | null;
 }
 
 async function gerarNumeroLaudo(): Promise<string> {
@@ -166,6 +179,60 @@ export function BancadaVisao() {
   // por OpenCV é OPCIONAL e carregada só sob demanda - ela é pesada e trava
   // máquinas mais lentas, então NÃO carrega sozinha ao abrir a tela.
   const [resultadoManual, setResultadoManual] = useState<'Aprovado' | 'Reprovado'>('Aprovado');
+
+  // --- Ensaio ISO 8600 (FOV + direção de visão) ---
+  const [modeloId, setModeloId] = useState('');
+  const [fovMedido, setFovMedido] = useState('');
+  const [distanciaMedicao, setDistanciaMedicao] = useState('50');
+  const [direcaoMedida, setDirecaoMedida] = useState('');
+  const [calibracaoId, setCalibracaoId] = useState('');
+
+  const modelosQuery = useQuery({
+    queryKey: ['catalogo-oticas-iso'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('catalogo_oticas')
+        .select(
+          'id, fabricante, modelo, angulo_graus, fov_referencia_graus, tolerancia_fov_pct, tolerancia_direcao_graus, distancia_medicao_mm, metodo_iso',
+        )
+        .order('fabricante');
+      if (error) throw error;
+      return data as CatalogoOticaSpec[];
+    },
+  });
+
+  const calibsQuery = useQuery({
+    queryKey: ['padroes-calibracao-validos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('padroes_calibracao')
+        .select('id, identificacao, data_validade, status_ativo')
+        .eq('status_ativo', true)
+        .order('data_validade', { ascending: false });
+      if (error) throw error;
+      return data as { id: number; identificacao: string; data_validade: string | null }[];
+    },
+  });
+
+  const spec = modelosQuery.data?.find((m) => String(m.id) === modeloId) ?? null;
+  const hojeCalib = new Date();
+  hojeCalib.setHours(0, 0, 0, 0);
+  const calibsValidas = (calibsQuery.data ?? []).filter(
+    (c) => !!c.data_validade && new Date(c.data_validade + 'T00:00:00') >= hojeCalib,
+  );
+
+  // Prévia do veredito ISO (mostra conforme/não conforme enquanto o técnico digita).
+  const previewIso = (() => {
+    if (!spec || spec.fov_referencia_graus == null || fovMedido === '') return null;
+    const fovM = Number(fovMedido);
+    const fovConf = conformeFov(fovM, spec.fov_referencia_graus, spec.tolerancia_fov_pct ?? 15);
+    const dvM = direcaoMedida !== '' ? Number(direcaoMedida) : null;
+    const dvConf =
+      dvM != null && spec.angulo_graus != null
+        ? conformeDirecao(dvM, spec.angulo_graus, spec.tolerancia_direcao_graus ?? 10)
+        : null;
+    return { fovConf, dvConf, desvio: desvioFovPct(fovM, spec.fov_referencia_graus) };
+  })();
 
   function ativarMedicaoAutomatica() {
     if (cvPronto || cvCarregando) return;
@@ -418,6 +485,21 @@ export function BancadaVisao() {
   async function gerarLaudo(override?: { metricas: MetricasOticas | null; imagemDataUrl: string | null }) {
     if (!osSelecionada) return;
     setErro(null);
+    // Porteiras ISO 8600: só bloqueiam quando o técnico ESCOLHEU um modelo
+    // (intenção de emitir laudo conforme). Sem modelo, os fluxos antigos
+    // (OpenCV / manual) seguem inalterados.
+    if (modeloId && spec && spec.fov_referencia_graus == null) {
+      setErro('Modelo sem golden sample (FOV de referência). Cadastre em "Amostras-padrão" antes de emitir o laudo.');
+      return;
+    }
+    if (modeloId && fovMedido !== '' && calibsValidas.length === 0) {
+      setErro('Nenhum padrão de calibração válido (ativo e na validade). Atualize em "Calibração de padrões" antes do laudo.');
+      return;
+    }
+    if (modeloId && fovMedido !== '' && !calibracaoId) {
+      setErro('Selecione o padrão de calibração (alvo) usado no ensaio.');
+      return;
+    }
     setGerando(true);
     try {
       let metricasFinal: MetricasOticas | null;
@@ -433,11 +515,60 @@ export function BancadaVisao() {
           cvProntoRef.current && imageData ? await calcularMetricasWorker(imageData, fatorCalibRef.current) : null;
         imagemDataUrl = capturaRef.current?.toDataURL('image/jpeg', 0.85) ?? null;
       }
-      const resultado: 'Aprovado' | 'Reprovado' = metricasFinal
-        ? statusMetricas(metricasFinal).conforme
-          ? 'Aprovado'
-          : 'Reprovado'
-        : resultadoManual;
+      // Veredito ISO 8600 (prioritário): modelo com golden sample + FOV medido
+      // -> aplica ±15% (FOV, §4.5) e ±10° (direção, §4.6). Senão, cai no OpenCV
+      // (complementar) ou no resultado manual.
+      const usarIso = !!spec && spec.fov_referencia_graus != null && fovMedido !== '';
+      let isoCampos: Record<string, unknown> = {};
+      let isoProp: DadosBancadaPdf['iso'] = undefined;
+      let resultado: 'Aprovado' | 'Reprovado';
+      if (usarIso && spec) {
+        const fovM = Number(fovMedido);
+        const dvM = direcaoMedida !== '' ? Number(direcaoMedida) : null;
+        const fovRef = spec.fov_referencia_graus as number;
+        const fovConf = conformeFov(fovM, fovRef, spec.tolerancia_fov_pct ?? 15);
+        const dvConf =
+          dvM != null && spec.angulo_graus != null
+            ? conformeDirecao(dvM, spec.angulo_graus, spec.tolerancia_direcao_graus ?? 10)
+            : true;
+        resultado = fovConf && dvConf ? 'Aprovado' : 'Reprovado';
+        isoCampos = {
+          catalogo_otica_id: Number(modeloId),
+          numero_serie_otica: osSelecionada.optica_sn ?? null,
+          metodo_iso: spec.metodo_iso ?? 'A',
+          distancia_medicao_mm: distanciaMedicao !== '' ? Number(distanciaMedicao) : null,
+          fov_medido_graus: fovM,
+          fov_referencia_graus: fovRef,
+          fov_desvio_pct: Number(desvioFovPct(fovM, fovRef).toFixed(2)),
+          fov_conforme: fovConf,
+          direcao_medida_graus: dvM,
+          direcao_nominal_graus: spec.angulo_graus,
+          direcao_conforme: dvConf,
+          calibracao_id: calibracaoId ? Number(calibracaoId) : null,
+        };
+        isoProp = {
+          modeloNome: `${spec.fabricante} ${spec.modelo}`,
+          metodo: spec.metodo_iso ?? 'A',
+          distanciaMm: distanciaMedicao !== '' ? Number(distanciaMedicao) : null,
+          fovMedido: fovM,
+          fovReferencia: fovRef,
+          fovDesvioPct: Number(desvioFovPct(fovM, fovRef).toFixed(2)),
+          fovTolPct: spec.tolerancia_fov_pct ?? 15,
+          fovConforme: fovConf,
+          fovIncerteza: null,
+          direcaoMedida: dvM,
+          direcaoNominal: spec.angulo_graus,
+          direcaoTolGraus: spec.tolerancia_direcao_graus ?? 10,
+          direcaoConforme: dvM != null && spec.angulo_graus != null ? dvConf : null,
+          calibracao: calibsQuery.data?.find((c) => String(c.id) === calibracaoId)?.identificacao ?? null,
+        };
+      } else {
+        resultado = metricasFinal
+          ? statusMetricas(metricasFinal).conforme
+            ? 'Aprovado'
+            : 'Reprovado'
+          : resultadoManual;
+      }
 
       const numeroLaudo = await gerarNumeroLaudo();
       const blob = await pdf(
@@ -461,6 +592,7 @@ export function BancadaVisao() {
             imagemDataUrl,
             tecnicoResponsavel: funcionario?.nome ?? '',
             observacoes,
+            iso: isoProp,
           }}
         />,
       ).toBlob();
@@ -479,6 +611,7 @@ export function BancadaVisao() {
         observacoes_tecnicas: observacoes || null,
         storage_path: caminho,
         etapa,
+        ...isoCampos,
       });
       if (erroInsert) throw erroInsert;
 
@@ -543,8 +676,81 @@ export function BancadaVisao() {
           )}
         </div>
 
+        <div
+          style={{
+            maxWidth: 420,
+            border: '1px solid #cbd5e1',
+            borderRadius: 8,
+            padding: 12,
+            margin: '12px 0',
+          }}
+        >
+          <strong style={{ fontSize: 13 }}>Ensaio ISO 8600 (FOV + direção de visão)</strong>
+          <div className="campo-form">
+            <label>Modelo da ótica</label>
+            <select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
+              <option value="">Selecione o modelo...</option>
+              {(modelosQuery.data ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.fabricante} {m.modelo}
+                </option>
+              ))}
+            </select>
+          </div>
+          {spec && spec.fov_referencia_graus == null && (
+            <p className="erro-login">
+              Modelo sem golden sample. Cadastre o FOV de referência em "Amostras-padrão" antes do laudo.
+            </p>
+          )}
+          {spec && spec.fov_referencia_graus != null && (
+            <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+              FOV ref.: {spec.fov_referencia_graus}° (±{spec.tolerancia_fov_pct ?? 15}%) • Direção nominal:{' '}
+              {spec.angulo_graus ?? '—'}° (±{spec.tolerancia_direcao_graus ?? 10}°)
+            </p>
+          )}
+          <div className="campo-form">
+            <label>Padrão de calibração (alvo)</label>
+            <select value={calibracaoId} onChange={(e) => setCalibracaoId(e.target.value)}>
+              <option value="">Selecione...</option>
+              {calibsValidas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.identificacao}
+                </option>
+              ))}
+            </select>
+            {calibsQuery.data && calibsValidas.length === 0 && (
+              <p className="erro-login">
+                Nenhum padrão de calibração válido. Cadastre/renove em "Calibração de padrões".
+              </p>
+            )}
+          </div>
+          <div className="campo-form">
+            <label>FOV medido (°) — leia o anel que a borda do campo alcança</label>
+            <input type="number" value={fovMedido} onChange={(e) => setFovMedido(e.target.value)} />
+          </div>
+          <div className="campo-form">
+            <label>Distância de medição (mm)</label>
+            <input type="number" value={distanciaMedicao} onChange={(e) => setDistanciaMedicao(e.target.value)} />
+          </div>
+          <div className="campo-form">
+            <label>Direção de visão medida (°) — inclinômetro</label>
+            <input type="number" value={direcaoMedida} onChange={(e) => setDirecaoMedida(e.target.value)} />
+          </div>
+          {previewIso && (
+            <p
+              style={{
+                fontWeight: 600,
+                color: previewIso.fovConf && previewIso.dvConf !== false ? '#16a34a' : '#dc2626',
+              }}
+            >
+              FOV desvio {previewIso.desvio.toFixed(1)}% → {previewIso.fovConf ? 'conforme' : 'NÃO conforme'}
+              {previewIso.dvConf !== null && ` • Direção → ${previewIso.dvConf ? 'conforme' : 'NÃO conforme'}`}
+            </p>
+          )}
+        </div>
+
         <div className="campo-form" style={{ maxWidth: 420 }}>
-          <label>Resultado da inspeção</label>
+          <label>Resultado da inspeção (usado só sem medição ISO)</label>
           <select
             value={resultadoManual}
             onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
@@ -673,6 +879,37 @@ export function BancadaVisao() {
           <label style={{ color: '#fff' }}>Observações</label>
           <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
         </div>
+        {spec && spec.fov_referencia_graus != null && (
+          <div style={{ borderTop: '1px solid #334155', paddingTop: 8 }}>
+            <p style={{ color: '#fff', fontSize: 12, margin: '0 0 6px' }}>
+              ISO 8600 — {spec.fabricante} {spec.modelo} (FOV ref. {spec.fov_referencia_graus}°)
+            </p>
+            <div className="campo-form">
+              <label style={{ color: '#fff' }}>FOV medido (°)</label>
+              <input type="number" value={fovMedido} onChange={(e) => setFovMedido(e.target.value)} />
+            </div>
+            <div className="campo-form">
+              <label style={{ color: '#fff' }}>Distância (mm)</label>
+              <input type="number" value={distanciaMedicao} onChange={(e) => setDistanciaMedicao(e.target.value)} />
+            </div>
+            <div className="campo-form">
+              <label style={{ color: '#fff' }}>Direção de visão (°)</label>
+              <input type="number" value={direcaoMedida} onChange={(e) => setDirecaoMedida(e.target.value)} />
+            </div>
+            {previewIso && (
+              <p
+                style={{
+                  fontWeight: 600,
+                  fontSize: 12,
+                  color: previewIso.fovConf && previewIso.dvConf !== false ? '#4ade80' : '#f87171',
+                }}
+              >
+                FOV {previewIso.desvio.toFixed(1)}% {previewIso.fovConf ? '✓' : '✗'}
+                {previewIso.dvConf !== null && ` • Dir ${previewIso.dvConf ? '✓' : '✗'}`}
+              </p>
+            )}
+          </div>
+        )}
         {st && (
           <p style={{ color: st.conforme ? '#4ade80' : '#f87171', fontWeight: 600 }}>
             {st.conforme ? 'CONFORME' : 'NÃO CONFORME'}

@@ -8,7 +8,12 @@ interface CatalogoOtica {
   modelo: string;
   tipo: string | null;
   diametro_mm: number | null;
-  angulo_graus: number | null;
+  angulo_graus: number | null; // direção de visão nominal (ISO 8600-1 §4.6)
+  fov_referencia_graus: number | null; // FOV do golden sample (ISO 8600-1 §4.5)
+  tolerancia_fov_pct: number | null;
+  tolerancia_direcao_graus: number | null;
+  distancia_medicao_mm: number | null;
+  metodo_iso: string | null;
 }
 
 export function CatalogoOticas() {
@@ -31,12 +36,26 @@ export function CatalogoOticas() {
       tabela="catalogo_oticas"
       ordenarPor="fabricante"
       camposFiltro={['fabricante', 'modelo', 'tipo']}
+      // Novos modelos já nascem com os critérios ISO 8600-1 (15% / 10°),
+      // distância do Método A (50mm) e método A por padrão.
+      valorInicial={{
+        tolerancia_fov_pct: 15,
+        tolerancia_direcao_graus: 10,
+        distancia_medicao_mm: 50,
+        metodo_iso: 'A',
+      }}
       colunas={[
         { chave: 'fabricante', label: 'Fabricante' },
         { chave: 'modelo', label: 'Modelo' },
         { chave: 'tipo', label: 'Tipo' },
         { chave: 'diametro_mm', label: 'Diâmetro (mm)' },
-        { chave: 'angulo_graus', label: 'Ângulo (°)' },
+        { chave: 'angulo_graus', label: 'Direção (°)' },
+        {
+          chave: 'fov_referencia_graus',
+          label: 'FOV ref. (°)',
+          render: (r) =>
+            r.fov_referencia_graus != null ? `${r.fov_referencia_graus}°` : '— (sem golden sample)',
+        },
       ]}
       campos={[
         { name: 'fabricante', label: 'Fabricante', type: 'text', obrigatorio: true },
@@ -48,7 +67,32 @@ export function CatalogoOticas() {
           opcoes: (tiposQuery.data ?? []).map((t) => ({ value: t.descricao, label: t.descricao })),
         },
         { name: 'diametro_mm', label: 'Diâmetro (mm)', type: 'number' },
-        { name: 'angulo_graus', label: 'Ângulo (graus)', type: 'number' },
+        { name: 'angulo_graus', label: 'Direção de visão nominal (°) — ex.: 0/30/45/70', type: 'number' },
+        {
+          name: 'fov_referencia_graus',
+          label: 'FOV de referência (°) — normalmente vem do golden sample',
+          type: 'number',
+        },
+        { name: 'tolerancia_fov_pct', label: 'Tolerância FOV (%) — ISO 8600-1 §4.5', type: 'number' },
+        {
+          name: 'tolerancia_direcao_graus',
+          label: 'Tolerância direção (°) — ISO 8600-1 §4.6',
+          type: 'number',
+        },
+        {
+          name: 'distancia_medicao_mm',
+          label: 'Distância de medição (mm) — Método A = 50',
+          type: 'number',
+        },
+        {
+          name: 'metodo_iso',
+          label: 'Método ISO 8600-3',
+          type: 'select',
+          opcoes: [
+            { value: 'A', label: 'A — janela distal (50 mm)' },
+            { value: 'B', label: 'B — pupila de entrada' },
+          ],
+        },
       ]}
       validar={(d) => {
         if (!d.fabricante) return 'Informe o fabricante.';
@@ -58,7 +102,22 @@ export function CatalogoOticas() {
       antesDeEnviar={(d) => ({
         ...d,
         diametro_mm: d.diametro_mm ? Number(d.diametro_mm) : null,
-        angulo_graus: d.angulo_graus ? Number(d.angulo_graus) : null,
+        angulo_graus: d.angulo_graus !== '' && d.angulo_graus != null ? Number(d.angulo_graus) : null,
+        fov_referencia_graus:
+          d.fov_referencia_graus !== '' && d.fov_referencia_graus != null
+            ? Number(d.fov_referencia_graus)
+            : null,
+        tolerancia_fov_pct:
+          d.tolerancia_fov_pct !== '' && d.tolerancia_fov_pct != null ? Number(d.tolerancia_fov_pct) : 15,
+        tolerancia_direcao_graus:
+          d.tolerancia_direcao_graus !== '' && d.tolerancia_direcao_graus != null
+            ? Number(d.tolerancia_direcao_graus)
+            : 10,
+        distancia_medicao_mm:
+          d.distancia_medicao_mm !== '' && d.distancia_medicao_mm != null
+            ? Number(d.distancia_medicao_mm)
+            : 50,
+        metodo_iso: d.metodo_iso || 'A',
       })}
     />
   );

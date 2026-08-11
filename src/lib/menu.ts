@@ -69,6 +69,7 @@ export const MENU: CategoriaMenu[] = [
     itens: [
       { label: 'Bancada de visão (ISO 8600)', path: '/bancada-visao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Emissão de laudos PDF', path: '/laudos', categoria: 'laboratorio_qualidade', implementado: false },
+      { label: 'Amostras-padrão (golden sample)', path: '/amostras-padrao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Calibração de padrões (17025)', path: '/padroes-calibracao', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Montar orçamento (técnico)', path: '/orcamento-tecnico', categoria: 'laboratorio_qualidade', implementado: false },
       { label: 'Orçamentos aprovados', path: '/orcamentos-aprovados', categoria: 'laboratorio_qualidade', implementado: false },

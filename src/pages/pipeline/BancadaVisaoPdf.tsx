@@ -69,12 +69,36 @@ export interface DadosBancadaPdf {
   imagemDataUrl: string | null;
   tecnicoResponsavel: string;
   observacoes: string;
+  // Ensaio ISO 8600 (normativo). Quando presente, determina a conformidade
+  // (FOV ±% do golden sample e direção ±° do nominal); as métricas OpenCV
+  // passam a ser complementares/não-normativas.
+  iso?: {
+    modeloNome: string;
+    metodo: string;
+    distanciaMm: number | null;
+    fovMedido: number;
+    fovReferencia: number;
+    fovDesvioPct: number;
+    fovTolPct: number;
+    fovConforme: boolean;
+    fovIncerteza: number | null;
+    direcaoMedida: number | null;
+    direcaoNominal: number | null;
+    direcaoTolGraus: number;
+    direcaoConforme: boolean | null;
+    calibracao: string | null;
+  };
 }
 
 export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
   const m = dados.metricas;
   const st = m ? statusMetricas(m) : null;
-  const conforme = m && st ? st.conforme : dados.resultado === 'Aprovado';
+  const iso = dados.iso ?? null;
+  const conforme = iso
+    ? iso.fovConforme && iso.direcaoConforme !== false
+    : m && st
+      ? st.conforme
+      : dados.resultado === 'Aprovado';
   const etapaLabel = dados.etapa === 'checkpoint_a' ? 'Checkpoint A (pré-selagem)' : 'Checkpoint B (pós-autoclave, final)';
 
   return (
@@ -219,79 +243,98 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
           </View>
         ))}
 
-        {m && st ? (<>
-        <Text style={styles.faixa}>7. RESULTADOS - RESOLUÇÃO E NITIDEZ ÓPTICA (ISO 8600-5)</Text>
-        <View style={styles.tabelaCabecalho}>
-          <Text style={[styles.celula, { flex: 2 }]}>Região de análise</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Valor obtido (Laplaciano)</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Requisito</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Situação</Text>
-        </View>
-        <View style={styles.tabelaLinha}>
-          <Text style={[styles.celula, { flex: 2 }]}>Centro da imagem</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>{m.nitidez.toFixed(1)} pts</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Score ≥ 150.0 pts</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>
-            <StatusTexto conforme={st.stNitidez} />
-          </Text>
-        </View>
-
-        <Text style={styles.faixa}>8. RESULTADOS - CAMPO E DIREÇÃO DE VISÃO (ISO 8600-3)</Text>
-        <View style={styles.tabelaCabecalho}>
-          <Text style={[styles.celula, { flex: 2 }]}>Parâmetro</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Valor medido</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Tolerância</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Situação</Text>
-        </View>
-        <View style={styles.tabelaLinha}>
-          <Text style={[styles.celula, { flex: 2 }]}>Campo de Visão (FOV)</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>{m.fov.toFixed(2)}°</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>45° a 130°</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>
-            <StatusTexto conforme={st.stFov} />
-          </Text>
-        </View>
-        <View style={[styles.tabelaLinha, styles.linhaZebra]}>
-          <Text style={[styles.celula, { flex: 2 }]}>Alinhamento/Centragem</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Desvio: {m.desvio.toFixed(2)} mm</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>≤ 0.5 mm</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>
-            <StatusTexto conforme={st.stDesvio} />
-          </Text>
-        </View>
-
-        <Text style={styles.faixa}>9. RESULTADOS COMPLEMENTARES DE QUALIDADE DE IMAGEM</Text>
-        <View style={styles.tabelaCabecalho}>
-          <Text style={[styles.celula, { flex: 2 }]}>Característica</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Valor obtido</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Requisito</Text>
-          <Text style={[styles.celulaCentro, { flex: 1 }]}>Situação</Text>
-        </View>
-        {[
-          ['Uniformidade de Iluminação', `Média: ${m.luz.toFixed(1)}`, '≥ 40.0 pts', st.stLuz],
-          ['Vinhetagem (Queda de Luz)', `Queda: ${m.vinheta.toFixed(1)}%`, '≤ 25.0 %', st.stVinheta],
-          ['Fidelidade de Cores', `Desvio: ${m.cor.toFixed(1)}%`, 'Desvio ≤ 10.0 %', st.stCor],
-          ['Distorção Geométrica', `Índice: ${m.distorcao.toFixed(1)}%`, 'Distorção ≤ 5.0 %', st.stDistorcao],
-        ].map(([texto, valor, req, conforme], i) => (
-          <View style={[styles.tabelaLinha, i % 2 === 1 ? styles.linhaZebra : {}]} key={texto as string}>
-            <Text style={[styles.celula, { flex: 2 }]}>{texto}</Text>
-            <Text style={[styles.celulaCentro, { flex: 1 }]}>{valor}</Text>
-            <Text style={[styles.celulaCentro, { flex: 1 }]}>{req}</Text>
-            <Text style={[styles.celulaCentro, { flex: 1 }]}>
-              <StatusTexto conforme={conforme as boolean} />
-            </Text>
-          </View>
-        ))}
-        </>) : (
+        {iso && (
           <>
-            <Text style={styles.faixa}>7 a 9. ENSAIOS DE MEDIÇÃO POR IMAGEM</Text>
+            <Text style={styles.faixa}>7. RESULTADOS - CAMPO E DIREÇÃO DE VISÃO (ISO 8600-3 / ISO 8600-1)</Text>
+            <View style={styles.tabelaCabecalho}>
+              <Text style={[styles.celula, { flex: 2 }]}>Parâmetro</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Medido</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Referência</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Tolerância</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Situação</Text>
+            </View>
+            <View style={styles.tabelaLinha}>
+              <Text style={[styles.celula, { flex: 2 }]}>
+                Campo de visão (FOV){iso.fovIncerteza != null ? ` — U=±${iso.fovIncerteza.toFixed(2)}° (k=2)` : ''}
+              </Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>{iso.fovMedido.toFixed(1)}°</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>{iso.fovReferencia.toFixed(1)}°</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>±{iso.fovTolPct}% (desvio {iso.fovDesvioPct.toFixed(1)}%)</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>
+                <StatusTexto conforme={iso.fovConforme} />
+              </Text>
+            </View>
+            {iso.direcaoMedida != null && iso.direcaoNominal != null && (
+              <View style={[styles.tabelaLinha, styles.linhaZebra]}>
+                <Text style={[styles.celula, { flex: 2 }]}>Direção de visão</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>{iso.direcaoMedida.toFixed(1)}°</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>{iso.direcaoNominal.toFixed(1)}°</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>±{iso.direcaoTolGraus}°</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>
+                  <StatusTexto conforme={iso.direcaoConforme === true} />
+                </Text>
+              </View>
+            )}
             <View style={styles.caixa}>
-              <Text>
-                Medição automática por imagem não realizada nesta inspeção (inspeção visual manual). A conclusão
-                baseia-se na avaliação do técnico responsável, conforme item 12.
+              <Text style={{ fontSize: 7 }}>
+                Método: ISO 8600-3 Método {iso.metodo} | Distância de medição:{' '}
+                {iso.distanciaMm != null ? iso.distanciaMm.toFixed(1) : '-'} mm | Modelo: {iso.modeloNome}
+                {iso.calibracao ? ` | Padrão de calibração: ${iso.calibracao}` : ''}
+                {'\n'}Critérios: FOV com desvio ≤ {iso.fovTolPct}% do valor de referência (golden sample) — ISO 8600-1
+                §4.5; direção de visão ≤ ±{iso.direcaoTolGraus}° do nominal — §4.6.
               </Text>
             </View>
           </>
+        )}
+
+        {m && st ? (
+          <>
+            <Text style={styles.faixa}>
+              {iso ? '8. MEDIÇÕES COMPLEMENTARES DE IMAGEM (não-normativas)' : '7 a 9. RESULTADOS DE MEDIÇÃO POR IMAGEM'}
+            </Text>
+            <View style={styles.tabelaCabecalho}>
+              <Text style={[styles.celula, { flex: 2 }]}>Característica</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Valor obtido</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Referência interna</Text>
+              <Text style={[styles.celulaCentro, { flex: 1 }]}>Situação</Text>
+            </View>
+            {[
+              ['Nitidez (Laplaciano)', `${m.nitidez.toFixed(1)} pts`, '≥ 150.0 pts', st.stNitidez],
+              ['Uniformidade de iluminação', `${m.luz.toFixed(1)}`, '≥ 40.0', st.stLuz],
+              ['Vinhetagem', `${m.vinheta.toFixed(1)}%`, '≤ 25.0 %', st.stVinheta],
+              ['Fidelidade de cores', `${m.cor.toFixed(1)}%`, '≤ 10.0 %', st.stCor],
+              ['Distorção geométrica', `${m.distorcao.toFixed(1)}%`, '≤ 5.0 %', st.stDistorcao],
+            ].map(([texto, valor, req, ok], i) => (
+              <View style={[styles.tabelaLinha, i % 2 === 1 ? styles.linhaZebra : {}]} key={texto as string}>
+                <Text style={[styles.celula, { flex: 2 }]}>{texto}</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>{valor}</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>{req}</Text>
+                <Text style={[styles.celulaCentro, { flex: 1 }]}>
+                  <StatusTexto conforme={ok as boolean} />
+                </Text>
+              </View>
+            ))}
+            {iso && (
+              <View style={styles.caixa}>
+                <Text style={{ fontSize: 7 }}>
+                  Estas medições por imagem são complementares e NÃO determinam a conformidade normativa (dada pelo
+                  item 7 — FOV e direção de visão). Servem como indicadores internos de qualidade de imagem.
+                </Text>
+              </View>
+            )}
+          </>
+        ) : (
+          !iso && (
+            <>
+              <Text style={styles.faixa}>7 a 9. ENSAIOS DE MEDIÇÃO POR IMAGEM</Text>
+              <View style={styles.caixa}>
+                <Text>
+                  Medição automática por imagem não realizada nesta inspeção (inspeção visual manual). A conclusão
+                  baseia-se na avaliação do técnico responsável, conforme item 12.
+                </Text>
+              </View>
+            </>
+          )
         )}
 
         <Text style={styles.faixa}>10. REGISTRO DAS OBSERVAÇÕES TÉCNICAS</Text>
@@ -358,7 +401,8 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
             valor de Laplaciano ≥ 150.0 pts garante que o médico enxergará contornos e microvasos nítidos sem imagem
             borrada.
             {'\n'}• <Text style={styles.bold}>Campo de Visão / FOV:</Text> é a "largura de abertura" da imagem.
-            Garante que a área visualizada pelo endoscópio corresponde ao padrão de fábrica (entre 45° e 130°).
+            Garante que a área visualizada corresponde ao padrão do modelo — desvio ≤ 15% do valor de referência
+            (amostra-padrão), conforme ISO 8600-1 §4.5.
             {'\n'}• <Text style={styles.bold}>Alinhamento / Centragem:</Text> avalia se o feixe de luz e lentes estão
             perfeitamente centralizados. Desvios ≤ 0.5 mm evitam imagem "torta" ou cortada na torre de vídeo.
             {'\n'}• <Text style={styles.bold}>Uniformidade de Iluminação:</Text> mede a quantidade de luz
