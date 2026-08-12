@@ -17,6 +17,11 @@
   --copper-800: #6b4423;
   --copper-500-12: rgba(201, 129, 75, 0.12);
 
+  /* Azul institucional da CVF (da logomarca) - usado no menu lateral */
+  --azul-cvf: #344d95;
+  --azul-cvf-800: #26386c;
+  --azul-cvf-12: rgba(52, 77, 149, 0.12);
+
   --teal-500: #3e7a6f;
   --teal-800: #244840;
   --teal-500-12: rgba(62, 122, 111, 0.12);

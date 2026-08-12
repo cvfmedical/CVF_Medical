@@ -209,8 +209,8 @@ button {
 }
 
 .sidebar-dash.ativo {
-  background: var(--copper-500-12);
-  color: var(--copper-800);
+  background: var(--azul-cvf-12);
+  color: var(--azul-cvf);
 }
 
 .sidebar-cat-cab.atual {
@@ -241,7 +241,7 @@ button {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--copper-800);
+  color: var(--azul-cvf-800);
   font-weight: 700;
   padding: 9px 10px 3px;
 }
@@ -260,7 +260,7 @@ button {
 }
 
 .sidebar-item.ativo {
-  background: var(--copper-500);
+  background: var(--azul-cvf);
   color: #fff;
   font-weight: 500;
 }
