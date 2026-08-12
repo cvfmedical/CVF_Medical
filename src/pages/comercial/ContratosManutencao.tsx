@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
+import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
@@ -222,9 +223,10 @@ export function ContratosManutencao() {
     />
 
     {contratoPrecos && (
-      <div className="modal-fundo">
-        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-          <h2>Preços fixos - {contratoPrecos.numero_contrato}</h2>
+      <ModalJanela
+        titulo={`Preços fixos - ${contratoPrecos.numero_contrato}`}
+        aoFechar={() => setContratoPrecos(null)}
+      >
           <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
             {nomeCliente(contratoPrecos.cliente_id)} - preço fechado por modelo de ótica (diferente da mensalidade).
             O financeiro seleciona o modelo na hora de precificar um orçamento desse cliente.
@@ -287,8 +289,7 @@ export function ContratosManutencao() {
               Fechar
             </button>
           </div>
-        </div>
-      </div>
+      </ModalJanela>
     )}
     </>
   );

@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus } from '@tabler/icons-react';
 
 interface ItemChecklist {
@@ -44,6 +46,25 @@ export function Manutencao() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('manutencao', {
+    titulo: 'Nova manutenção',
+    obterEstado: () => ({ osId, dataInicio, dataFim, observacoes, checklist }),
+    aoRestaurar: (e) => {
+      setOsId((e.osId as string) ?? '');
+      setDataInicio((e.dataInicio as string) ?? '');
+      setDataFim((e.dataFim as string) ?? '');
+      setObservacoes((e.observacoes as string) ?? '');
+      setChecklist((e.checklist as ItemChecklist[]) ?? []);
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarManutencao() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const manutencoesQuery = useQuery({
     queryKey: ['manutencoes'],
@@ -220,10 +241,12 @@ export function Manutencao() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <h2>Nova manutenção</h2>
-
+        <ModalJanela
+          titulo="Nova manutenção"
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarManutencao}
+          larguraMax={560}
+        >
             <div className="campo-form">
               <label>Ordem de serviço *</label>
               <select value={osId} onChange={(e) => selecionarOS(e.target.value)}>
@@ -304,8 +327,7 @@ export function Manutencao() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

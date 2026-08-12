@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { urlAssinadaFoto } from '../../lib/storage';
 import { abrirImpressao } from '../../lib/imprimir';
@@ -565,12 +566,18 @@ export function OrcamentoFinanceiro() {
       </table>
 
       {selecionadoId && orcamentoSelecionado && (
-        <div className="modal-fundo">
-          <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
-            <h2>
-              {orcamentoSelecionado.numero_orcamento} <Badge tono={TONO_STATUS[orcamentoSelecionado.status] ?? 'neutro'}>{orcamentoSelecionado.status}</Badge>
-            </h2>
-
+        <ModalJanela
+          titulo={
+            <>
+              {orcamentoSelecionado.numero_orcamento}{' '}
+              <Badge tono={TONO_STATUS[orcamentoSelecionado.status] ?? 'neutro'}>
+                {orcamentoSelecionado.status}
+              </Badge>
+            </>
+          }
+          aoFechar={() => setSelecionadoId(null)}
+          larguraMax={640}
+        >
             {(precosFixosQuery.data ?? []).length > 0 && (
               <div
                 style={{
@@ -745,8 +752,7 @@ export function OrcamentoFinanceiro() {
                 )}
               </div>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

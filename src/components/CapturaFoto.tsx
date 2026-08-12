@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconCamera } from '@tabler/icons-react';
+import { ModalJanela } from './ModalJanela';
 
 // Botão "Tirar foto" que abre a webcam/câmera USB conectada ao
 // computador (via getUserMedia) num modal, deixa o usuário enquadrar e
@@ -62,9 +63,7 @@ export function CapturaFoto({ onCapturar }: { onCapturar: (arquivo: File) => voi
       </button>
 
       {aberto && (
-        <div className="modal-fundo" onClick={fechar}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Tirar foto</h2>
+        <ModalJanela titulo="Tirar foto" aoFechar={fechar}>
             {erro ? (
               <p className="erro-login">{erro}</p>
             ) : (
@@ -78,8 +77,7 @@ export function CapturaFoto({ onCapturar }: { onCapturar: (arquivo: File) => voi
                 Capturar
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </>
   );

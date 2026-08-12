@@ -6,6 +6,8 @@ import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '..
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { CapturaFoto } from '../../components/CapturaFoto';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 
 interface ProdutoServico {
@@ -68,6 +70,26 @@ export function ProdutosServicos() {
   const [salvando, setSalvando] = useState(false);
   const [fotos, setFotos] = useState<File[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
+
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('produtos-servicos', {
+    titulo: editando ? 'Editar produto/serviço' : 'Novo produto/serviço',
+    obterEstado: () => ({ form, editando, fotos, fotosExistentes }),
+    aoRestaurar: (e) => {
+      setForm((e.form as typeof formVazio) ?? formVazio);
+      setEditando((e.editando as ProdutoServico | null) ?? null);
+      setFotos((e.fotos as File[]) ?? []);
+      setFotosExistentes(
+        (e.fotosExistentes as { id: number; storage_path: string; url: string | null }[]) ?? [],
+      );
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarProduto() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const query = useQuery({
     queryKey: ['produtos-servicos'],
@@ -313,9 +335,12 @@ export function ProdutosServicos() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editando ? 'Editar' : 'Novo'}</h2>
+        <ModalJanela
+          titulo={editando ? 'Editar produto/serviço' : 'Novo produto/serviço'}
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarProduto}
+          larguraMax={560}
+        >
 
             <div className="campo-form">
               <label>Código interno (SKU) - gerado automaticamente</label>
@@ -482,8 +507,7 @@ export function ProdutosServicos() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

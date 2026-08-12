@@ -6,6 +6,8 @@ import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 interface SolicitacaoCompra {
@@ -49,6 +51,21 @@ export function SolicitacoesCompra() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('solicitacoes-compra', {
+    titulo: 'Nova solicitação de compra',
+    obterEstado: () => ({ form }),
+    aoRestaurar: (e) => {
+      setForm((e.form as typeof formVazio) ?? formVazio);
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarSolicitacao() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const query = useQuery({
     queryKey: ['solicitacoes-compra'],
@@ -209,9 +226,11 @@ export function SolicitacoesCompra() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Nova solicitação de compra</h2>
+        <ModalJanela
+          titulo="Nova solicitação de compra"
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarSolicitacao}
+        >
 
             <div className="campo-form">
               <label>Produto/peça já cadastrado (opcional)</label>
@@ -266,8 +285,7 @@ export function SolicitacoesCompra() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

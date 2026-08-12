@@ -7,6 +7,8 @@ import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { Badge } from '../../components/Badge';
 import { LaudoPdf } from './LaudoPdf';
 
@@ -32,6 +34,21 @@ export function Laudos() {
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [form, setForm] = useState({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('laudos', {
+    titulo: 'Nova nota técnica interna',
+    obterEstado: () => ({ form }),
+    aoRestaurar: (e) => {
+      setForm((e.form as typeof form) ?? { ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarLaudo() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const laudosQuery = useQuery({
     queryKey: ['laudos'],
@@ -159,10 +176,11 @@ export function Laudos() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Nova nota técnica interna</h2>
-
+        <ModalJanela
+          titulo="Nova nota técnica interna"
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarLaudo}
+        >
             <div className="campo-form">
               <label>Ordem de serviço *</label>
               <select
@@ -202,8 +220,7 @@ export function Laudos() {
                 {gerando ? 'Gerando...' : 'Gerar nota interna'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

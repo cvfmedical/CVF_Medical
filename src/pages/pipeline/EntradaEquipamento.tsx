@@ -13,6 +13,8 @@ import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAva
 import { imprimirRegistroEntrada } from '../../lib/relatorioEntrada';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { CapturaFoto } from '../../components/CapturaFoto';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 
 interface Entrada {
   id: number;
@@ -98,6 +100,39 @@ export function EntradaEquipamento() {
   const [condicaoParaAdicionar, setCondicaoParaAdicionar] = useState('');
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
+
+  // Minimizar/restaurar preservando dados entre telas. Os File das fotos ficam
+  // vivos porque o contexto de rascunhos mora na raiz do app.
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('entrada-equipamento', {
+    titulo: editando ? `Editar entrada ${editando.codigo_entrada}` : 'Nova entrada',
+    obterEstado: () => ({
+      form,
+      avarias,
+      fotos,
+      fotosExistentes,
+      condicoesSelecionadas,
+      condicaoParaAdicionar,
+      editando,
+    }),
+    aoRestaurar: (e) => {
+      setForm((e.form as typeof formVazio) ?? formVazio);
+      setAvarias((e.avarias as ChecklistAvarias) ?? {});
+      setFotos((e.fotos as File[]) ?? []);
+      setFotosExistentes(
+        (e.fotosExistentes as { id: number; storage_path: string; url: string | null }[]) ?? [],
+      );
+      setCondicoesSelecionadas((e.condicoesSelecionadas as string[]) ?? []);
+      setCondicaoParaAdicionar((e.condicaoParaAdicionar as string) ?? '');
+      setEditando((e.editando as Entrada | null) ?? null);
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarEntrada() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const condicoesChegadaQuery = useQuery({
     queryKey: ['condicoes-chegada-opcoes'],
@@ -469,10 +504,12 @@ export function EntradaEquipamento() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editando ? `Editar entrada ${editando.codigo_entrada}` : 'Nova entrada'}</h2>
-
+        <ModalJanela
+          titulo={editando ? `Editar entrada ${editando.codigo_entrada}` : 'Nova entrada'}
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarEntrada}
+          larguraMax={560}
+        >
             <div className="campo-form">
               <label>Cliente *</label>
               <select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
@@ -739,14 +776,11 @@ export function EntradaEquipamento() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
 
       {detalhe && (
-        <div className="modal-fundo" onClick={() => setDetalhe(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>{detalhe.codigo_entrada}</h2>
+        <ModalJanela titulo={detalhe.codigo_entrada} aoFechar={() => setDetalhe(null)}>
             <div className="campo-form">
               <label>Cliente</label>
               <p>{cliente(detalhe.cliente_id)?.razao_social}</p>
@@ -802,8 +836,7 @@ export function EntradaEquipamento() {
                 Fechar
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

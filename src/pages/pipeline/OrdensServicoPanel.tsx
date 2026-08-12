@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
 
@@ -130,9 +131,7 @@ export function OrdensServicoPanel() {
       </table>
 
       {detalhe && (
-        <div className="modal-fundo" onClick={() => setDetalhe(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>{detalhe.numero_os}</h2>
+        <ModalJanela titulo={detalhe.numero_os} aoFechar={() => setDetalhe(null)}>
             <div className="campo-form">
               <label>Cliente</label>
               <p>{detalhe.cliente_nome}</p>
@@ -163,8 +162,7 @@ export function OrdensServicoPanel() {
                 Fechar
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

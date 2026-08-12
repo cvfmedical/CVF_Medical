@@ -5,6 +5,7 @@ import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
 
 interface ProdutoEstoque {
   id: number;
@@ -199,9 +200,10 @@ export function InventarioEstoque() {
       </table>
 
       {modalMovimento && produtoSelecionado && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Movimentar estoque - {produtoSelecionado.nome}</h2>
+        <ModalJanela
+          titulo={`Movimentar estoque - ${produtoSelecionado.nome}`}
+          aoFechar={() => setModalMovimento(false)}
+        >
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
               Estoque atual: {produtoSelecionado.quantidade_estoque} {produtoSelecionado.unidade}
             </p>
@@ -231,14 +233,14 @@ export function InventarioEstoque() {
                 {salvando ? 'Salvando...' : 'Registrar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
 
       {modalHistorico && produtoSelecionado && (
-        <div className="modal-fundo" onClick={() => setModalHistorico(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Histórico - {produtoSelecionado.nome}</h2>
+        <ModalJanela
+          titulo={`Histórico - ${produtoSelecionado.nome}`}
+          aoFechar={() => setModalHistorico(false)}
+        >
             <table className="tabela-crud">
               <thead>
                 <tr>
@@ -271,14 +273,14 @@ export function InventarioEstoque() {
                 Fechar
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
 
       {modalMinimo && produtoSelecionado && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Estoque mínimo - {produtoSelecionado.nome}</h2>
+        <ModalJanela
+          titulo={`Estoque mínimo - ${produtoSelecionado.nome}`}
+          aoFechar={() => setModalMinimo(false)}
+        >
             <div className="campo-form">
               <label>Quantidade mínima</label>
               <input type="number" value={novoMinimo} onChange={(e) => setNovoMinimo(e.target.value)} />
@@ -294,8 +296,7 @@ export function InventarioEstoque() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

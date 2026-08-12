@@ -5,6 +5,8 @@ import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 interface ContaReceber {
@@ -41,6 +43,21 @@ export function ContasReceber() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('contas-receber', {
+    titulo: 'Novo lançamento (conta a receber)',
+    obterEstado: () => ({ form }),
+    aoRestaurar: (e) => {
+      setForm((e.form as typeof formVazio) ?? formVazio);
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarConta() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const query = useQuery({
     queryKey: ['contas-receber'],
@@ -205,9 +222,11 @@ export function ContasReceber() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Novo lançamento (conta a receber)</h2>
+        <ModalJanela
+          titulo="Novo lançamento (conta a receber)"
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarConta}
+        >
             <div className="campo-form">
               <label>Cliente *</label>
               <select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
@@ -250,8 +269,7 @@ export function ContasReceber() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

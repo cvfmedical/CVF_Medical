@@ -6,6 +6,7 @@ import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
 import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
@@ -389,10 +390,7 @@ export function OrcamentoTecnico() {
       )}
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Adicionar item</h2>
-
+        <ModalJanela titulo="Adicionar item" aoFechar={() => setModalAberto(false)}>
             <div className="campo-form">
               <label>Produto/serviço do catálogo (deixe em branco se for só mão de obra)</label>
               <select
@@ -516,8 +514,7 @@ export function OrcamentoTecnico() {
                 Adicionar item
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

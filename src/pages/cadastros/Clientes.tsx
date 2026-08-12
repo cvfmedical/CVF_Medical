@@ -5,6 +5,8 @@ import { mensagemErro } from '../../lib/erros';
 import { validarCnpj, formatarCnpj, somenteDigitos } from '../../lib/cnpj';
 import { consultarCnpj } from '../../lib/consultaCnpj';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPencil, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 
 interface Cliente {
@@ -59,6 +61,22 @@ export function Clientes() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [consultando, setConsultando] = useState(false);
+
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('clientes', {
+    titulo: editando ? 'Editar cliente' : 'Novo cliente',
+    obterEstado: () => ({ form, editando }),
+    aoRestaurar: (e) => {
+      setForm((e.form as typeof formVazio) ?? formVazio);
+      setEditando((e.editando as Cliente | null) ?? null);
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+
+  function minimizarCliente() {
+    minimizarRascunho();
+    setModalAberto(false);
+  }
 
   const query = useQuery({
     queryKey: ['clientes'],
@@ -258,10 +276,12 @@ export function Clientes() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editando ? 'Editar cliente' : 'Novo cliente'}</h2>
-
+        <ModalJanela
+          titulo={editando ? 'Editar cliente' : 'Novo cliente'}
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarCliente}
+          larguraMax={640}
+        >
             <div className="campo-form">
               <label>CNPJ *</label>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -370,8 +390,7 @@ export function Clientes() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

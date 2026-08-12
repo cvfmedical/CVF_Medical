@@ -7,7 +7,7 @@ import {
 } from '@tabler/icons-react';
 
 interface ModalJanelaProps {
-  titulo: string;
+  titulo: ReactNode;
   aoFechar: () => void;
   // Quando fornecido, mostra o botão de minimizar. O pai é quem decide o que
   // fazer (normalmente: registrar o rascunho no contexto global e fechar).

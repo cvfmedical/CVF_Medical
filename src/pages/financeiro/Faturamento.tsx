@@ -6,6 +6,7 @@ import { linkEmail } from '../../lib/compartilhar';
 import { STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { ModalJanela } from '../../components/ModalJanela';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -222,9 +223,10 @@ export function Faturamento() {
       </table>
 
       {contaSelecionada && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Lançar nota fiscal - {contaSelecionada.numero_conta}</h2>
+        <ModalJanela
+          titulo={`Lançar nota fiscal - ${contaSelecionada.numero_conta}`}
+          aoFechar={() => setContaSelecionada(null)}
+        >
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
               {nomeCliente(contaSelecionada.cliente_id)} - R$ {Number(contaSelecionada.valor).toFixed(2)}
             </p>
@@ -274,8 +276,7 @@ export function Faturamento() {
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );
