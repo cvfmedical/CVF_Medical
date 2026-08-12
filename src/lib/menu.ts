@@ -18,6 +18,10 @@ export interface ItemMenu {
   // Rota gerada normalmente, mas não listada no menu lateral (telas que
   // só fazem sentido abertas com um parâmetro, ex: /registro-entrada?os=).
   oculto?: boolean;
+  // Subtítulo opcional para agrupar itens dentro de uma categoria longa
+  // (ex.: "Laboratório & qualidade", que tem muitas telas). Itens sem
+  // grupo aparecem soltos no topo da categoria.
+  grupo?: string;
 }
 
 export interface CategoriaMenu {
@@ -67,21 +71,25 @@ export const MENU: CategoriaMenu[] = [
     titulo: 'Laboratório & qualidade',
     icone: IconMicroscope,
     itens: [
-      { label: 'Bancada de visão (ISO 8600)', path: '/bancada-visao', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Teste de resolução (ISO 8600-5)', path: '/teste-resolucao', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Auto-validação do sistema', path: '/auto-validacao', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Emissão de laudos PDF', path: '/laudos', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Amostras-padrão (golden sample)', path: '/amostras-padrao', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Calibração de padrões (17025)', path: '/padroes-calibracao', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Montar orçamento (técnico)', path: '/orcamento-tecnico', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Orçamentos aprovados', path: '/orcamentos-aprovados', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Manutenção / remontagem', path: '/manutencao', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Selagem', path: '/selagem', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Teste de estanqueidade', path: '/teste-estanqueidade', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Teste de autoclave', path: '/teste-autoclave', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Teste de qualidade / funcionamento', path: '/teste-qualidade', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Teste de luz / transmissão', path: '/teste-luz', categoria: 'laboratorio_qualidade', implementado: false },
-      { label: 'Medição dimensional (ISO 8600-4)', path: '/medicao-dimensional', categoria: 'laboratorio_qualidade', implementado: false },
+      // Orçamento & reparo
+      { label: 'Montar orçamento (técnico)', path: '/orcamento-tecnico', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Orçamento & reparo' },
+      { label: 'Orçamentos aprovados', path: '/orcamentos-aprovados', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Orçamento & reparo' },
+      { label: 'Manutenção / remontagem', path: '/manutencao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Orçamento & reparo' },
+      // Ensaios ópticos (ISO 8600)
+      { label: 'Bancada de visão (ISO 8600)', path: '/bancada-visao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
+      { label: 'Teste de resolução (ISO 8600-5)', path: '/teste-resolucao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
+      { label: 'Teste de luz / transmissão', path: '/teste-luz', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
+      { label: 'Medição dimensional (ISO 8600-4)', path: '/medicao-dimensional', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
+      { label: 'Auto-validação do sistema', path: '/auto-validacao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
+      // Pós-reparo & selagem
+      { label: 'Selagem', path: '/selagem', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
+      { label: 'Teste de estanqueidade', path: '/teste-estanqueidade', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
+      { label: 'Teste de autoclave', path: '/teste-autoclave', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
+      { label: 'Teste de qualidade / funcionamento', path: '/teste-qualidade', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
+      // Laudos & metrologia
+      { label: 'Emissão de laudos PDF', path: '/laudos', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Laudos & metrologia' },
+      { label: 'Amostras-padrão (golden sample)', path: '/amostras-padrao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Laudos & metrologia' },
+      { label: 'Calibração de padrões (17025)', path: '/padroes-calibracao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Laudos & metrologia' },
     ],
   },
   {

@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { IconLayoutDashboard, IconLogout } from '@tabler/icons-react';
+import { IconChevronRight, IconLayoutDashboard, IconLogout } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
-import { MENU, categoriaDoPath } from '../lib/menu';
+import { MENU, categoriaDoPath, type ItemMenu } from '../lib/menu';
 import cvfMarca from '../assets/cvf-marca.png';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 import { AlertasFlutuantes } from './AlertasFlutuantes';
@@ -16,74 +17,89 @@ export function Layout() {
   const categoriaAtual = categoriaDoPath(location.pathname);
   const noDashboard = location.pathname === '/';
 
+  // Accordion: categoria expandida (uma por vez). Começa na do caminho atual.
+  const [aberta, setAberta] = useState<string | null>(categoriaAtual?.titulo ?? null);
+
   return (
     <div className="layout-app">
-      <aside className="rail">
-        <NavLink to="/" className="rail-logo" data-tooltip="Q-CVF Medical">
-          <img src={cvfMarca} alt="Q-CVF Medical" className="rail-logo-img" />
+      <aside className="sidebar">
+        <NavLink to="/" className="sidebar-marca">
+          <img src={cvfLogoCompleto} alt="Q-CVF Medical" className="sidebar-logo" />
         </NavLink>
 
-        <nav className="rail-nav">
-          <NavLink
-            to="/"
-            end
-            data-tooltip="Visão geral"
-            className={({ isActive }) => 'rail-icone' + (isActive ? ' ativo' : '')}
-          >
-            <IconLayoutDashboard size={20} stroke={1.75} />
+        <nav className="sidebar-nav">
+          <NavLink to="/" end className={({ isActive }) => 'sidebar-dash' + (isActive ? ' ativo' : '')}>
+            <IconLayoutDashboard size={18} stroke={1.75} />
+            <span>Visão geral</span>
           </NavLink>
 
           {categoriasVisiveis.map((cat) => {
             const IconeCategoria = cat.icone;
-            const ativo = categoriaAtual?.titulo === cat.titulo;
-            const primeiroItemPermitido = cat.itens.find((item) => temPermissao(item.categoria) && !item.oculto);
+            const itensVisiveis = cat.itens.filter((item) => temPermissao(item.categoria) && !item.oculto);
+            const expandida = aberta === cat.titulo;
+
+            // Agrupa por 'grupo' preservando a ordem original dos itens.
+            const grupos: { nome: string | null; itens: ItemMenu[] }[] = [];
+            for (const item of itensVisiveis) {
+              const chave = item.grupo ?? null;
+              let g = grupos.find((x) => x.nome === chave);
+              if (!g) {
+                g = { nome: chave, itens: [] };
+                grupos.push(g);
+              }
+              g.itens.push(item);
+            }
+
             return (
-              <NavLink
-                key={cat.titulo}
-                to={primeiroItemPermitido?.path ?? '/'}
-                data-tooltip={cat.titulo}
-                className={'rail-icone' + (ativo ? ' ativo' : '')}
-              >
-                <IconeCategoria size={20} stroke={1.75} />
-              </NavLink>
+              <div key={cat.titulo} className="sidebar-cat">
+                <button
+                  type="button"
+                  className={
+                    'sidebar-cat-cab' + (categoriaAtual?.titulo === cat.titulo ? ' atual' : '')
+                  }
+                  onClick={() => setAberta(expandida ? null : cat.titulo)}
+                >
+                  <IconeCategoria size={18} stroke={1.75} />
+                  <span className="sidebar-cat-nome">{cat.titulo}</span>
+                  <IconChevronRight size={15} className={'sidebar-chevron' + (expandida ? ' girado' : '')} />
+                </button>
+
+                {expandida && (
+                  <div className="sidebar-itens">
+                    {grupos.map((g, i) => (
+                      <div key={g.nome ?? `sem-grupo-${i}`}>
+                        {g.nome && <div className="sidebar-grupo">{g.nome}</div>}
+                        {g.itens.map((item) => (
+                          <NavLink
+                            key={item.path}
+                            to={item.path}
+                            end
+                            className={({ isActive }) => 'sidebar-item' + (isActive ? ' ativo' : '')}
+                          >
+                            {item.label}
+                          </NavLink>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
 
-        <button className="rail-icone rail-sair" data-tooltip="Sair do sistema" onClick={() => signOut()}>
-          <IconLogout size={20} stroke={1.75} />
+        <button type="button" className="sidebar-sair" onClick={() => signOut()}>
+          <IconLogout size={18} stroke={1.75} />
+          <span>Sair do sistema</span>
         </button>
       </aside>
 
       <div className="area-principal">
-        <header className="barra-contextual">
-          <div className="barra-contextual-topo">
-            <div className="marca-barra-contextual">
-              <img src={cvfLogoCompleto} alt="Q-CVF Medical" className="logo-barra-contextual" />
-              {!noDashboard && categoriaAtual && (
-                <span className="categoria-label">{categoriaAtual.titulo}</span>
-              )}
-            </div>
-            <span className="usuario-logado">
-              {funcionario?.nome} <span className="cargo">({funcionario?.nivel_acesso})</span>
-            </span>
-          </div>
-
-          {categoriaAtual && (
-            <nav className="abas-categoria">
-              {categoriaAtual.itens
-                .filter((item) => temPermissao(item.categoria) && !item.oculto)
-                .map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) => 'aba' + (isActive ? ' ativa' : '')}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-            </nav>
-          )}
+        <header className="topo-app">
+          <span className="topo-titulo">{noDashboard ? 'Visão geral' : categoriaAtual?.titulo ?? ''}</span>
+          <span className="usuario-logado">
+            {funcionario?.nome} <span className="cargo">({funcionario?.nivel_acesso})</span>
+          </span>
         </header>
 
         <main className="conteudo">
