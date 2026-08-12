@@ -260,6 +260,7 @@
                     <th>Equipamento</th>
                     <th>Status</th>
                     <th>Abertura</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody id="corpo-tabela"></tbody>
@@ -334,6 +335,47 @@ function abrirDocumentoCVF(titulo, corpoHtml) {
     if (!w) { alert('Não foi possível abrir o documento (verifique o bloqueador de pop-ups).'); return; }
     w.document.write(doc);
     w.document.close();
+}
+
+function formatarMoedaPortal(v) {
+    return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function imprimirOrcamentoDoc(o) {
+    const linhas = (o.itens || []).map(i =>
+        `<tr><td>${i.nome}</td><td>${i.qtd}</td><td>${formatarMoedaPortal(i.preco)}</td><td>${formatarMoedaPortal(i.preco * i.qtd)}</td></tr>`).join('');
+    const corpo = `
+        <h1>Orçamento de Manutenção</h1>
+        <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor">${o.numero_orcamento}</div></div>
+        <div class="linha"><div class="rotulo">Ordem de serviço</div><div class="valor">${o.numero_os || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Situação</div><div class="valor">${o.status}</div></div>
+        <div class="secao">Itens</div>
+        <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
+        <p style="text-align:right;font-weight:700;font-size:15px;margin-top:12px;">Total: ${formatarMoedaPortal(o.total)}</p>
+        ${o.observacoes ? `<div class="secao">Observações</div><p>${o.observacoes}</p>` : ''}`;
+    abrirDocumentoCVF('Orçamento ' + o.numero_orcamento, corpo);
+}
+
+function imprimirEntradaDoc(e) {
+    const corpo = `
+        <h1>Registro de Entrada</h1>
+        <div class="linha"><div class="rotulo">Código</div><div class="valor">${e.codigo_entrada || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${e.equipamento_desc || '-'} ${e.equipamento_fab ? '(' + e.equipamento_fab + ')' : ''}</div></div>
+        <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${e.equipamento_sn || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${e.defeito_relatado || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${e.condicao_chegada || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Recebido em</div><div class="valor">${formatarData(e.data_entrada)}</div></div>`;
+    abrirDocumentoCVF('Registro de Entrada ' + (e.codigo_entrada || ''), corpo);
+}
+
+function imprimirOSDoc(o) {
+    const corpo = `
+        <h1>Ordem de Serviço</h1>
+        <div class="linha"><div class="rotulo">Nº OS</div><div class="valor">${o.numero_os}</div></div>
+        <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${o.optica_desc || '-'} ${o.optica_fab ? '(' + o.optica_fab + ')' : ''}</div></div>
+        <div class="linha"><div class="rotulo">Status</div><div class="valor">${o.status_os || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Abertura</div><div class="valor">${formatarData(o.data_abertura)}</div></div>`;
+    abrirDocumentoCVF('Ordem de Serviço ' + o.numero_os, corpo);
 }
 
 const telaLogin = document.getElementById('tela-login');
@@ -467,7 +509,7 @@ function classeBadge(status) {
 async function carregarOrdens() {
     const { data: ordens, error } = await supabaseClient
         .from('ordens_servico')
-        .select('numero_os, optica_desc, optica_fab, status_os, data_abertura')
+        .select('id, numero_os, optica_desc, optica_fab, status_os, data_abertura')
         .order('data_abertura', { ascending: false });
 
     const corpo = document.getElementById('corpo-tabela');
@@ -486,9 +528,14 @@ async function carregarOrdens() {
             <td>${os.optica_desc || '-'} ${os.optica_fab ? '(' + os.optica_fab + ')' : ''}</td>
             <td><span class="badge ${classeBadge(os.status_os)}">${os.status_os || '-'}</span></td>
             <td>${formatarData(os.data_abertura)}</td>
+            <td><button class="secundario" data-imprimir-os="${os.id}">Imprimir</button></td>
         `;
+        window._osMap = window._osMap || {};
+        window._osMap[os.id] = os;
         corpo.appendChild(tr);
     });
+    corpo.querySelectorAll('[data-imprimir-os]').forEach(btn =>
+        btn.addEventListener('click', () => imprimirOSDoc(window._osMap[btn.getAttribute('data-imprimir-os')])));
 }
 
 async function urlAssinada(caminho) {
@@ -578,9 +625,15 @@ async function carregarEntradas() {
             <p style="color:var(--texto-sec); font-size:13px; margin:4px 0;">Defeito relatado: ${entrada.defeito_relatado || '-'}</p>
             <p style="color:var(--texto-sec); font-size:12px; margin:4px 0;">Recebido em: ${formatarData(entrada.data_entrada)}</p>
             ${fotosHtml}
+            <div style="margin-top:12px;"><button class="secundario" data-imprimir-ent="${entrada.id}">Imprimir registro de entrada</button></div>
         `;
+        window._entMap = window._entMap || {};
+        window._entMap[entrada.id] = entrada;
         container.appendChild(card);
     }
+    container.querySelectorAll('[data-imprimir-ent]').forEach(btn => {
+        btn.addEventListener('click', () => imprimirEntradaDoc(window._entMap[btn.getAttribute('data-imprimir-ent')]));
+    });
 }
 
 async function carregarOrcamentos() {
@@ -606,8 +659,17 @@ async function carregarOrcamentos() {
             .select('quantidade, preco_unitario, observacao, produtos_servicos(nome)')
             .eq('orcamento_id', orc.id);
 
-        const total = (itens || []).reduce((soma, i) => soma + (i.preco_unitario || 0) * i.quantidade, 0);
-        const linhas = (itens || []).map(i => `<tr><td>${i.produtos_servicos ? i.produtos_servicos.nome : ''}</td><td>${i.quantidade}</td><td>R$ ${(i.preco_unitario || 0).toFixed(2)}</td></tr>`).join('');
+        window._orcMap = window._orcMap || {};
+        window._orcMap[orc.id] = {
+            numero_orcamento: orc.numero_orcamento,
+            numero_os: orc.ordens_servico ? orc.ordens_servico.numero_os : '',
+            status: orc.status,
+            observacoes: orc.observacoes_financeiro || '',
+            itens: (itens || []).map(i => ({ nome: i.produtos_servicos ? i.produtos_servicos.nome : '', qtd: i.quantidade, preco: i.preco_unitario || 0 })),
+            total: (itens || []).reduce((s, i) => s + (i.preco_unitario || 0) * i.quantidade, 0),
+        };
+        const total = window._orcMap[orc.id].total;
+        const linhas = (itens || []).map(i => `<tr><td>${i.produtos_servicos ? i.produtos_servicos.nome : ''}</td><td>${i.quantidade}</td><td>${formatarMoedaPortal(i.preco_unitario || 0)}</td></tr>`).join('');
 
         const badgeClasse = orc.status === 'Aprovado' ? 'badge-aprovado' : orc.status === 'Recusado' ? 'badge-recusado' : 'badge-andamento';
 
@@ -619,18 +681,22 @@ async function carregarOrcamentos() {
                 <span class="badge ${badgeClasse}">${orc.status}</span>
             </div>
             <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th></tr></thead><tbody>${linhas}</tbody></table>
-            <p class="total">Total: R$ ${total.toFixed(2)}</p>
+            <p class="total">Total: ${formatarMoedaPortal(total)}</p>
             ${orc.observacoes_financeiro ? `<p style="font-size:13px; color:var(--texto-sec);">${orc.observacoes_financeiro}</p>` : ''}
-            ${orc.status === 'Enviado ao Cliente' ? `
-                <div class="acoes">
+            <div class="acoes">
+                <button class="secundario" data-imprimir-orc="${orc.id}">Imprimir orçamento</button>
+                ${orc.status === 'Enviado ao Cliente' ? `
                     <button class="primario" data-aprovar="${orc.id}">Aprovar orçamento</button>
                     <button class="secundario" data-recusar="${orc.id}">Recusar orçamento</button>
-                </div>
-            ` : ''}
+                ` : ''}
+            </div>
         `;
         container.appendChild(card);
     }
 
+    container.querySelectorAll('[data-imprimir-orc]').forEach(btn => {
+        btn.addEventListener('click', () => imprimirOrcamentoDoc(window._orcMap[btn.getAttribute('data-imprimir-orc')]));
+    });
     container.querySelectorAll('[data-aprovar]').forEach(btn => {
         btn.addEventListener('click', () => responderOrcamento(btn.getAttribute('data-aprovar'), 'Aprovado'));
     });
