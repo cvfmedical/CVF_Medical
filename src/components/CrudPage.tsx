@@ -20,6 +20,10 @@ export interface CampoConfig {
   // tabela por id (ex: cliente_id em Equipamentos do cliente).
   opcoes?: string[] | OpcaoSelect[];
   obrigatorio?: boolean;
+  // Ao mudar este campo, retorna um objeto para preencher AUTOMATICAMENTE
+  // outros campos do formulário (ex: escolher um modelo do catálogo
+  // preenche fabricante/modelo/tipo/descrição). Retorne nada para não mexer.
+  aoMudar?: (valor: string, form: Record<string, unknown>) => Record<string, unknown> | void;
 }
 
 function normalizarOpcoes(opcoes: string[] | OpcaoSelect[] | undefined): OpcaoSelect[] {
@@ -70,6 +74,16 @@ export function CrudPage<Row extends { id: number }>({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // Atualiza um campo e, se ele tiver `aoMudar`, mescla os campos que ele
+  // preenche automaticamente (ex: puxar do catálogo).
+  function atualizarCampo(campo: CampoConfig, valor: unknown) {
+    setFormData((f) => {
+      const base = { ...f, [campo.name]: valor };
+      const extra = campo.aoMudar?.(String(valor ?? ''), base);
+      return extra ? { ...base, ...extra } : base;
+    });
+  }
 
   const linhas = useMemo(() => {
     const todas = listQuery.data ?? [];
@@ -213,12 +227,12 @@ export function CrudPage<Row extends { id: number }>({
                 {campo.type === 'textarea' ? (
                   <textarea
                     value={String(formData[campo.name] ?? '')}
-                    onChange={(e) => setFormData((f) => ({ ...f, [campo.name]: e.target.value }))}
+                    onChange={(e) => atualizarCampo(campo, e.target.value)}
                   />
                 ) : campo.type === 'select' ? (
                   <select
                     value={String(formData[campo.name] ?? '')}
-                    onChange={(e) => setFormData((f) => ({ ...f, [campo.name]: e.target.value }))}
+                    onChange={(e) => atualizarCampo(campo, e.target.value)}
                   >
                     <option value="">Selecione...</option>
                     {normalizarOpcoes(campo.opcoes).map((op) => (
@@ -231,13 +245,13 @@ export function CrudPage<Row extends { id: number }>({
                   <input
                     type="checkbox"
                     checked={Boolean(formData[campo.name] ?? false)}
-                    onChange={(e) => setFormData((f) => ({ ...f, [campo.name]: e.target.checked }))}
+                    onChange={(e) => atualizarCampo(campo, e.target.checked)}
                   />
                 ) : (
                   <input
                     type={campo.type}
                     value={String(formData[campo.name] ?? '')}
-                    onChange={(e) => setFormData((f) => ({ ...f, [campo.name]: e.target.value }))}
+                    onChange={(e) => atualizarCampo(campo, e.target.value)}
                   />
                 )}
               </div>

@@ -17,6 +17,13 @@ interface EquipamentoCliente {
   observacoes: string | null;
 }
 
+interface ModeloCatalogo {
+  id: number;
+  fabricante: string | null;
+  modelo: string | null;
+  tipo: string | null;
+}
+
 export function EquipamentosClientes() {
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes'],
@@ -27,9 +34,28 @@ export function EquipamentosClientes() {
     },
   });
 
+  // Catálogo de óticas (modelos cadastrados) - para puxar o equipamento
+  // de um cadastro padrão em vez de digitar o nome à mão.
+  const catalogoQuery = useQuery({
+    queryKey: ['catalogo-oticas-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('catalogo_oticas')
+        .select('id, fabricante, modelo, tipo')
+        .order('fabricante');
+      if (error) throw error;
+      return data as ModeloCatalogo[];
+    },
+  });
+
   const clientes = clientesQuery.data ?? [];
   const opcoesCliente = clientes.map((c) => ({ value: String(c.id), label: c.razao_social }));
   const nomeClientePorId = (id: number) => clientes.find((c) => c.id === id)?.razao_social ?? `#${id}`;
+
+  const catalogo = catalogoQuery.data ?? [];
+  const descricaoModelo = (c: ModeloCatalogo) =>
+    [c.fabricante, c.modelo, c.tipo].filter(Boolean).join(' ') || `Modelo #${c.id}`;
+  const opcoesCatalogo = catalogo.map((c) => ({ value: String(c.id), label: descricaoModelo(c) }));
 
   if (clientesQuery.isLoading) return <CarregandoTela />;
 
@@ -54,6 +80,22 @@ export function EquipamentosClientes() {
       ]}
       campos={[
         { name: 'cliente_id', label: 'Cliente', type: 'select', opcoes: opcoesCliente, obrigatorio: true },
+        {
+          name: '_catalogo',
+          label: 'Puxar do catálogo de óticas (preenche os campos abaixo)',
+          type: 'select',
+          opcoes: opcoesCatalogo,
+          aoMudar: (id) => {
+            const c = catalogo.find((x) => String(x.id) === id);
+            if (!c) return;
+            return {
+              descricao: descricaoModelo(c),
+              fabricante: c.fabricante ?? '',
+              modelo: c.modelo ?? '',
+              tipo_equipamento: c.tipo ?? '',
+            };
+          },
+        },
         { name: 'descricao', label: 'Descrição', type: 'text', obrigatorio: true },
         { name: 'tipo_equipamento', label: 'Tipo de equipamento', type: 'text' },
         { name: 'fabricante', label: 'Fabricante', type: 'text' },
@@ -68,7 +110,12 @@ export function EquipamentosClientes() {
         if (!d.descricao) return 'Informe a descrição.';
         return null;
       }}
-      antesDeEnviar={(d) => ({ ...d, cliente_id: Number(d.cliente_id) })}
+      antesDeEnviar={(d) => {
+        // _catalogo é só um atalho de UI - não é coluna da tabela.
+        const { _catalogo, ...resto } = d;
+        void _catalogo;
+        return { ...resto, cliente_id: Number(d.cliente_id) };
+      }}
     />
   );
 }
