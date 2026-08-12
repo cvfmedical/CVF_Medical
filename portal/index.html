@@ -246,6 +246,22 @@
             <tbody id="corpo-tabela"></tbody>
         </table>
         <div id="vazio" class="vazio" style="display:none;">Nenhuma Ordem de Serviço encontrada.</div>
+
+        <h2 class="secao">Laudos</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nº laudo</th>
+                    <th>OS</th>
+                    <th>Etapa</th>
+                    <th>Resultado</th>
+                    <th>Emissão</th>
+                    <th>PDF</th>
+                </tr>
+            </thead>
+            <tbody id="corpo-laudos"></tbody>
+        </table>
+        <div id="vazio-laudos" class="vazio" style="display:none;">Nenhum laudo disponível.</div>
         </div>
     </div>
 </main>
@@ -417,6 +433,48 @@ async function urlAssinada(caminho) {
     return data.signedUrl;
 }
 
+async function urlAssinadaLaudo(caminho) {
+    const { data, error } = await supabaseClient.storage.from('laudos-pdf').createSignedUrl(caminho, 3600);
+    if (error) return null;
+    return data.signedUrl;
+}
+
+async function carregarLaudos() {
+    const corpo = document.getElementById('corpo-laudos');
+    const vazio = document.getElementById('vazio-laudos');
+    corpo.innerHTML = '';
+
+    const { data: laudos, error } = await supabaseClient
+        .from('laudos')
+        .select('numero_laudo, etapa, resultado, data_emissao, storage_path, ordens_servico(numero_os)')
+        .order('data_emissao', { ascending: false });
+
+    if (error || !laudos || laudos.length === 0) {
+        vazio.style.display = 'block';
+        return;
+    }
+    vazio.style.display = 'none';
+
+    for (const l of laudos) {
+        const tr = document.createElement('tr');
+        const badge = l.resultado === 'Aprovado' ? 'badge-aprovado' : l.resultado === 'Reprovado' ? 'badge-recusado' : 'badge-andamento';
+        let pdfCel = '-';
+        if (l.storage_path) {
+            const url = await urlAssinadaLaudo(l.storage_path);
+            if (url) pdfCel = `<a href="${url}" target="_blank" rel="noopener" style="color:var(--azul);font-weight:600;">Baixar PDF</a>`;
+        }
+        tr.innerHTML = `
+            <td>${l.numero_laudo || '-'}</td>
+            <td>${l.ordens_servico ? l.ordens_servico.numero_os : '-'}</td>
+            <td>${l.etapa || '-'}</td>
+            <td><span class="badge ${badge}">${l.resultado || '-'}</span></td>
+            <td>${formatarData(l.data_emissao)}</td>
+            <td>${pdfCel}</td>
+        `;
+        corpo.appendChild(tr);
+    }
+}
+
 async function carregarEntradas() {
     const container = document.getElementById('lista-entradas');
     const vazio = document.getElementById('vazio-entradas');
@@ -565,6 +623,7 @@ async function carregarPortal() {
     await carregarOrcamentos();
     await carregarEntradas();
     await carregarOrdens();
+    await carregarLaudos();
 }
 
 // Abre a orientação de esterilização numa janela nova (o cliente imprime
