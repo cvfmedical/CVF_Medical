@@ -13,11 +13,13 @@
   --graphite-900: #1b1d20;
   --graphite-700: #2a2d31;
 
-  --copper-500: #c9814b;
-  --copper-800: #6b4423;
-  --copper-500-12: rgba(201, 129, 75, 0.12);
+  /* Cor de acento da marca CVF - agora AZUL (da logomarca). O nome
+     "copper" foi mantido para não quebrar as referências espalhadas,
+     mas o valor é o azul institucional. */
+  --copper-500: #344d95;
+  --copper-800: #26386c;
+  --copper-500-12: rgba(52, 77, 149, 0.12);
 
-  /* Azul institucional da CVF (da logomarca) - usado no menu lateral */
   --azul-cvf: #344d95;
   --azul-cvf-800: #26386c;
   --azul-cvf-12: rgba(52, 77, 149, 0.12);
