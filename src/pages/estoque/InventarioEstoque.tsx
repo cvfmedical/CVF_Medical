@@ -199,7 +199,7 @@ export function InventarioEstoque() {
       </table>
 
       {modalMovimento && produtoSelecionado && (
-        <div className="modal-fundo" onClick={() => setModalMovimento(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Movimentar estoque - {produtoSelecionado.nome}</h2>
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
@@ -276,7 +276,7 @@ export function InventarioEstoque() {
       )}
 
       {modalMinimo && produtoSelecionado && (
-        <div className="modal-fundo" onClick={() => setModalMinimo(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Estoque mínimo - {produtoSelecionado.nome}</h2>
             <div className="campo-form">

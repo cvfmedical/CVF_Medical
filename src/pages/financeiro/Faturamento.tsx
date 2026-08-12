@@ -222,7 +222,7 @@ export function Faturamento() {
       </table>
 
       {contaSelecionada && (
-        <div className="modal-fundo" onClick={() => setContaSelecionada(null)}>
+        <div className="modal-fundo">
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Lançar nota fiscal - {contaSelecionada.numero_conta}</h2>
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>

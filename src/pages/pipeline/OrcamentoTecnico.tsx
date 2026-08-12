@@ -389,7 +389,7 @@ export function OrcamentoTecnico() {
       )}
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Adicionar item</h2>
 

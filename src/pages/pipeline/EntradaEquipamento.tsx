@@ -469,7 +469,7 @@ export function EntradaEquipamento() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <h2>{editando ? `Editar entrada ${editando.codigo_entrada}` : 'Nova entrada'}</h2>
 

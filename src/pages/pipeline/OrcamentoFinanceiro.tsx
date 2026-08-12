@@ -565,7 +565,7 @@ export function OrcamentoFinanceiro() {
       </table>
 
       {selecionadoId && orcamentoSelecionado && (
-        <div className="modal-fundo" onClick={() => setSelecionadoId(null)}>
+        <div className="modal-fundo">
           <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
             <h2>
               {orcamentoSelecionado.numero_orcamento} <Badge tono={TONO_STATUS[orcamentoSelecionado.status] ?? 'neutro'}>{orcamentoSelecionado.status}</Badge>

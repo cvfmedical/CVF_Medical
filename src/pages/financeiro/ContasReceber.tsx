@@ -205,7 +205,7 @@ export function ContasReceber() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Novo lançamento (conta a receber)</h2>
             <div className="campo-form">

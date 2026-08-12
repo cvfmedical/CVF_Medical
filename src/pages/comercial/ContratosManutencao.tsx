@@ -222,7 +222,7 @@ export function ContratosManutencao() {
     />
 
     {contratoPrecos && (
-      <div className="modal-fundo" onClick={() => setContratoPrecos(null)}>
+      <div className="modal-fundo">
         <div className="modal-card" onClick={(e) => e.stopPropagation()}>
           <h2>Preços fixos - {contratoPrecos.numero_contrato}</h2>
           <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>

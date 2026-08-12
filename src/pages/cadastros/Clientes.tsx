@@ -258,7 +258,7 @@ export function Clientes() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
             <h2>{editando ? 'Editar cliente' : 'Novo cliente'}</h2>
 

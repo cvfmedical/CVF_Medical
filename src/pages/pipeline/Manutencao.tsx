@@ -220,7 +220,7 @@ export function Manutencao() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <h2>Nova manutenção</h2>
 

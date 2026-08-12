@@ -201,7 +201,7 @@ export function CrudPage<Row extends { id: number }>({
       )}
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={fechar}>
+        <div className="modal-fundo">
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>{editando ? 'Editar' : 'Novo'}</h2>
             {campos.map((campo) => (

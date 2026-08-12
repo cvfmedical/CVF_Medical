@@ -313,7 +313,7 @@ export function ProdutosServicos() {
       </table>
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo">
           <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <h2>{editando ? 'Editar' : 'Novo'}</h2>
 
