@@ -1,11 +1,14 @@
 // Service worker do Portal do Cliente (PWA).
-// Cacheia só a "casca" (index + ícones) para instalar/abrir offline.
-// Requisições ao Supabase (outra origem) vão sempre pela rede.
-const CACHE = 'cvf-portal-v4';
+// Estratégia robusta:
+//  - Navegação (abrir a página): REDE primeiro (sempre pega a versão nova),
+//    caindo para o cache só se estiver offline. Evita "página travada".
+//  - Demais assets same-origin: cache primeiro, rede como reserva.
+//  - Supabase e outras origens: sempre pela rede (não intercepta).
+const CACHE = 'cvf-portal-v5';
 const ASSETS = ['./', './index.html', './icon-192.png', './icon-512.png', './manifest.webmanifest', './logo-cvf.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(() => {}));
   self.skipWaiting();
 });
 
@@ -15,16 +18,23 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  const u = new URL(e.request.url);
-  if (e.request.method === 'GET' && u.origin === self.location.origin) {
-    e.respondWith(
-      caches.match(e.request).then((r) =>
-        r || fetch(e.request).then((resp) => {
-          const cp = resp.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, cp));
-          return resp;
-        }).catch(() => caches.match('./index.html')),
-      ),
-    );
+  const req = e.request;
+  const u = new URL(req.url);
+  if (req.method !== 'GET' || u.origin !== self.location.origin) return; // deixa o navegador tratar
+
+  if (req.mode === 'navigate') {
+    e.respondWith(fetch(req).catch(() => caches.match('./index.html')));
+    return;
   }
+
+  e.respondWith(
+    caches.match(req).then((cached) =>
+      cached ||
+      fetch(req).then((resp) => {
+        const cp = resp.clone();
+        caches.open(CACHE).then((c) => c.put(req, cp));
+        return resp;
+      }),
+    ),
+  );
 });
