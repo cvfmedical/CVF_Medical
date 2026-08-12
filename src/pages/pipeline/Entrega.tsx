@@ -18,6 +18,7 @@ interface EntregaRow {
   nf_devolucao_cfop: string | null;
   nf_devolucao_data_emissao: string | null;
   nf_devolucao_valor: number | null;
+  confirmado_pelo_cliente_em: string | null;
 }
 
 export function Entrega() {
@@ -63,6 +64,16 @@ export function Entrega() {
         { chave: 'forma_devolucao', label: 'Forma de devolução' },
         { chave: 'nf_devolucao_numero', label: 'NF devolução', mono: true },
         { chave: 'data_entrega', label: 'Data', render: (r) => (r.data_entrega ? new Date(r.data_entrega).toLocaleString('pt-BR') : '-') },
+        {
+          chave: 'confirmado_pelo_cliente_em',
+          label: 'Confirmado pelo cliente',
+          render: (r) =>
+            r.confirmado_pelo_cliente_em ? (
+              <Badge tono="teal">{new Date(r.confirmado_pelo_cliente_em).toLocaleString('pt-BR')}</Badge>
+            ) : (
+              <Badge tono="neutro">Aguardando</Badge>
+            ),
+        },
         { chave: 'detalhes', label: 'Detalhes' },
       ]}
       campos={[

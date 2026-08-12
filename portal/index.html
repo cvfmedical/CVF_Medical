@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Q-CVF Medical - Portal do Cliente</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4A4F57">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Portal CVF">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
     :root {
@@ -262,6 +268,10 @@
             <tbody id="corpo-laudos"></tbody>
         </table>
         <div id="vazio-laudos" class="vazio" style="display:none;">Nenhum laudo disponível.</div>
+
+        <h2 class="secao">Termo de entrega</h2>
+        <div id="lista-termos"></div>
+        <div id="vazio-termos" class="vazio" style="display:none;">Nenhuma entrega registrada.</div>
         </div>
     </div>
 </main>
@@ -271,6 +281,47 @@ const SUPABASE_URL = "https://wrpylwtamxmaclyqdqmg.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QVIEwDHz2LkLihA2BZrhHA_9zxLaOEA";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Cabeçalho institucional (usado nos documentos abertos pelo portal).
+const CVF_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 133" style="width:100%;height:auto;display:block"><defs><linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#C2703D"/><stop offset="100%" stop-color="#2A9D8F"/></linearGradient><clipPath id="cc"><rect x="0" y="0" width="920" height="128"/></clipPath></defs><rect x="0" y="0" width="920" height="128" fill="#4A4F57"/><g transform="translate(40,24) scale(0.42)"><path d="M 141.50,144.75 L 142.75,147.50 L 152.25,147.50 L 153.25,145.25 Z M 318.50,135.50 L 318.75,155.25 L 337.00,156.25 L 336.75,153.00 L 321.75,152.50 L 321.50,135.75 Z M 280.25,138.00 L 277.25,143.25 L 277.50,156.00 L 280.25,155.50 L 281.50,150.75 L 293.25,150.75 L 294.75,155.50 L 297.25,156.00 L 297.25,135.75 L 284.75,135.50 Z M 280.75,142.50 L 286.25,138.50 L 293.50,138.50 L 294.75,146.25 L 281.25,147.75 Z M 240.75,136.50 L 239.00,140.25 L 240.00,154.25 L 257.25,156.00 L 256.75,153.00 L 242.50,152.25 L 242.00,140.25 L 243.50,138.50 L 257.00,138.50 L 257.50,135.75 Z M 216.75,135.25 L 215.25,155.25 L 218.00,156.00 L 218.50,135.75 Z M 175.75,135.50 L 175.00,155.25 L 188.00,156.00 L 193.25,153.50 L 195.50,149.00 L 193.50,138.25 L 187.50,135.25 Z M 178.25,138.75 L 190.75,140.00 L 192.25,149.00 L 189.75,152.25 L 177.75,152.25 Z M 137.00,135.50 L 136.25,153.25 L 140.00,156.00 L 154.25,156.00 L 154.00,153.00 L 139.50,152.00 L 139.25,139.75 L 154.00,138.50 L 154.75,135.75 Z M 91.50,135.75 L 91.50,156.00 L 94.50,155.25 L 95.25,144.50 L 103.50,156.50 L 111.75,144.75 L 112.25,155.50 L 115.25,156.00 L 115.00,135.50 L 112.50,136.00 L 103.50,150.75 L 94.25,136.00 Z M 268.75,127.50 L 277.50,125.75 L 284.75,118.50 L 287.75,97.00 L 315.50,94.50 L 322.75,86.75 L 324.50,79.00 L 270.00,79.75 Z M 270.25,68.00 L 323.50,68.00 L 332.75,62.25 L 337.50,50.75 L 287.50,51.25 L 276.75,57.00 Z M 92.50,111.25 L 100.75,122.75 L 111.25,127.50 L 168.00,128.00 L 164.50,117.00 L 155.75,110.75 L 116.00,110.00 L 109.50,104.00 L 109.50,74.00 L 112.00,69.75 L 167.75,68.50 L 174.50,74.50 L 176.25,124.25 L 182.50,128.25 L 208.00,124.25 L 228.25,113.25 L 243.50,98.00 L 255.75,79.25 L 267.50,50.50 L 258.25,50.25 L 249.25,54.75 L 235.00,79.75 L 223.75,94.00 L 210.50,104.50 L 198.00,109.25 L 192.75,108.25 L 192.50,62.50 L 185.00,52.50 L 179.50,50.25 L 108.75,51.25 L 97.50,58.75 L 92.25,68.50 Z" fill="#FFFFFF" fill-rule="evenodd"/></g><line x1="200" y1="26" x2="200" y2="102" stroke="#6B7078" stroke-width="1"/><text x="222" y="64" font-family="Arial, Helvetica, sans-serif" font-style="italic" font-size="26" fill="#E8A870" dominant-baseline="middle">Sua imagem, nossa visão.</text><g clip-path="url(#cc)" stroke="#5FC4B5" fill="none"><circle cx="905" cy="30" r="58" stroke-width="1"/><circle cx="905" cy="30" r="44" stroke-width="1"/><circle cx="905" cy="30" r="30" stroke-width="1"/><circle cx="905" cy="30" r="17" stroke-width="1"/></g><rect x="0" y="128" width="920" height="5" fill="url(#ag)"/></svg>';
+
+const CVF_RODAPE = '<strong>CVF MEDICAL MANUTENÇÃO EM EQUIPAMENTOS CIRÚRGICOS LTDA</strong> &nbsp;•&nbsp; CNPJ: 46.948.692/0001-03<br>Rua Sete de Setembro, 1929 - Ribeirão Preto/SP - CEP 14.025-200<br>Tel. / WhatsApp: (16) 99757-7587 &nbsp;•&nbsp; E-mail: suporte@cvfmedical.com.br';
+
+// Abre um documento CVF (cabeçalho + corpo + rodapé) numa janela nova.
+function abrirDocumentoCVF(titulo, corpoHtml) {
+    const doc = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${titulo}</title><style>
+      *{box-sizing:border-box}body{font-family:Helvetica,Arial,sans-serif;color:#21201c;margin:0;font-size:13px;line-height:1.5}
+      .folha{max-width:820px;margin:0 auto}.corpo{padding:20px 40px}
+      h1{font-size:20px;color:#1b1d20;margin:8px 0 14px}
+      .secao{margin-top:20px;font-weight:700;font-size:12.5px;text-transform:uppercase;color:#6b4423;border-bottom:1px solid #e4e1d8;padding-bottom:6px;margin-bottom:10px}
+      .num{display:inline-block;background:#c9814b;color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;font-size:11px;margin-right:8px}
+      .linha{display:flex;margin-bottom:6px}.rotulo{width:190px;font-weight:600;color:#5c5a54}.valor{flex:1}
+      ul.check{list-style:none;padding-left:0;margin:6px 0}ul.check li{padding:3px 0 3px 24px;position:relative}
+      ul.check li::before{content:"\\2713";position:absolute;left:0;color:#3e7a6f;font-weight:700}
+      ul.nunca li::before{content:"\\2715";color:#8a3b1a}
+      ol{margin:6px 0;padding-left:20px}ol li{margin-bottom:5px}
+      table{width:100%;border-collapse:collapse;margin-top:6px}
+      th{background:#1b1d20;color:#fff;text-align:left;padding:8px 10px;font-size:12px}
+      td{border-bottom:1px solid #e4e1d8;padding:8px 10px;vertical-align:top;font-size:12px}
+      .alerta{background:#fbeee8;border:1px solid #d99b7a;border-left:4px solid #8a3b1a;border-radius:6px;padding:12px 16px;margin:14px 0;color:#8a3b1a}
+      .ref{background:#f5f3ee;border:1px solid #e4e1d8;border-radius:6px;padding:14px 18px;font-size:12px;color:#5c5a54}
+      .ref .quote{font-style:italic;color:#21201c;border-left:3px solid #c9814b;padding-left:10px;margin:8px 0}
+      .obs{border:2px solid #1b1d20;border-radius:8px;padding:14px 18px;margin-top:20px;font-size:12px;line-height:1.6}
+      .obs .t{font-weight:700;text-transform:uppercase;font-size:12px;margin-bottom:6px}
+      .confirmado{background:#dcfce7;border:1px solid #86c79b;border-radius:6px;padding:12px 16px;margin-top:14px;color:#15803d;font-weight:600}
+      .assinatura{border-top:1px solid #1b1d20;margin-top:56px;padding-top:6px;width:60%;font-size:12px}
+      .rodape{padding:12px 40px 20px;border-top:1px solid #e4e1d8;font-size:9.5px;color:#5c5a54;text-align:center;line-height:1.5}
+      .barra{max-width:820px;margin:14px auto 0;padding:0 8px}.barra button{background:#c9814b;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px}
+      @media print{.barra{display:none}}
+    </style></head><body>
+    <div class="barra"><button onclick="window.print()">Imprimir / salvar PDF</button></div>
+    <div class="folha"><div style="line-height:0">${CVF_SVG}</div><div class="corpo">${corpoHtml}</div><div class="rodape">${CVF_RODAPE}</div></div>
+    </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Não foi possível abrir o documento (verifique o bloqueador de pop-ups).'); return; }
+    w.document.write(doc);
+    w.document.close();
+}
 
 const telaLogin = document.getElementById('tela-login');
 const telaPortal = document.getElementById('tela-portal');
@@ -591,6 +642,82 @@ async function responderOrcamento(orcamentoId, novoStatus) {
     await carregarOrcamentos();
 }
 
+async function carregarTermos() {
+    const container = document.getElementById('lista-termos');
+    const vazio = document.getElementById('vazio-termos');
+    container.innerHTML = '';
+
+    const { data: entregas, error } = await supabaseClient
+        .from('entregas')
+        .select('id, forma_devolucao, detalhes, data_entrega, nf_devolucao_numero, confirmado_pelo_cliente_em, ordens_servico(numero_os, optica_desc, optica_fab, optica_sn)')
+        .order('id', { ascending: false });
+
+    if (error || !entregas || entregas.length === 0) {
+        vazio.style.display = 'block';
+        return;
+    }
+    vazio.style.display = 'none';
+    window._entregas = entregas;
+
+    entregas.forEach(e => {
+        const os = e.ordens_servico || {};
+        const conf = e.confirmado_pelo_cliente_em;
+        const card = document.createElement('div');
+        card.className = 'card-entrada';
+        card.innerHTML = `
+            <div class="cabecalho">
+                <strong>OS ${os.numero_os || '-'}</strong>
+                <span class="badge ${conf ? 'badge-aprovado' : 'badge-andamento'}">${conf ? 'Recebimento confirmado' : 'Aguardando confirmação'}</span>
+            </div>
+            <p style="margin:6px 0;">${os.optica_desc || ''} ${os.optica_fab ? '(' + os.optica_fab + ')' : ''} ${os.optica_sn ? '- ' + os.optica_sn : ''}</p>
+            <p style="color:var(--texto-sec); font-size:13px; margin:4px 0;">Forma: ${e.forma_devolucao || '-'} ${e.nf_devolucao_numero ? '· NF ' + e.nf_devolucao_numero : ''}</p>
+            <p style="color:var(--texto-sec); font-size:12px; margin:4px 0;">Data: ${formatarData(e.data_entrega)}</p>
+            <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center;">
+                <button class="secundario" data-termo="${e.id}">Ver termo de entrega</button>
+                ${conf
+                    ? `<span style="color:#15803d; font-weight:600;">✓ Confirmado em ${formatarData(conf)}</span>`
+                    : `<button class="primario" data-confirmar="${e.id}">Li o documento e confirmo o recebimento</button>`}
+            </div>`;
+        container.appendChild(card);
+    });
+
+    container.querySelectorAll('[data-termo]').forEach(b => b.addEventListener('click', () => {
+        const ent = (window._entregas || []).find(x => String(x.id) === b.getAttribute('data-termo'));
+        if (ent) abrirTermoEntrega(ent);
+    }));
+    container.querySelectorAll('[data-confirmar]').forEach(b => b.addEventListener('click', () => confirmarEntrega(b.getAttribute('data-confirmar'))));
+}
+
+function abrirTermoEntrega(e) {
+    const os = e.ordens_servico || {};
+    const conf = e.confirmado_pelo_cliente_em;
+    const corpo = `
+        <h1>Termo de Entrega</h1>
+        <div class="linha"><div class="rotulo">Ordem de serviço</div><div class="valor">${os.numero_os || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${os.optica_desc || '-'} ${os.optica_fab ? '(' + os.optica_fab + ')' : ''}</div></div>
+        <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${os.optica_sn || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Forma de devolução</div><div class="valor">${e.forma_devolucao || '-'}</div></div>
+        ${e.nf_devolucao_numero ? `<div class="linha"><div class="rotulo">NF de devolução</div><div class="valor">${e.nf_devolucao_numero}</div></div>` : ''}
+        <div class="linha"><div class="rotulo">Data da entrega</div><div class="valor">${formatarData(e.data_entrega)}</div></div>
+        <div class="secao">Declaração de recebimento</div>
+        <p>Declaro que recebi o(s) equipamento(s) acima identificado(s), conferi as condições de entrega e tomei ciência das orientações de manuseio, limpeza e esterilização fornecidas pela CVF Medical.</p>
+        ${conf
+            ? `<div class="confirmado">&#10003; Recebimento confirmado eletronicamente pelo cliente em ${formatarData(conf)}.</div>`
+            : `<div class="assinatura">Assinatura do cliente / responsável &nbsp;—&nbsp; Data: ____/____/______</div>`}
+    `;
+    abrirDocumentoCVF('Termo de Entrega', corpo);
+}
+
+async function confirmarEntrega(id) {
+    if (!confirm('Confirma que leu o termo de entrega e recebeu o(s) equipamento(s)? Esta confirmação fica registrada com data e hora.')) return;
+    const { data, error } = await supabaseClient.rpc('confirmar_recebimento_entrega', { p_entrega_id: Number(id) });
+    if (error || !data) {
+        alert('Não foi possível registrar a confirmação. Recarregue a página e tente novamente.');
+        return;
+    }
+    await carregarTermos();
+}
+
 async function carregarPortal() {
     telaLogin.style.display = 'none';
     telaCadastro.style.display = 'none';
@@ -725,6 +852,11 @@ function abrirOrientacaoEsterilizacao() {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (session) await carregarPortal();
 })();
+
+// PWA: registra o service worker (instalável em Android/iPhone).
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 </script>
 
 </body>
