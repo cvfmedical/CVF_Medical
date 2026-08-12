@@ -1,5 +1,13 @@
 import { useMemo, useState } from 'react';
-import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react';
+import {
+  IconPlus,
+  IconPencil,
+  IconTrash,
+  IconMinus,
+  IconWindowMaximize,
+  IconWindowMinimize,
+  IconX,
+} from '@tabler/icons-react';
 import { useCrud } from '../lib/useCrud';
 import { mensagemErro } from '../lib/erros';
 import { CarregandoTela } from './CarregandoTela';
@@ -71,6 +79,10 @@ export function CrudPage<Row extends { id: number }>({
   const [filtro, setFiltro] = useState('');
   const [editando, setEditando] = useState<Row | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
+  // Controles de janela do formulário (igual às janelas do Windows). Minimizar
+  // mantém os dados preenchidos e libera a tela atrás; maximizar amplia.
+  const [minimizado, setMinimizado] = useState(false);
+  const [maximizado, setMaximizado] = useState(false);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -102,6 +114,8 @@ export function CrudPage<Row extends { id: number }>({
     setEditando(null);
     setFormData({ ...valorInicial });
     setErro(null);
+    setMinimizado(false);
+    setMaximizado(false);
     setModalAberto(true);
   }
 
@@ -109,11 +123,15 @@ export function CrudPage<Row extends { id: number }>({
     setEditando(row);
     setFormData({ ...row });
     setErro(null);
+    setMinimizado(false);
+    setMaximizado(false);
     setModalAberto(true);
   }
 
   function fechar() {
     setModalAberto(false);
+    setMinimizado(false);
+    setMaximizado(false);
     setErro(null);
   }
 
@@ -215,10 +233,50 @@ export function CrudPage<Row extends { id: number }>({
       )}
 
       {modalAberto && (
-        <div className="modal-fundo">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>{editando ? 'Editar' : 'Novo'}</h2>
-            {campos.map((campo) => (
+        <div className={`modal-fundo${minimizado ? ' minimizado' : ''}`}>
+          <div
+            className={`modal-card modal-card-janela${maximizado ? ' maximizado' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="modal-titulo-barra"
+              onDoubleClick={() => setMaximizado((m) => !m)}
+            >
+              <h2>
+                {editando ? 'Editar' : 'Novo'} — {titulo}
+              </h2>
+              <div className="modal-janela-botoes">
+                <button
+                  type="button"
+                  className="janela-btn"
+                  title={minimizado ? 'Restaurar' : 'Minimizar'}
+                  onClick={() => setMinimizado((m) => !m)}
+                >
+                  {minimizado ? <IconWindowMaximize size={15} /> : <IconMinus size={15} />}
+                </button>
+                <button
+                  type="button"
+                  className="janela-btn"
+                  title={maximizado ? 'Restaurar' : 'Maximizar'}
+                  onClick={() => {
+                    setMinimizado(false);
+                    setMaximizado((m) => !m);
+                  }}
+                >
+                  {maximizado ? <IconWindowMinimize size={15} /> : <IconWindowMaximize size={15} />}
+                </button>
+                <button
+                  type="button"
+                  className="janela-btn fechar"
+                  title="Fechar"
+                  onClick={fechar}
+                >
+                  <IconX size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="modal-corpo">
+              {campos.map((campo) => (
               <div className="campo-form" key={campo.name}>
                 <label>
                   {campo.label}
@@ -257,15 +315,16 @@ export function CrudPage<Row extends { id: number }>({
               </div>
             ))}
 
-            {erro && <p className="erro-login">{erro}</p>}
+              {erro && <p className="erro-login">{erro}</p>}
 
-            <div className="modal-acoes">
-              <button className="botao-secundario" onClick={fechar} disabled={salvando}>
-                Cancelar
-              </button>
-              <button className="botao-primario" onClick={salvar} disabled={salvando}>
-                {salvando ? 'Salvando...' : 'Salvar'}
-              </button>
+              <div className="modal-acoes">
+                <button className="botao-secundario" onClick={fechar} disabled={salvando}>
+                  Cancelar
+                </button>
+                <button className="botao-primario" onClick={salvar} disabled={salvando}>
+                  {salvando ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

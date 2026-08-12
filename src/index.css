@@ -546,3 +546,99 @@ button {
   width: auto;
   margin-top: 0;
 }
+
+/* ---- Janela do formulário (minimizar / maximizar / fechar) ----
+   Aplicado só aos cards do CrudPage via .modal-card-janela, sem mexer
+   nos outros modais que usam .modal-card puro. */
+.modal-card-janela {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-titulo-barra {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 10px 18px;
+  background: var(--azul-cvf);
+  user-select: none;
+  cursor: default;
+}
+
+.modal-titulo-barra h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.modal-janela-botoes {
+  display: flex;
+  gap: 6px;
+}
+
+.janela-btn {
+  width: 28px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.janela-btn:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.janela-btn.fechar:hover {
+  background: var(--danger-500);
+}
+
+.modal-corpo {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* Maximizado: ocupa quase a tela toda. */
+.modal-card-janela.maximizado {
+  max-width: 1080px;
+  width: 96vw;
+  max-height: 96vh;
+}
+
+/* Minimizado: vira uma barra flutuante no canto inferior direito e
+   libera o clique na tela atrás (os dados do formulário continuam vivos). */
+.modal-fundo.minimizado {
+  background: transparent;
+  pointer-events: none;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 24px 24px 0;
+}
+
+.modal-fundo.minimizado .modal-card-janela {
+  pointer-events: auto;
+  width: auto;
+  min-width: 300px;
+  max-width: 380px;
+  max-height: none;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.modal-fundo.minimizado .modal-titulo-barra {
+  cursor: pointer;
+}
+
+.modal-fundo.minimizado .modal-corpo {
+  display: none;
+}
