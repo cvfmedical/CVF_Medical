@@ -331,10 +331,16 @@ function abrirDocumentoCVF(titulo, corpoHtml) {
     <div class="barra"><button onclick="window.print()">Imprimir / salvar PDF</button></div>
     <div class="folha"><div style="line-height:0">${CVF_SVG}</div><div class="corpo">${corpoHtml}</div><div class="rodape">${CVF_RODAPE}</div></div>
     </body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) { alert('Não foi possível abrir o documento (verifique o bloqueador de pop-ups).'); return; }
-    w.document.write(doc);
-    w.document.close();
+    const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function formatarMoedaPortal(v) {
@@ -911,10 +917,16 @@ function abrirOrientacaoEsterilizacao() {
       </div>
       <div class="rodape"><strong>CVF MEDICAL MANUTENÇÃO EM EQUIPAMENTOS CIRÚRGICOS LTDA</strong> &nbsp;•&nbsp; CNPJ: 46.948.692/0001-03<br>Rua Sete de Setembro, 1929 - Ribeirão Preto/SP - CEP 14.025-200<br>Tel. / WhatsApp: (16) 99757-7587 &nbsp;•&nbsp; E-mail: suporte@cvfmedical.com.br</div>
     </div></body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) { alert('Não foi possível abrir o documento (verifique o bloqueador de pop-ups).'); return; }
-    w.document.write(doc);
-    w.document.close();
+    const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // Inicialização: convite/redefinição de senha, ou sessão existente.

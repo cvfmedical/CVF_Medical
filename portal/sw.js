@@ -4,7 +4,7 @@
 //    caindo para o cache só se estiver offline. Evita "página travada".
 //  - Demais assets same-origin: cache primeiro, rede como reserva.
 //  - Supabase e outras origens: sempre pela rede (não intercepta).
-const CACHE = 'cvf-portal-v5';
+const CACHE = 'cvf-portal-v6';
 const ASSETS = ['./', './index.html', './icon-192.png', './icon-512.png', './manifest.webmanifest', './logo-cvf.png'];
 
 self.addEventListener('install', (e) => {
