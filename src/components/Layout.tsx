@@ -6,6 +6,7 @@ import { MENU, categoriaDoPath, type ItemMenu } from '../lib/menu';
 import cvfMarca from '../assets/cvf-marca.png';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 import { AlertasFlutuantes } from './AlertasFlutuantes';
+import { BarraRascunhos } from './BarraRascunhos';
 
 export function Layout() {
   const { funcionario, temPermissao, signOut } = useAuth();
@@ -115,6 +116,7 @@ export function Layout() {
       </div>
 
       <AlertasFlutuantes />
+      <BarraRascunhos />
     </div>
   );
 }

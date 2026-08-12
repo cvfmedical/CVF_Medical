@@ -1,15 +1,10 @@
-import { useMemo, useState } from 'react';
-import {
-  IconPlus,
-  IconPencil,
-  IconTrash,
-  IconMinus,
-  IconWindowMaximize,
-  IconWindowMinimize,
-  IconX,
-} from '@tabler/icons-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react';
 import { useCrud } from '../lib/useCrud';
 import { mensagemErro } from '../lib/erros';
+import { useRascunhos } from '../contexts/RascunhosContext';
+import { ModalJanela } from './ModalJanela';
 import { CarregandoTela } from './CarregandoTela';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'date';
@@ -76,13 +71,11 @@ export function CrudPage<Row extends { id: number }>({
   aposSalvar,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
+  const location = useLocation();
+  const { minimizar, rascunhos, pedidoRestauracao, fecharRascunho, limparPedido } = useRascunhos();
   const [filtro, setFiltro] = useState('');
   const [editando, setEditando] = useState<Row | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
-  // Controles de janela do formulário (igual às janelas do Windows). Minimizar
-  // mantém os dados preenchidos e libera a tela atrás; maximizar amplia.
-  const [minimizado, setMinimizado] = useState(false);
-  const [maximizado, setMaximizado] = useState(false);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -114,8 +107,6 @@ export function CrudPage<Row extends { id: number }>({
     setEditando(null);
     setFormData({ ...valorInicial });
     setErro(null);
-    setMinimizado(false);
-    setMaximizado(false);
     setModalAberto(true);
   }
 
@@ -123,17 +114,41 @@ export function CrudPage<Row extends { id: number }>({
     setEditando(row);
     setFormData({ ...row });
     setErro(null);
-    setMinimizado(false);
-    setMaximizado(false);
     setModalAberto(true);
   }
 
   function fechar() {
     setModalAberto(false);
-    setMinimizado(false);
-    setMaximizado(false);
     setErro(null);
   }
+
+  // Minimizar: guarda o rascunho (com o registro em edição) no contexto global
+  // e fecha o modal local. Ele sobrevive à navegação entre telas.
+  function minimizarFormulario() {
+    minimizar({
+      tabela,
+      titulo: `${editando ? 'Editar' : 'Novo'} — ${titulo}`,
+      rota: location.pathname + location.search,
+      formData,
+      editando,
+    });
+    setModalAberto(false);
+  }
+
+  // Restaurar: quando a barra pede este rascunho, reabre com os dados.
+  useEffect(() => {
+    if (pedidoRestauracao !== tabela) return;
+    const r = rascunhos.find((x) => x.tabela === tabela);
+    if (r) {
+      setEditando((r.editando as Row | null) ?? null);
+      setFormData(r.formData);
+      setErro(null);
+      setModalAberto(true);
+      fecharRascunho(tabela);
+    }
+    limparPedido();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoRestauracao]);
 
   async function salvar() {
     setErro(null);
@@ -233,101 +248,61 @@ export function CrudPage<Row extends { id: number }>({
       )}
 
       {modalAberto && (
-        <div className={`modal-fundo${minimizado ? ' minimizado' : ''}`}>
-          <div
-            className={`modal-card modal-card-janela${maximizado ? ' maximizado' : ''}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="modal-titulo-barra"
-              onDoubleClick={() => setMaximizado((m) => !m)}
-            >
-              <h2>
-                {editando ? 'Editar' : 'Novo'} — {titulo}
-              </h2>
-              <div className="modal-janela-botoes">
-                <button
-                  type="button"
-                  className="janela-btn"
-                  title={minimizado ? 'Restaurar' : 'Minimizar'}
-                  onClick={() => setMinimizado((m) => !m)}
+        <ModalJanela
+          titulo={`${editando ? 'Editar' : 'Novo'} — ${titulo}`}
+          aoFechar={fechar}
+          aoMinimizar={minimizarFormulario}
+        >
+          {campos.map((campo) => (
+            <div className="campo-form" key={campo.name}>
+              <label>
+                {campo.label}
+                {campo.obrigatorio ? ' *' : ''}
+              </label>
+              {campo.type === 'textarea' ? (
+                <textarea
+                  value={String(formData[campo.name] ?? '')}
+                  onChange={(e) => atualizarCampo(campo, e.target.value)}
+                />
+              ) : campo.type === 'select' ? (
+                <select
+                  value={String(formData[campo.name] ?? '')}
+                  onChange={(e) => atualizarCampo(campo, e.target.value)}
                 >
-                  {minimizado ? <IconWindowMaximize size={15} /> : <IconMinus size={15} />}
-                </button>
-                <button
-                  type="button"
-                  className="janela-btn"
-                  title={maximizado ? 'Restaurar' : 'Maximizar'}
-                  onClick={() => {
-                    setMinimizado(false);
-                    setMaximizado((m) => !m);
-                  }}
-                >
-                  {maximizado ? <IconWindowMinimize size={15} /> : <IconWindowMaximize size={15} />}
-                </button>
-                <button
-                  type="button"
-                  className="janela-btn fechar"
-                  title="Fechar"
-                  onClick={fechar}
-                >
-                  <IconX size={15} />
-                </button>
-              </div>
+                  <option value="">Selecione...</option>
+                  {normalizarOpcoes(campo.opcoes).map((op) => (
+                    <option key={op.value} value={op.value}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+              ) : campo.type === 'checkbox' ? (
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData[campo.name] ?? false)}
+                  onChange={(e) => atualizarCampo(campo, e.target.checked)}
+                />
+              ) : (
+                <input
+                  type={campo.type}
+                  value={String(formData[campo.name] ?? '')}
+                  onChange={(e) => atualizarCampo(campo, e.target.value)}
+                />
+              )}
             </div>
-            <div className="modal-corpo">
-              {campos.map((campo) => (
-              <div className="campo-form" key={campo.name}>
-                <label>
-                  {campo.label}
-                  {campo.obrigatorio ? ' *' : ''}
-                </label>
-                {campo.type === 'textarea' ? (
-                  <textarea
-                    value={String(formData[campo.name] ?? '')}
-                    onChange={(e) => atualizarCampo(campo, e.target.value)}
-                  />
-                ) : campo.type === 'select' ? (
-                  <select
-                    value={String(formData[campo.name] ?? '')}
-                    onChange={(e) => atualizarCampo(campo, e.target.value)}
-                  >
-                    <option value="">Selecione...</option>
-                    {normalizarOpcoes(campo.opcoes).map((op) => (
-                      <option key={op.value} value={op.value}>
-                        {op.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : campo.type === 'checkbox' ? (
-                  <input
-                    type="checkbox"
-                    checked={Boolean(formData[campo.name] ?? false)}
-                    onChange={(e) => atualizarCampo(campo, e.target.checked)}
-                  />
-                ) : (
-                  <input
-                    type={campo.type}
-                    value={String(formData[campo.name] ?? '')}
-                    onChange={(e) => atualizarCampo(campo, e.target.value)}
-                  />
-                )}
-              </div>
-            ))}
+          ))}
 
-              {erro && <p className="erro-login">{erro}</p>}
+          {erro && <p className="erro-login">{erro}</p>}
 
-              <div className="modal-acoes">
-                <button className="botao-secundario" onClick={fechar} disabled={salvando}>
-                  Cancelar
-                </button>
-                <button className="botao-primario" onClick={salvar} disabled={salvando}>
-                  {salvando ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </div>
+          <div className="modal-acoes">
+            <button className="botao-secundario" onClick={fechar} disabled={salvando}>
+              Cancelar
+            </button>
+            <button className="botao-primario" onClick={salvar} disabled={salvando}>
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
           </div>
-        </div>
+        </ModalJanela>
       )}
     </div>
   );

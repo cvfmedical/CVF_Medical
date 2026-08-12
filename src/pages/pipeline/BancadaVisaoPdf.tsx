@@ -498,7 +498,7 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
             <Text style={styles.bold}>CNPJ:</Text> 46.948.692/0001-03
             {'\n'}
             <Text style={styles.bold}>Endereço:</Text> Rua Sete de Setembro, 1929 - Ribeirão Preto/SP - CEP:
-            14.025-200 | <Text style={styles.bold}>Contato:</Text> suporte@cvfmedical.com.br
+            14.025-384 | <Text style={styles.bold}>Contato:</Text> cvfmedical@cvfmedical.com.br
           </Text>
         </View>
 

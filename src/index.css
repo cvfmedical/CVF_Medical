@@ -615,30 +615,63 @@ button {
   max-height: 96vh;
 }
 
-/* Minimizado: vira uma barra flutuante no canto inferior direito e
-   libera o clique na tela atrás (os dados do formulário continuam vivos). */
-.modal-fundo.minimizado {
-  background: transparent;
-  pointer-events: none;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 0 24px 24px 0;
+/* Barra flutuante com os formulários minimizados (sobrevive à navegação). */
+.barra-rascunhos {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 80vw;
+  z-index: 60;
 }
 
-.modal-fundo.minimizado .modal-card-janela {
-  pointer-events: auto;
-  width: auto;
-  min-width: 300px;
-  max-width: 380px;
-  max-height: none;
+.rascunho-chip {
+  display: flex;
+  align-items: stretch;
+  background: var(--azul-cvf);
+  color: #fff;
   border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
 }
 
-.modal-fundo.minimizado .modal-titulo-barra {
+.rascunho-chip-abrir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  padding: 8px 14px;
   cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-body);
+  max-width: 320px;
 }
 
-.modal-fundo.minimizado .modal-corpo {
-  display: none;
+.rascunho-chip-abrir span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rascunho-chip-abrir:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rascunho-chip-fechar {
+  border: none;
+  background: transparent;
+  color: #fff;
+  padding: 0 10px;
+  cursor: pointer;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.rascunho-chip-fechar:hover {
+  background: var(--danger-500);
 }

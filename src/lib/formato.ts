@@ -4,9 +4,9 @@
 export const EMPRESA = {
   razaoSocial: 'CVF MEDICAL MANUTENÇÃO EM EQUIPAMENTOS CIRÚRGICOS LTDA',
   cnpj: '46.948.692/0001-03',
-  endereco: 'Rua Sete de Setembro, 1929 - Ribeirão Preto/SP - CEP 14.025-200',
+  endereco: 'Rua Sete de Setembro, 1929 - Ribeirão Preto/SP - CEP 14.025-384',
   telefone: '(16) 99757-7587',
-  email: 'suporte@cvfmedical.com.br',
+  email: 'cvfmedical@cvfmedical.com.br',
 };
 
 // Missão, visão e valores - exibidos na capa do relatório final enviado
