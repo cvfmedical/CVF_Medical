@@ -405,7 +405,7 @@ async function cadastrar() {
     const { error } = await supabaseClient.auth.signUp({
         email,
         password: s1,
-        options: { emailRedirectTo: 'https://portal.cvfmedical.com.br' },
+        options: { emailRedirectTo: window.location.origin },
     });
     if (error) return mostrarMsgCadastro('Não foi possível cadastrar: ' + error.message, true);
 
