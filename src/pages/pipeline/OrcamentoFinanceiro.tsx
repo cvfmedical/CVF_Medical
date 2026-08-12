@@ -11,7 +11,7 @@ import { abrirImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
-import { formatarMoeda, MISSAO_VISAO_VALORES, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
+import { formatarMoeda, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
 import { montarCorpoOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
@@ -387,8 +387,25 @@ export function OrcamentoFinanceiro() {
     );
   }
 
-  async function imprimirOrcamento() {
-    if (!orcamentoSelecionado) return;
+  // Links de compartilhamento (WhatsApp/e-mail) - o mesmo para os 3 documentos:
+  // aponta o cliente para o portal, onde ele acessa cada relatório em separado.
+  function linksCompart() {
+    if (!clienteQuery.data || !orcamentoSelecionado) return undefined;
+    return {
+      whatsapp: linkWhatsApp(clienteQuery.data.telefone, mensagemCompartilhar()),
+      email: linkEmail(
+        clienteQuery.data.email,
+        `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`,
+        mensagemCompartilhar(),
+      ),
+    };
+  }
+
+  // Corpo do documento do Orçamento (itens + condições comerciais + garantia +
+  // condições gerais + observações). O texto legal fica compacto e agrupado
+  // (page-break-inside:avoid) para não se espalhar por mais de uma página.
+  function montarOrcamentoHtml() {
+    const os = orcamentoSelecionado!.ordens_servico;
     const linhas = (itensQuery.data ?? [])
       .map(
         (item) => `
@@ -401,41 +418,10 @@ export function OrcamentoFinanceiro() {
       )
       .join('');
 
-    const relatorioOSHtml = await buscarRelatorioOSHtml();
-    const registroEntradaHtml = await buscarRegistroEntradaHtml();
-    const os = orcamentoSelecionado.ordens_servico;
-
-    // Capa: identifica o documento (ficha do cliente/equipamento), traz o
-    // sumário do que vem nas próximas páginas e a missão/visão/valores da
-    // CVF. O valor total aparece na página do Orçamento (não na capa).
-    const capaHtml = `
-      <h1 class="capa-titulo">Relatório de Manutenção e Orçamento</h1>
-      <div class="ficha">
-        <div class="ficha-linha"><span class="ficha-rot">Cliente</span><span class="ficha-val">${os?.cliente_nome ?? '-'}</span></div>
-        <div class="ficha-linha"><span class="ficha-rot">Data</span><span class="ficha-val">${new Date().toLocaleDateString('pt-BR')}</span></div>
-        <div class="ficha-linha"><span class="ficha-rot">Equipamento</span><span class="ficha-val">${os?.optica_desc ?? '-'}${os?.optica_fab ? ' (' + os.optica_fab + ')' : ''}</span></div>
-        <div class="ficha-linha"><span class="ficha-rot">Nº de série</span><span class="ficha-val mono">${os?.optica_sn ?? '-'}</span></div>
-        <div class="ficha-linha"><span class="ficha-rot">Nº da OS</span><span class="ficha-val mono">${os?.numero_os ?? '-'}</span></div>
-        <div class="ficha-linha"><span class="ficha-rot">Nº do orçamento</span><span class="ficha-val mono">${orcamentoSelecionado.numero_orcamento}</span></div>
-      </div>
-      <div class="sumario">
-        <h3>Conteúdo deste documento</h3>
-        <ol>
-          <li><strong>Registro de Entrada</strong> — equipamento recebido, NF de remessa e avarias na triagem</li>
-          <li><strong>Ordem de Serviço</strong> — peças/serviços identificados pelo técnico</li>
-          <li><strong>Orçamento</strong> — valores e aprovação</li>
-        </ol>
-      </div>
-      <div class="mvv">
-        ${MISSAO_VISAO_VALORES.map(
-          (m) => `<div class="mvv-item"><div class="mvv-rot">${m.rotulo}</div><div class="mvv-txt">${m.texto}</div></div>`,
-        ).join('')}
-      </div>`;
-
-    const orcamentoHtml = `
-      <span class="tag-secao">3 · Orçamento</span>
+    return `
       <h1>Orçamento de Manutenção</h1>
-      <p class="subtitulo">Nº ${orcamentoSelecionado.numero_orcamento} · OS ${os?.numero_os ?? '-'}</p>
+      <p class="subtitulo">Nº ${orcamentoSelecionado!.numero_orcamento} · OS ${os?.numero_os ?? '-'} · ${os?.cliente_nome ?? '-'}</p>
+      <p class="subtitulo">${os?.optica_desc ?? '-'}${os?.optica_fab ? ' (' + os.optica_fab + ')' : ''}${os?.optica_sn ? ' · Nº série ' + os.optica_sn : ''}</p>
       <div class="secao">Itens</div>
       <table class="dados">
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
@@ -446,38 +432,47 @@ export function OrcamentoFinanceiro() {
       <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
       <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${condicoesPagamento || '-'}</div></div>
       <div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${prazoEntrega || '-'}</div></div>
-      <div class="secao">Garantia</div>
-      <div class="valor">${GARANTIA_CVF.resumo}</div>
-      <p style="margin:8px 0 4px;">${GARANTIA_CVF.intro}</p>
-      <ol style="margin:0;padding-left:20px;line-height:1.6;font-size:12px;color:var(--ink-600);">
-        ${GARANTIA_CVF.itens.map((i) => `<li>${i}</li>`).join('')}
-      </ol>
-      <div class="secao">Condições gerais</div>
-      ${CLAUSULAS_GERAIS.map(
-        (c) => `<p style="margin:0 0 8px;font-size:12px;"><strong>${c.titulo}.</strong> ${c.texto}</p>`,
-      ).join('')}
-      <div class="secao">Observações</div>
-      <div class="valor">${observacoesFinanceiro || '-'}</div>`;
+      <div style="page-break-inside:avoid;font-size:10px;line-height:1.32;color:var(--ink-600);margin-top:8px;">
+        <div class="secao" style="margin-bottom:4px;">Garantia</div>
+        <div style="font-size:11px;color:var(--ink-900);margin-bottom:2px;">${GARANTIA_CVF.resumo}</div>
+        <p style="margin:3px 0;">${GARANTIA_CVF.intro}</p>
+        <ol style="margin:0;padding-left:16px;">
+          ${GARANTIA_CVF.itens.map((i) => `<li>${i}</li>`).join('')}
+        </ol>
+        <div class="secao" style="margin:8px 0 4px;">Condições gerais</div>
+        ${CLAUSULAS_GERAIS.map((c) => `<p style="margin:0 0 4px;"><strong>${c.titulo}.</strong> ${c.texto}</p>`).join('')}
+        <div class="secao" style="margin:8px 0 4px;">Observações</div>
+        <div>${observacoesFinanceiro || '-'}</div>
+      </div>`;
+  }
 
+  // Os 3 relatórios são DOCUMENTOS SEPARADOS - o cliente escolhe qual imprimir.
+  async function imprimirDocEntrada() {
+    if (!orcamentoSelecionado) return;
+    const html = await buscarRegistroEntradaHtml();
+    // O Registro de Entrada já traz suas próprias assinaturas dentro do corpo.
+    abrirImpressao(`Registro de Entrada - ${orcamentoSelecionado.numero_orcamento}`, html, linksCompart(), {
+      semAssinaturas: true,
+    });
+  }
+
+  async function imprimirDocOS() {
+    if (!orcamentoSelecionado) return;
+    const html = await buscarRelatorioOSHtml();
     abrirImpressao(
-      `Relatório e Orçamento ${orcamentoSelecionado.numero_orcamento}`,
-      `
-      ${capaHtml}
-      <div class="quebra-pagina"><span class="tag-secao">1 · Entrada</span>${registroEntradaHtml}</div>
-      <div class="quebra-pagina"><span class="tag-secao">2 · Ordem de Serviço</span>${relatorioOSHtml}</div>
-      <div class="quebra-pagina">${orcamentoHtml}</div>
-      `,
-      clienteQuery.data
-        ? {
-            whatsapp: linkWhatsApp(clienteQuery.data.telefone, mensagemCompartilhar()),
-            email: linkEmail(clienteQuery.data.email, `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`, mensagemCompartilhar()),
-          }
-        : undefined,
-      {
-        assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'],
-        anexoHtml: anexarOrientacao ? montarCorpoOrientacaoEsterilizacao() : undefined,
-      },
+      `Ordem de Serviço - ${orcamentoSelecionado.ordens_servico?.numero_os ?? orcamentoSelecionado.numero_orcamento}`,
+      html,
+      linksCompart(),
+      { semAssinaturas: true },
     );
+  }
+
+  function imprimirDocOrcamento() {
+    if (!orcamentoSelecionado) return;
+    abrirImpressao(`Orçamento ${orcamentoSelecionado.numero_orcamento}`, montarOrcamentoHtml(), linksCompart(), {
+      assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'],
+      anexoHtml: anexarOrientacao ? montarCorpoOrientacaoEsterilizacao() : undefined,
+    });
   }
 
   function compartilhar(vetorEnvio: 'whatsapp' | 'email') {
@@ -574,8 +569,9 @@ export function OrcamentoFinanceiro() {
         .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
         .eq('id', orcamentoSelecionado.ordem_servico_id);
 
-      // Abre o relatório pra salvar/imprimir assim que o envio é confirmado.
-      await imprimirOrcamento();
+      // Ao confirmar o envio, abre o documento do Orçamento pra salvar/imprimir.
+      // Os outros dois (Entrada e OS) ficam nos botões separados e no portal.
+      imprimirDocOrcamento();
 
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
@@ -850,9 +846,16 @@ export function OrcamentoFinanceiro() {
             {erro && <p className="erro-login">{erro}</p>}
 
             <div className="modal-acoes" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="botao-secundario" onClick={() => imprimirOrcamento()}>
-                  Imprimir
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Imprimir:</span>
+                <button className="botao-secundario botao-pequeno" onClick={() => imprimirDocEntrada()}>
+                  Registro de Entrada
+                </button>
+                <button className="botao-secundario botao-pequeno" onClick={() => imprimirDocOS()}>
+                  Ordem de Serviço
+                </button>
+                <button className="botao-secundario botao-pequeno" onClick={() => imprimirDocOrcamento()}>
+                  Orçamento
                 </button>
                 <button className="botao-secundario" onClick={() => compartilhar('whatsapp')}>
                   WhatsApp
