@@ -32,9 +32,9 @@ export const MISSAO_VISAO_VALORES: { rotulo: string; texto: string }[] = [
 // Condições comerciais padrão do orçamento (o financeiro pode editar por
 // orçamento; usadas como valor inicial quando o campo está vazio).
 export const CONDICOES_COMERCIAIS_PADRAO = {
-  validadeProposta: '30 dias após a emissão da proposta.',
-  condicoesPagamento: '50% de sinal; 50% em 15 DDL no faturamento.',
-  prazoEntrega: '45 dias após a confirmação do recebimento do sinal.',
+  validadeProposta: '10 dias',
+  condicoesPagamento: '28 DDL',
+  prazoEntrega: '3 dias',
 };
 
 // Garantia institucional da CVF - texto fixo impresso no relatório ao

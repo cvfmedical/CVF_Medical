@@ -70,6 +70,122 @@ const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
   Recusado: 'danger',
 };
 
+// Opções pré-definidas das condições comerciais (o campo continua sendo texto
+// livre no banco - estas são só atalhos; "Outro" libera a digitação).
+const OPCOES_VALIDADE = ['10 dias', '15 dias', '30 dias'];
+const OPCOES_PAGAMENTO = [
+  'À vista',
+  '28 DDL',
+  '2x (28/56 DDL)',
+  '3x (28/56/84 DDL)',
+  '4x (28/56/84/112 DDL)',
+  '50% de sinal; 50% em 15 DDL no faturamento.',
+];
+const OPCOES_PRAZO = ['3 dias', '4 dias', '5 dias'];
+
+// Select com opções + "Outro" que libera um campo de texto livre.
+function CampoSelecao({
+  valor,
+  aoMudar,
+  opcoes,
+  placeholder,
+}: {
+  valor: string;
+  aoMudar: (v: string) => void;
+  opcoes: string[];
+  placeholder?: string;
+}) {
+  const [outro, setOutro] = useState(valor !== '' && !opcoes.includes(valor));
+  return (
+    <>
+      <select
+        value={outro ? '__outro__' : valor}
+        onChange={(e) => {
+          if (e.target.value === '__outro__') {
+            setOutro(true);
+            aoMudar('');
+          } else {
+            setOutro(false);
+            aoMudar(e.target.value);
+          }
+        }}
+      >
+        <option value="">Selecione…</option>
+        {opcoes.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+        <option value="__outro__">Outro (escrever)…</option>
+      </select>
+      {outro && (
+        <input
+          style={{ marginTop: 6 }}
+          value={valor}
+          placeholder={placeholder}
+          onChange={(e) => aoMudar(e.target.value)}
+        />
+      )}
+    </>
+  );
+}
+
+// Opções em botões de rádio (uma só) + "Outro" com campo de texto livre.
+function CampoRadio({
+  valor,
+  aoMudar,
+  opcoes,
+  placeholder,
+}: {
+  valor: string;
+  aoMudar: (v: string) => void;
+  opcoes: string[];
+  placeholder?: string;
+}) {
+  const [outro, setOutro] = useState(valor !== '' && !opcoes.includes(valor));
+  const estiloOpcao = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 } as const;
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {opcoes.map((o) => (
+          <label key={o} style={estiloOpcao}>
+            <input
+              type="radio"
+              style={{ width: 'auto' }}
+              checked={!outro && valor === o}
+              onChange={() => {
+                setOutro(false);
+                aoMudar(o);
+              }}
+            />
+            {o}
+          </label>
+        ))}
+        <label style={estiloOpcao}>
+          <input
+            type="radio"
+            style={{ width: 'auto' }}
+            checked={outro}
+            onChange={() => {
+              setOutro(true);
+              aoMudar('');
+            }}
+          />
+          Outro
+        </label>
+      </div>
+      {outro && (
+        <input
+          style={{ marginTop: 6 }}
+          value={valor}
+          placeholder={placeholder}
+          onChange={(e) => aoMudar(e.target.value)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
@@ -673,15 +789,30 @@ export function OrcamentoFinanceiro() {
 
             <div className="campo-form">
               <label>Validade da proposta</label>
-              <input value={validadeProposta} onChange={(e) => setValidadeProposta(e.target.value)} />
+              <CampoSelecao
+                valor={validadeProposta}
+                aoMudar={setValidadeProposta}
+                opcoes={OPCOES_VALIDADE}
+                placeholder="Ex.: 20 dias"
+              />
             </div>
             <div className="campo-form">
               <label>Condições de pagamento</label>
-              <textarea value={condicoesPagamento} onChange={(e) => setCondicoesPagamento(e.target.value)} />
+              <CampoSelecao
+                valor={condicoesPagamento}
+                aoMudar={setCondicoesPagamento}
+                opcoes={OPCOES_PAGAMENTO}
+                placeholder="Escreva a condição de pagamento"
+              />
             </div>
             <div className="campo-form">
               <label>Prazo de entrega</label>
-              <input value={prazoEntrega} onChange={(e) => setPrazoEntrega(e.target.value)} />
+              <CampoRadio
+                valor={prazoEntrega}
+                aoMudar={setPrazoEntrega}
+                opcoes={OPCOES_PRAZO}
+                placeholder="Escreva o prazo"
+              />
             </div>
 
             <div className="campo-form">
