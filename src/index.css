@@ -247,6 +247,7 @@ button {
 }
 
 .sidebar-item {
+  display: block;
   padding: 7px 10px;
   border-radius: 6px;
   font-size: 12.5px;
