@@ -182,7 +182,11 @@
     #doc-overlay .doc-barra { position: sticky; top: 0; background: #f1f5f9; border-bottom: 1px solid var(--borda); padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
     #doc-overlay .doc-titulo { font-weight: bold; color: var(--azul); font-size: 14px; }
     #doc-overlay .doc-corpo { padding: 16px 20px; max-width: 820px; margin: 0 auto; color: #21201c; }
-    #doc-overlay .doc-rodape { padding: 12px 20px 28px; border-top: 1px solid var(--borda); font-size: 10px; color: var(--texto-sec); text-align: center; line-height: 1.5; max-width: 820px; margin: 0 auto; }
+    #doc-overlay .doc-cab { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; background: #fff; }
+    #doc-overlay .doc-logo { height: 46px; width: auto; }
+    #doc-overlay .doc-slogan { font-style: italic; color: var(--azul); font-size: 15px; }
+    #doc-overlay .doc-barra { height: 5px; background: linear-gradient(90deg, #344d95, #5b78bd); }
+    #doc-overlay .doc-rodape { padding: 12px 20px 28px; border-top: 1px solid var(--borda); font-size: 10px; color: #26386c; text-align: center; line-height: 1.5; max-width: 820px; margin: 0 auto; }
     #doc-overlay h1 { font-size: 20px; color: #1b1d20; margin: 8px 0 14px; }
     #doc-overlay .secao { margin-top: 20px; font-weight: 700; font-size: 12.5px; text-transform: uppercase; color: #26386c; border-bottom: 1px solid var(--borda); padding-bottom: 6px; margin-bottom: 10px; }
     #doc-overlay .num { display: inline-block; background: #344d95; color: #fff; border-radius: 50%; width: 20px; height: 20px; line-height: 20px; text-align: center; font-size: 11px; margin-right: 8px; }
@@ -351,7 +355,7 @@ const CVF_RODAPE = '<strong>CVF MEDICAL MANUTENÇÃO EM EQUIPAMENTOS CIRÚRGICOS
 function abrirDocumentoCVF(titulo, corpoHtml) {
     document.getElementById('doc-titulo').textContent = titulo || 'Documento';
     document.getElementById('doc-conteudo').innerHTML =
-        '<div style="line-height:0">' + CVF_SVG + '</div>' +
+        '<div class="doc-cab"><img src="logo-cvf.png" alt="CVF Medical" class="doc-logo"><span class="doc-slogan">Sua imagem, nossa visão.</span></div><div class="doc-barra"></div>' +
         '<div class="doc-corpo">' + corpoHtml + '</div>' +
         '<div class="doc-rodape">' + CVF_RODAPE + '</div>';
     const ov = document.getElementById('doc-overlay');
