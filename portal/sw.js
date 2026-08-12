@@ -1,8 +1,8 @@
 // Service worker do Portal do Cliente (PWA).
 // Cacheia só a "casca" (index + ícones) para instalar/abrir offline.
 // Requisições ao Supabase (outra origem) vão sempre pela rede.
-const CACHE = 'cvf-portal-v1';
-const ASSETS = ['./', './index.html', './icon-192.png', './icon-512.png', './manifest.webmanifest'];
+const CACHE = 'cvf-portal-v2';
+const ASSETS = ['./', './index.html', './icon-192.png', './icon-512.png', './manifest.webmanifest', './logo-cvf.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));

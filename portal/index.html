@@ -35,11 +35,14 @@
         align-items: center;
         justify-content: space-between;
     }
-    header h1 {
-        font-size: 18px;
-        color: var(--azul);
-        margin: 0;
-    }
+    .marca-header { display: flex; align-items: center; gap: 14px; }
+    .marca-header img { height: 46px; width: auto; }
+    .marca-txt { display: flex; flex-direction: column; line-height: 1.2; }
+    .marca-txt .slogan { font-style: italic; color: var(--vermelho); font-size: 14px; }
+    .marca-txt .portal-nome { font-size: 12px; color: var(--texto-sec); font-weight: bold; text-transform: uppercase; letter-spacing: .04em; }
+    .login-marca { text-align: center; margin-bottom: 18px; }
+    .login-marca img { max-width: 220px; width: 100%; height: auto; }
+    .login-marca .slogan { display: block; font-style: italic; color: var(--vermelho); font-size: 14px; margin-top: 8px; }
     #btn-sair {
         background: #e2e8f0;
         color: var(--texto);
@@ -179,12 +182,22 @@
 <body>
 
 <header>
-    <h1>Q-CVF MEDICAL | Portal do Cliente</h1>
+    <div class="marca-header">
+        <img src="logo-cvf.png" alt="CVF Medical">
+        <div class="marca-txt">
+            <span class="slogan">Sua imagem, nossa visão.</span>
+            <span class="portal-nome">Portal do Cliente</span>
+        </div>
+    </div>
     <button id="btn-sair">Sair</button>
 </header>
 
 <main>
     <div id="tela-login">
+        <div class="login-marca">
+            <img src="logo-cvf.png" alt="CVF Medical - Manutenção em Equipamentos Cirúrgicos">
+            <span class="slogan">Sua imagem, nossa visão.</span>
+        </div>
         <h2>Acesso do Cliente</h2>
         <label for="txt-email">E-mail</label>
         <input type="email" id="txt-email" placeholder="seu@email.com">
