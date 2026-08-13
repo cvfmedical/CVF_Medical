@@ -36,6 +36,7 @@ interface Orcamento {
   validade_proposta: string | null;
   condicoes_pagamento: string | null;
   prazo_entrega: string | null;
+  desconto: number | null;
   ordens_servico: {
     numero_os: string;
     cliente_nome: string;
@@ -215,6 +216,7 @@ export function OrcamentoFinanceiro() {
   // ficam com preço zerado (só de referência, não somam no total nesse
   // caso). null = precificação normal por item.
   const [valorFixoContrato, setValorFixoContrato] = useState<number | null>(null);
+  const [desconto, setDesconto] = useState('');
   // Ao restaurar um rascunho minimizado, guarda os preços editados para que o
   // efeito que recarrega os itens não sobrescreva com os valores do banco.
   const precosRestauradosRef = useRef<Record<number, string> | null>(null);
@@ -225,7 +227,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, desconto, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -350,6 +352,7 @@ export function OrcamentoFinanceiro() {
       prazoEntrega,
       precoFixoSelecionado,
       valorFixoContrato,
+      desconto,
       anexarOrientacao,
     }),
     aoRestaurar: (e) => {
@@ -360,6 +363,7 @@ export function OrcamentoFinanceiro() {
       setPrazoEntrega((e.prazoEntrega as string) ?? '');
       setPrecoFixoSelecionado((e.precoFixoSelecionado as string) ?? '');
       setValorFixoContrato((e.valorFixoContrato as number | null) ?? null);
+      setDesconto((e.desconto as string) ?? '');
       setAnexarOrientacao(Boolean(e.anexarOrientacao));
       setErro(null);
       setSelecionadoId((e.selecionadoId as number | null) ?? null);
@@ -371,10 +375,12 @@ export function OrcamentoFinanceiro() {
     setSelecionadoId(null);
   }
 
-  const total =
+  const subtotal =
     valorFixoContrato != null
       ? valorFixoContrato
       : (itensQuery.data ?? []).reduce((soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade, 0);
+  const descontoNum = Number(desconto) || 0;
+  const total = Math.max(subtotal - descontoNum, 0);
 
   // Valor de contrato vira o total do orçamento direto - os itens ficam
   // com preço zerado (só de referência de quais peças foram usadas, não
@@ -502,6 +508,10 @@ export function OrcamentoFinanceiro() {
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
         <tbody>${linhas}</tbody>
       </table>
+      ${descontoNum > 0
+        ? `<p style="text-align:right;margin:6px 0 0;color:var(--ink-600);">Subtotal: ${formatarMoeda(subtotal)}</p>
+           <p style="text-align:right;margin:2px 0 0;color:var(--ink-600);">Desconto: - ${formatarMoeda(descontoNum)}</p>`
+        : ''}
       <p class="total-linha">Total: ${formatarMoeda(total)}</p>
       <div class="secao">Condições comerciais</div>
       <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
@@ -569,6 +579,7 @@ export function OrcamentoFinanceiro() {
     setPrazoEntrega(o.prazo_entrega ?? CONDICOES_COMERCIAIS_PADRAO.prazoEntrega);
     setPrecoFixoSelecionado('');
     setValorFixoContrato(o.valor_fixo_contrato ?? null);
+    setDesconto(o.desconto ? String(o.desconto) : '');
     setAnexarOrientacao(false);
     setErro(null);
   }
@@ -590,6 +601,7 @@ export function OrcamentoFinanceiro() {
         validade_proposta: validadeProposta || null,
         condicoes_pagamento: condicoesPagamento || null,
         prazo_entrega: prazoEntrega || null,
+        desconto: descontoNum || 0,
       })
       .eq('id', selecionadoId!);
     if (error) throw error;
@@ -702,6 +714,8 @@ export function OrcamentoFinanceiro() {
           quantidade: it.quantidade,
           precoUnit: Number(precos[it.id]) || 0,
         })),
+        subtotal,
+        desconto: descontoNum,
         total,
         validade: validadeProposta,
         pagamento: condicoesPagamento,
@@ -991,7 +1005,27 @@ export function OrcamentoFinanceiro() {
               O preço unitário já vem sugerido do catálogo (valor de venda) quando o item está cadastrado — ajuste
               livremente antes de salvar/enviar.
             </p>
-            <p style={{ textAlign: 'right', fontWeight: 500 }}>Total: {formatarMoeda(total)}</p>
+            <div style={{ marginTop: 8, marginLeft: 'auto', maxWidth: 320 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--ink-600)' }}>
+                <span>Subtotal</span>
+                <span>{formatarMoeda(subtotal)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                <label style={{ fontSize: 13, color: 'var(--ink-600)', margin: 0 }}>Desconto (R$)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={desconto}
+                  onChange={(e) => setDesconto(e.target.value)}
+                  style={{ width: 120, textAlign: 'right', padding: '6px 8px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                <span>Total</span>
+                <span>{formatarMoeda(total)}</span>
+              </div>
+            </div>
 
             <div className="campo-form">
               <label>Validade da proposta</label>

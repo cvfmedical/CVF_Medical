@@ -73,6 +73,8 @@ export interface DadosOrcamentoPdf {
   equipamento: string;
   numeroSerie: string;
   itens: ItemOrcamentoPdf[];
+  subtotal: number;
+  desconto: number;
   total: number;
   validade: string;
   pagamento: string;
@@ -107,6 +109,12 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
             <Text style={s.cNum}>{formatarMoeda(it.precoUnit * it.quantidade)}</Text>
           </View>
         ))}
+        {d.desconto > 0 ? (
+          <>
+            <Text style={{ textAlign: 'right', color: cinza, marginTop: 6 }}>Subtotal: {formatarMoeda(d.subtotal)}</Text>
+            <Text style={{ textAlign: 'right', color: cinza, marginTop: 2 }}>Desconto: - {formatarMoeda(d.desconto)}</Text>
+          </>
+        ) : null}
         <Text style={s.total}>Total: {formatarMoeda(d.total)}</Text>
 
         <Text style={s.secao}>Condições comerciais</Text>

@@ -465,6 +465,7 @@ function imprimirOrcamentoDoc(o) {
         <div class="secao">Itens</div>
         <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
         ${o.temValorFixo ? `<p style="font-size:12px;color:#5c5a54;margin-top:6px;">Valor fechado por contrato — os preços dos itens acima são apenas de referência e não somam no total.</p>` : ''}
+        ${o.desconto > 0 ? `<p style="text-align:right;margin:6px 0 0;color:#5c5a54;">Subtotal: ${formatarMoedaPortal(o.subtotal)}</p><p style="text-align:right;margin:2px 0 0;color:#5c5a54;">Desconto: - ${formatarMoedaPortal(o.desconto)}</p>` : ''}
         <p style="text-align:right;font-weight:700;font-size:15px;margin-top:12px;">Total: ${formatarMoedaPortal(o.total)}</p>
         ${condicoes}
         ${garantia}
@@ -813,7 +814,7 @@ async function carregarOrcamentos() {
 
     const { data: orcamentos, error } = await supabaseClient
         .from('orcamentos')
-        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
+        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, desconto, validade_proposta, condicoes_pagamento, prazo_entrega, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
         .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
         .order('data_envio', { ascending: false });
 
@@ -829,12 +830,14 @@ async function carregarOrcamentos() {
             .select('quantidade, preco_unitario, observacao, produtos_servicos(nome)')
             .eq('orcamento_id', orc.id);
 
-        // Total: se há valor fixo de contrato, ele É o total (itens ficam só de
-        // referência). Senão, soma os itens.
+        // Total: se há valor fixo de contrato, ele É o subtotal (itens ficam só
+        // de referência). Senão, soma os itens. Depois aplica o desconto.
         const temValorFixo = orc.valor_fixo_contrato != null;
-        const totalCalc = temValorFixo
+        const subtotalCalc = temValorFixo
             ? Number(orc.valor_fixo_contrato)
             : (itens || []).reduce((s, i) => s + (i.preco_unitario || 0) * i.quantidade, 0);
+        const descontoCalc = Number(orc.desconto) || 0;
+        const totalCalc = Math.max(subtotalCalc - descontoCalc, 0);
 
         window._orcMap = window._orcMap || {};
         window._orcMap[orc.id] = {
@@ -843,6 +846,8 @@ async function carregarOrcamentos() {
             status: orc.status,
             observacoes: orc.observacoes_financeiro || '',
             itens: (itens || []).map(i => ({ nome: i.produtos_servicos ? i.produtos_servicos.nome : '', qtd: i.quantidade, preco: i.preco_unitario || 0 })),
+            subtotal: subtotalCalc,
+            desconto: descontoCalc,
             total: totalCalc,
             temValorFixo: temValorFixo,
             validade: orc.validade_proposta || '',
