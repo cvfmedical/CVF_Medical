@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   IconMinus,
   IconWindowMaximize,
@@ -18,19 +18,51 @@ interface ModalJanelaProps {
 }
 
 // Moldura de janela padrão de TODOS os modais do sistema: barra de título azul
-// com minimizar / maximizar / fechar (estilo Windows) + corpo rolável. Centraliza
-// o visual e o comportamento para não repetir em cada tela.
+// com minimizar / maximizar / fechar (estilo Windows), corpo rolável e ARRASTE
+// pela barra (clicar e mover a janela para tirar da frente do conteúdo atrás).
 export function ModalJanela({ titulo, aoFechar, aoMinimizar, larguraMax, children }: ModalJanelaProps) {
   const [maximizado, setMaximizado] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const arrasto = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+
+  function aoMover(e: MouseEvent) {
+    const a = arrasto.current;
+    if (!a) return;
+    setPos({ x: a.ox + (e.clientX - a.px), y: a.oy + (e.clientY - a.py) });
+  }
+
+  function aoSoltar() {
+    arrasto.current = null;
+    window.removeEventListener('mousemove', aoMover);
+    window.removeEventListener('mouseup', aoSoltar);
+  }
+
+  function aoPressionarBarra(e: React.MouseEvent) {
+    // Não arrasta quando maximizado nem ao clicar nos botões da janela.
+    if (maximizado) return;
+    if ((e.target as HTMLElement).closest('.janela-btn')) return;
+    arrasto.current = { px: e.clientX, py: e.clientY, ox: pos.x, oy: pos.y };
+    window.addEventListener('mousemove', aoMover);
+    window.addEventListener('mouseup', aoSoltar);
+    e.preventDefault();
+  }
 
   return (
     <div className="modal-fundo">
       <div
         className={`modal-card modal-card-janela${maximizado ? ' maximizado' : ''}`}
-        style={!maximizado && larguraMax ? { maxWidth: larguraMax } : undefined}
+        style={{
+          ...(maximizado ? {} : { transform: `translate(${pos.x}px, ${pos.y}px)` }),
+          ...(!maximizado && larguraMax ? { maxWidth: larguraMax } : {}),
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-titulo-barra" onDoubleClick={() => setMaximizado((m) => !m)}>
+        <div
+          className="modal-titulo-barra"
+          style={{ cursor: maximizado ? 'default' : 'move' }}
+          onMouseDown={aoPressionarBarra}
+          onDoubleClick={() => setMaximizado((m) => !m)}
+        >
           <h2>{titulo}</h2>
           <div className="modal-janela-botoes">
             {aoMinimizar && (

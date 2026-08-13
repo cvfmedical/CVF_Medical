@@ -572,6 +572,20 @@ export function OrcamentoFinanceiro() {
     if (!selecionadoId || !orcamentoSelecionado) return;
     setErro(null);
     setEnviando(true);
+    // Abre o Gmail JÁ (dentro do clique, antes das chamadas assíncronas, para
+    // não cair no bloqueador de pop-up) com texto padrão + e-mail do cliente.
+    // Os arquivos não podem ser anexados por link - o usuário anexa os PDFs
+    // gerados em "Imprimir (3 arquivos)", ou o cliente acessa pelo portal.
+    if (clienteQuery.data?.email) {
+      window.open(
+        linkEmail(
+          clienteQuery.data.email,
+          `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`,
+          mensagemCompartilhar(),
+        ),
+        '_blank',
+      );
+    }
     try {
       await persistirPrecosEObservacoes();
 
@@ -589,10 +603,6 @@ export function OrcamentoFinanceiro() {
         .from('ordens_servico')
         .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
         .eq('id', orcamentoSelecionado.ordem_servico_id);
-
-      // Ao confirmar o envio, gera os 3 documentos (Entrada, OS e Orçamento)
-      // para o financeiro salvar em PDF e anexar ao e-mail/WhatsApp do cliente.
-      await imprimirTresDocumentos();
 
       setSelecionadoId(null);
       setObservacoesFinanceiro('');

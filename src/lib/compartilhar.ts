@@ -17,6 +17,18 @@ export function linkWhatsApp(telefone: string | null | undefined, mensagem: stri
   return `https://wa.me/${comCodigoPais}?text=${encodeURIComponent(mensagem)}`;
 }
 
+// Abre o Gmail (compose web) já com destinatário/assunto/corpo preenchidos.
+// Usamos o Gmail em vez de mailto: porque mailto depende do app de e-mail
+// padrão do sistema (que às vezes não está configurado e abre em branco).
+// Obs.: nem o Gmail nem o mailto conseguem ANEXAR arquivos por link - o
+// usuário anexa os PDFs na mão (ou usa o portal, que já entrega os arquivos).
 export function linkEmail(email: string | null | undefined, assunto: string, corpo: string): string {
-  return `mailto:${email ?? ''}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+  const params = new URLSearchParams({
+    view: 'cm',
+    fs: '1',
+    to: email ?? '',
+    su: assunto,
+    body: corpo,
+  });
+  return `https://mail.google.com/mail/?${params.toString()}`;
 }
