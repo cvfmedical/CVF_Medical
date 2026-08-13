@@ -416,6 +416,25 @@ function formatarMoedaPortal(v) {
     return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Garantia e condições gerais - texto institucional fixo (igual ao do sistema).
+const GARANTIA_PORTAL = {
+    resumo: 'A CVF Medical garante os serviços de manutenção executados e as peças substituídas pelo prazo de 90 (noventa) dias, contados a partir da data de entrega do equipamento.',
+    intro: 'Para a validade da garantia, são condições indispensáveis:',
+    itens: [
+        'Que a falha decorra do serviço executado ou das peças substituídas pela CVF Medical, desde que não se constate mau uso.',
+        'Que o equipamento tenha sido utilizado conforme as instruções do fabricante.',
+        'Que sejam respeitadas as condições de uso, limpeza, esterilização e armazenamento indicadas para o equipamento.',
+        'Que a CVF Medical seja comunicada de imediato sobre qualquer falha, no prazo máximo de 2 (dois) dias a partir do recebimento do equipamento.',
+        'A garantia não cobre danos por mau uso, quedas, esterilização inadequada ou reparos por terceiros.',
+        'A garantia cobre a substituição das peças e a mão de obra dos técnicos. Custos de transporte e deslocamento não estão incluídos.',
+    ],
+};
+const CLAUSULAS_PORTAL = [
+    ['Confidencialidade e proteção de dados (LGPD)', 'As partes obrigam-se a manter sigilo sobre as informações a que tiverem acesso em razão deste orçamento e da prestação dos serviços, tratando eventuais dados pessoais em conformidade com a Lei nº 13.709/2018 (LGPD), exclusivamente para as finalidades necessárias à execução do serviço.'],
+    ['Limitação de responsabilidade', 'A CONTRATADA não responderá por perdas e danos, lucros cessantes, danos emergentes ou insucessos comerciais advindos de falhas havidas no serviço objeto deste orçamento.'],
+    ['Responsabilidade da CONTRATANTE', 'É de total responsabilidade da CONTRATANTE a relação profissional mantida com o profissional habilitado, respondendo por todos os encargos relativos à relação, bem como por toda a responsabilidade civil e criminal por eventuais danos causados a terceiros atendidos nos procedimentos que envolvam o objeto do presente orçamento.'],
+];
+
 function imprimirOrcamentoDoc(o) {
     const linhas = (o.itens || []).map(i =>
         `<tr><td>${i.nome}</td><td>${i.qtd}</td><td>${formatarMoedaPortal(i.preco)}</td><td>${formatarMoedaPortal(i.preco * i.qtd)}</td></tr>`).join('');
@@ -424,16 +443,28 @@ function imprimirOrcamentoDoc(o) {
         <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${o.validade || '-'}</div></div>
         <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${o.pagamento || '-'}</div></div>
         <div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${o.prazo || '-'}</div></div>` : '';
+    const garantia = `
+        <div class="secao">Garantia</div>
+        <p style="margin-bottom:4px;">${GARANTIA_PORTAL.resumo}</p>
+        <p style="font-size:12px;color:#5c5a54;margin:2px 0;">${GARANTIA_PORTAL.intro}</p>
+        <ol style="margin:0;padding-left:18px;font-size:12px;color:#5c5a54;line-height:1.5;">
+            ${GARANTIA_PORTAL.itens.map(i => `<li>${i}</li>`).join('')}
+        </ol>
+        <div class="secao">Condições gerais</div>
+        ${CLAUSULAS_PORTAL.map(c => `<p style="font-size:12px;color:#5c5a54;margin:0 0 6px;"><strong>${c[0]}.</strong> ${c[1]}</p>`).join('')}`;
     const corpo = `
         <h1>Orçamento de Manutenção</h1>
         <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor">${o.numero_orcamento}</div></div>
         <div class="linha"><div class="rotulo">Ordem de serviço</div><div class="valor">${o.numero_os || '-'}</div></div>
         <div class="linha"><div class="rotulo">Situação</div><div class="valor">${o.status}</div></div>
+        <div class="linha"><div class="rotulo">Enviado em</div><div class="valor">${formatarData(o.enviadoEm)}</div></div>
+        ${o.respostaEm ? `<div class="linha"><div class="rotulo">Respondido pelo cliente</div><div class="valor">${formatarData(o.respostaEm)}</div></div>` : ''}
         <div class="secao">Itens</div>
         <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
         ${o.temValorFixo ? `<p style="font-size:12px;color:#5c5a54;margin-top:6px;">Valor fechado por contrato — os preços dos itens acima são apenas de referência e não somam no total.</p>` : ''}
         <p style="text-align:right;font-weight:700;font-size:15px;margin-top:12px;">Total: ${formatarMoedaPortal(o.total)}</p>
         ${condicoes}
+        ${garantia}
         ${o.observacoes ? `<div class="secao">Observações</div><p>${o.observacoes}</p>` : ''}`;
     abrirDocumentoCVF('Orçamento ' + o.numero_orcamento, corpo);
 }
@@ -754,7 +785,7 @@ async function carregarOrcamentos() {
 
     const { data: orcamentos, error } = await supabaseClient
         .from('orcamentos')
-        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
+        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
         .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
         .order('data_envio', { ascending: false });
 
@@ -789,6 +820,8 @@ async function carregarOrcamentos() {
             validade: orc.validade_proposta || '',
             pagamento: orc.condicoes_pagamento || '',
             prazo: orc.prazo_entrega || '',
+            enviadoEm: orc.data_envio || '',
+            respostaEm: orc.data_resposta_cliente || '',
         };
         const total = window._orcMap[orc.id].total;
         const linhas = (itens || []).map(i => `<tr><td>${i.produtos_servicos ? i.produtos_servicos.nome : ''}</td><td>${i.quantidade}</td><td>${formatarMoedaPortal(i.preco_unitario || 0)}</td></tr>`).join('');
@@ -804,6 +837,9 @@ async function carregarOrcamentos() {
             </div>
             <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th></tr></thead><tbody>${linhas}</tbody></table>
             <p class="total">Total: ${formatarMoedaPortal(total)}</p>
+            <p style="font-size:12px; color:var(--texto-sec); margin-top:2px;">
+                Enviado em ${formatarData(orc.data_envio)}${orc.data_resposta_cliente ? ' · Respondido em ' + formatarData(orc.data_resposta_cliente) : ''}
+            </p>
             ${orc.observacoes_financeiro ? `<p style="font-size:13px; color:var(--texto-sec);">${orc.observacoes_financeiro}</p>` : ''}
             <div class="acoes">
                 <button class="secundario" data-imprimir-orc="${orc.id}">Imprimir orçamento</button>
