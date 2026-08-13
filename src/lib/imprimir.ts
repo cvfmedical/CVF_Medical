@@ -46,6 +46,31 @@ export function abrirImpressao(
     alert('Não foi possível abrir a janela de impressão (verifique o bloqueador de pop-ups).');
     return;
   }
+  escreverImpressao(janela, titulo, corpoHtml, links, opcoes);
+}
+
+// Abre uma janela em branco (usada quando é preciso reservar a janela DENTRO
+// do clique do usuário - ex.: gerar vários documentos de uma vez - para não
+// cair no bloqueador de pop-up antes de os dados assíncronos carregarem).
+export function abrirJanelaImpressao(): Window | null {
+  const janela = window.open('', '_blank', 'width=850,height=950');
+  if (janela) {
+    janela.document.write(
+      '<p style="font-family:sans-serif;padding:24px;color:#5c5a54">Gerando documento…</p>',
+    );
+  }
+  return janela;
+}
+
+// Escreve o relatório numa janela já aberta (nova ou reservada por
+// abrirJanelaImpressao). document.open() limpa qualquer placeholder anterior.
+export function escreverImpressao(
+  janela: Window,
+  titulo: string,
+  corpoHtml: string,
+  links?: LinksCompartilharImpressao,
+  opcoes?: OpcoesImpressao,
+) {
   const [assinaturaA, assinaturaB] = opcoes?.assinaturas ?? ASSINATURAS_PADRAO;
   const semAssinaturas = opcoes?.semAssinaturas ?? false;
   const anexoHtml = opcoes?.anexoHtml ?? '';
@@ -62,6 +87,7 @@ export function abrirImpressao(
     .filter(Boolean)
     .join(' &nbsp;•&nbsp; ');
 
+  janela.document.open();
   janela.document.write(`
     <!DOCTYPE html>
     <html lang="pt-BR">

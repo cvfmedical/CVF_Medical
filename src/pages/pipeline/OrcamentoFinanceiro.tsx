@@ -7,7 +7,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { urlAssinadaFoto } from '../../lib/storage';
-import { abrirImpressao } from '../../lib/imprimir';
+import { abrirJanelaImpressao, escreverImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
@@ -296,6 +296,29 @@ export function OrcamentoFinanceiro() {
     setPrecos(iniciais);
   }, [itensQuery.data]);
 
+  // Pré-seleciona automaticamente o preço fixo cujo modelo do catálogo bate com
+  // a ótica da OS - assim o financeiro (que nem sempre conhece o material) já
+  // vê o modelo identificado. Só deixa escolhido no seletor; aplicar ao total
+  // continua sendo uma ação manual (botão "Aplicar ao total").
+  useEffect(() => {
+    const lista = precosFixosQuery.data;
+    const os = orcamentoSelecionado?.ordens_servico;
+    if (!lista?.length || !os || precoFixoSelecionado || valorFixoContrato != null) return;
+    const alvo = `${os.optica_fab ?? ''} ${os.optica_desc ?? ''}`.toLowerCase();
+    const porFabModelo = lista.find((p) => {
+      const fab = (p.catalogo_oticas?.fabricante ?? '').toLowerCase();
+      const mod = (p.catalogo_oticas?.modelo ?? '').toLowerCase();
+      return fab && mod && alvo.includes(fab) && alvo.includes(mod);
+    });
+    const soFab = lista.filter((p) => {
+      const fab = (p.catalogo_oticas?.fabricante ?? '').toLowerCase();
+      return fab && alvo.includes(fab);
+    });
+    const match = porFabModelo ?? (soFab.length === 1 ? soFab[0] : undefined);
+    if (match) setPrecoFixoSelecionado(String(match.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [precosFixosQuery.data, orcamentoSelecionado]);
+
   const total =
     valorFixoContrato != null
       ? valorFixoContrato
@@ -446,30 +469,28 @@ export function OrcamentoFinanceiro() {
       </div>`;
   }
 
-  // Os 3 relatórios são DOCUMENTOS SEPARADOS - o cliente escolhe qual imprimir.
-  async function imprimirDocEntrada() {
+  // Um clique em "Imprimir" gera os 3 documentos SEPARADOS (Registro de
+  // Entrada, Ordem de Serviço e Orçamento), cada um em sua janela, para o
+  // usuário salvar 3 PDFs distintos e anexá-los ao e-mail/WhatsApp do cliente
+  // (o cliente então escolhe qual imprimir). As 3 janelas são abertas JÁ no
+  // clique (antes dos dados assíncronos) para não cair no bloqueador de pop-up.
+  async function imprimirTresDocumentos() {
     if (!orcamentoSelecionado) return;
-    const html = await buscarRegistroEntradaHtml();
-    // O Registro de Entrada já traz suas próprias assinaturas dentro do corpo.
-    abrirImpressao(`Registro de Entrada - ${orcamentoSelecionado.numero_orcamento}`, html, linksCompart(), {
-      semAssinaturas: true,
-    });
-  }
+    const jEntrada = abrirJanelaImpressao();
+    const jOS = abrirJanelaImpressao();
+    const jOrc = abrirJanelaImpressao();
+    if (!jEntrada || !jOS || !jOrc) {
+      alert('Libere os pop-ups deste site para gerar os 3 arquivos de uma vez.');
+      return;
+    }
+    const num = orcamentoSelecionado.numero_orcamento;
+    const numOS = orcamentoSelecionado.ordens_servico?.numero_os ?? num;
+    const [entradaHtml, osHtml] = await Promise.all([buscarRegistroEntradaHtml(), buscarRelatorioOSHtml()]);
 
-  async function imprimirDocOS() {
-    if (!orcamentoSelecionado) return;
-    const html = await buscarRelatorioOSHtml();
-    abrirImpressao(
-      `Ordem de Serviço - ${orcamentoSelecionado.ordens_servico?.numero_os ?? orcamentoSelecionado.numero_orcamento}`,
-      html,
-      linksCompart(),
-      { semAssinaturas: true },
-    );
-  }
-
-  function imprimirDocOrcamento() {
-    if (!orcamentoSelecionado) return;
-    abrirImpressao(`Orçamento ${orcamentoSelecionado.numero_orcamento}`, montarOrcamentoHtml(), linksCompart(), {
+    // Registro de Entrada já traz suas próprias assinaturas dentro do corpo.
+    escreverImpressao(jEntrada, `Registro de Entrada - ${num}`, entradaHtml, linksCompart(), { semAssinaturas: true });
+    escreverImpressao(jOS, `Ordem de Serviço - ${numOS}`, osHtml, linksCompart(), { semAssinaturas: true });
+    escreverImpressao(jOrc, `Orçamento ${num}`, montarOrcamentoHtml(), linksCompart(), {
       assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'],
       anexoHtml: anexarOrientacao ? montarCorpoOrientacaoEsterilizacao() : undefined,
     });
@@ -569,9 +590,9 @@ export function OrcamentoFinanceiro() {
         .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
         .eq('id', orcamentoSelecionado.ordem_servico_id);
 
-      // Ao confirmar o envio, abre o documento do Orçamento pra salvar/imprimir.
-      // Os outros dois (Entrada e OS) ficam nos botões separados e no portal.
-      imprimirDocOrcamento();
+      // Ao confirmar o envio, gera os 3 documentos (Entrada, OS e Orçamento)
+      // para o financeiro salvar em PDF e anexar ao e-mail/WhatsApp do cliente.
+      await imprimirTresDocumentos();
 
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
@@ -690,6 +711,27 @@ export function OrcamentoFinanceiro() {
           aoFechar={() => setSelecionadoId(null)}
           larguraMax={640}
         >
+            {orcamentoSelecionado.ordens_servico && (
+              <div
+                style={{
+                  background: 'var(--azul-cvf-12)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  marginBottom: 12,
+                  fontSize: 13,
+                }}
+              >
+                <strong>Ótica da OS {orcamentoSelecionado.ordens_servico.numero_os}:</strong>{' '}
+                {[orcamentoSelecionado.ordens_servico.optica_fab, orcamentoSelecionado.ordens_servico.optica_desc]
+                  .filter(Boolean)
+                  .join(' ') || '—'}
+                {orcamentoSelecionado.ordens_servico.optica_sn
+                  ? ` · Nº série ${orcamentoSelecionado.ordens_servico.optica_sn}`
+                  : ''}
+              </div>
+            )}
+
             {(precosFixosQuery.data ?? []).length > 0 && (
               <div
                 style={{
@@ -847,15 +889,12 @@ export function OrcamentoFinanceiro() {
 
             <div className="modal-acoes" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Imprimir:</span>
-                <button className="botao-secundario botao-pequeno" onClick={() => imprimirDocEntrada()}>
-                  Registro de Entrada
-                </button>
-                <button className="botao-secundario botao-pequeno" onClick={() => imprimirDocOS()}>
-                  Ordem de Serviço
-                </button>
-                <button className="botao-secundario botao-pequeno" onClick={() => imprimirDocOrcamento()}>
-                  Orçamento
+                <button
+                  className="botao-secundario"
+                  onClick={() => imprimirTresDocumentos()}
+                  title="Gera os 3 arquivos: Registro de Entrada, Ordem de Serviço e Orçamento"
+                >
+                  Imprimir (3 arquivos)
                 </button>
                 <button className="botao-secundario" onClick={() => compartilhar('whatsapp')}>
                   WhatsApp
