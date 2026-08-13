@@ -692,7 +692,7 @@ export function OrcamentoFinanceiro() {
         })),
       };
       const dadosEntrada = await buscarEntradaDados();
-      const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS);
+      const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, anexarOrientacao);
 
       const html = `<p>Olá!</p>
         <p>Segue o orçamento <strong>${orcamentoSelecionado.numero_orcamento}</strong> (OS ${os?.numero_os ?? '-'}) no valor de <strong>${formatarMoeda(total)}</strong>.</p>

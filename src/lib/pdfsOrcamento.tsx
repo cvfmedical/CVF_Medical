@@ -30,6 +30,11 @@ const s = StyleSheet.create({
   total: { textAlign: 'right', fontSize: 12, fontWeight: 700, marginTop: 8 },
   legal: { fontSize: 8.5, color: cinza, lineHeight: 1.4, marginBottom: 3 },
   rodape: { position: 'absolute', bottom: 24, left: 40, right: 40, borderTopWidth: 1, borderTopColor: borda, paddingTop: 6, fontSize: 7.5, color: azulEscuro, textAlign: 'center' },
+  item: { marginBottom: 3, lineHeight: 1.35 },
+  alerta: { backgroundColor: '#fbeee8', borderWidth: 1, borderColor: '#d99b7a', borderLeftWidth: 3, borderLeftColor: '#8a3b1a', borderRadius: 4, padding: 8, marginVertical: 8, color: '#8a3b1a', fontSize: 9 },
+  metTh: { flexDirection: 'row', backgroundColor: '#1b1d20', color: '#fff', paddingVertical: 3, paddingHorizontal: 5, fontSize: 8.5 },
+  metTd: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: borda, paddingVertical: 3, paddingHorizontal: 5, fontSize: 8.5 },
+  obs: { borderWidth: 1.5, borderColor: '#1b1d20', borderRadius: 6, padding: 8, marginTop: 12, fontSize: 8.5, lineHeight: 1.4 },
 });
 
 function Cabecalho({ titulo, subtitulo }: { titulo: string; subtitulo?: string }) {
@@ -207,6 +212,75 @@ function DocOS({ d }: { d: DadosOSPdf }) {
   );
 }
 
+// Orientação de manuseio/limpeza/esterilização (documento informativo fixo,
+// validado contra Karl Storz HOPKINS + RDC ANVISA 15/2012).
+function DocOrientacao() {
+  return (
+    <Document>
+      <Page size="A4" style={s.page}>
+        <Cabecalho titulo="Orientações de Manuseio, Limpeza e Esterilização de Ópticas Rígidas" />
+
+        <Text style={s.secao}>1 · Manuseio e transporte</Text>
+        <Text style={s.item}>• Sempre transportar a óptica na caixa de acomodação.</Text>
+        <Text style={s.item}>• Ao retirar ou acomodar a óptica, nunca pressionar o meio da cânula.</Text>
+        <Text style={s.item}>• A cânula tem 6 ou mais rod lens (2,70–2,77 mm); qualquer queda ou torção pode quebrar as lentes e embaçar a imagem.</Text>
+
+        <Text style={s.secao}>2 · Limpeza</Text>
+        <Text style={s.item}>1. Efetuar a limpeza com tecido macio.</Text>
+        <Text style={s.item}>2. Retirar o excesso dos produtos de limpeza com tecido umedecido em água (preferir destilada/deionizada).</Text>
+        <Text style={s.item}>3. Umedecer tecido macio em álcool 70% e passar em todas as superfícies (lente objetiva, janela da ocular e conector do cabo de fibra óptica). Secar com tecido absorvente.</Text>
+        <Text style={[s.legal, { marginTop: 2 }]}>Após muitas esterilizações (aprox. 10–20) pode haver depósito nas superfícies de vidro deixando a imagem turva; nesse caso encaminhe a óptica para manutenção.</Text>
+
+        <Text style={s.secao}>3 · Cuidados na esterilização</Text>
+        <Text style={s.item}>• Limpar e secar completamente a óptica antes de esterilizar.</Text>
+        <Text style={s.item}>• Acondicionar em bandeja/estojo apropriado; a óptica não deve encostar em metal durante o ciclo.</Text>
+        <Text style={s.item}>• Ao final do ciclo, deixar a óptica esfriar naturalmente.</Text>
+        <Text style={s.alerta}>✗ Nunca resfrie a óptica bruscamente (não mergulhe em líquido nem exponha ao ar frio logo após a autoclave). O choque térmico trinca as lentes.</Text>
+
+        <Text style={s.secao}>4 · Métodos recomendados</Text>
+        <View style={s.metTh}>
+          <Text style={{ flex: 1 }}>Tipo de óptica</Text>
+          <Text style={{ flex: 1 }}>Método</Text>
+          <Text style={{ flex: 1 }}>Ciclo</Text>
+          <Text style={{ flex: 1.2 }}>Parâmetros</Text>
+        </View>
+        <View style={s.metTd}>
+          <Text style={{ flex: 1 }}>AUTOCLAVÁVEL (marcada "AUTOCLAV" na ocular)</Text>
+          <Text style={{ flex: 1 }}>Vapor saturado (autoclave)</Text>
+          <Text style={{ flex: 1 }}>Pré-vácuo fracionado. Nunca ciclo flash / uso imediato</Text>
+          <Text style={{ flex: 1.2 }}>132–134 °C · ~4 min · ~2 bar (27 psi) · com secagem</Text>
+        </View>
+        <View style={s.metTd}>
+          <Text style={{ flex: 1 }}>NÃO autoclavável (sem a marcação "AUTOCLAV")</Text>
+          <Text style={{ flex: 1 }}>Óxido de etileno (EtO) ou peróxido de hidrogênio (STERRAD®/plasma)</Text>
+          <Text style={{ flex: 1 }}>Conforme as instruções de uso do fabricante</Text>
+          <Text style={{ flex: 1.2 }}>Segundo o equipamento de baixa temperatura</Text>
+        </View>
+        <Text style={s.alerta}>⚠ Verifique a marcação antes de autoclavar. Somente ópticas marcadas "AUTOCLAV" podem ir a vapor. Ópticas não autoclaváveis na autoclave sofrem dano irreparável. Na dúvida, use método de baixa temperatura.</Text>
+
+        <Text style={s.secao}>5 · Nunca</Text>
+        <Text style={s.item}>✗ Utilizar secadores ou sopradores térmicos.</Text>
+        <Text style={s.item}>✗ Utilizar palha de aço ou abrasivos.</Text>
+        <Text style={s.item}>✗ Utilizar instrumentos perfurocortantes para limpar as superfícies (principalmente a lente objetiva).</Text>
+        <Text style={s.item}>✗ Autoclavar óptica sem a marcação "AUTOCLAV".</Text>
+        <Text style={s.item}>✗ Usar ciclo de autoclave flash / de uso imediato.</Text>
+        <Text style={s.item}>✗ Resfriar a óptica bruscamente após o ciclo.</Text>
+
+        <Text style={s.secao}>6 · Referência</Text>
+        <Text style={[s.legal, { fontStyle: 'italic' }]}>"Steam sterilize only KARL STORZ telescopes marked 'AUTOCLAV'!"</Text>
+        <Text style={s.legal}>1. KARL STORZ SE &amp; Co. KG. HOPKINS® / HOPKINS® II Telescopes — Instruction Manual, seção "Cleaning, Disinfection and Sterilization" (pré-vácuo, 132–133 °C, 4,0 min, 27 psi; proibição de ciclo flash).</Text>
+        <Text style={s.legal}>2. BRASIL. ANVISA. RDC nº 15/2012 — boas práticas para o processamento de produtos para saúde (e demais normas em vigor).</Text>
+
+        <View style={s.obs}>
+          <Text style={{ fontWeight: 700, marginBottom: 3 }}>Observação importante</Text>
+          <Text>Este documento é uma orientação geral de referência, elaborada com base nas instruções de uso do fabricante, e não substitui as instruções de uso específicas de cada modelo de endoscópio. A validação, a execução e o controle dos processos de limpeza, desinfecção e esterilização são de responsabilidade do serviço de reprocessamento (CME) da instituição de saúde, que deve seguir as normas aplicáveis (RDC ANVISA nº 15/2012 e demais em vigor), as instruções de uso do fabricante e os protocolos internos do hospital. A CVF Medical não se responsabiliza por resultados decorrentes de processos executados fora dessas condições.</Text>
+        </View>
+        <Rodape />
+      </Page>
+    </Document>
+  );
+}
+
 async function blobParaBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
@@ -227,6 +301,7 @@ export async function gerarAnexosOrcamento(
   orcamento: DadosOrcamentoPdf,
   entrada: DadosEntradaPdf | null,
   os: DadosOSPdf,
+  incluirOrientacao = false,
 ): Promise<AnexoBase64[]> {
   const anexos: AnexoBase64[] = [];
   if (entrada) {
@@ -237,5 +312,9 @@ export async function gerarAnexosOrcamento(
   anexos.push({ filename: `Ordem-de-Servico-${os.numeroOS}.pdf`, content: await blobParaBase64(blobOS) });
   const blobOrc = await pdf(<DocOrcamento d={orcamento} />).toBlob();
   anexos.push({ filename: `Orcamento-${orcamento.numeroOrcamento}.pdf`, content: await blobParaBase64(blobOrc) });
+  if (incluirOrientacao) {
+    const blobOri = await pdf(<DocOrientacao />).toBlob();
+    anexos.push({ filename: 'Orientacao-de-Esterilizacao.pdf', content: await blobParaBase64(blobOri) });
+  }
   return anexos;
 }
