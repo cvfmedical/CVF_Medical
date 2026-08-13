@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal do Cliente CVF Medical — Guia de Uso</title>
+<style>
+  :root{ --azul:#344d95; --azul-esc:#26386c; --tinta:#21201c; --cinza:#5c5a54; --borda:#e4e1d8; --claro:#f5f7fb; }
+  *{ box-sizing:border-box; }
+  body{ font-family:'Segoe UI',Helvetica,Arial,sans-serif; color:var(--tinta); margin:0; background:#eef0f4; }
+  .folha{ max-width:820px; margin:0 auto; background:#fff; }
+  .cab{ display:flex; align-items:center; justify-content:space-between; padding:20px 40px; border-bottom:4px solid var(--azul); }
+  .cab .marca{ font-size:26px; font-weight:800; color:var(--azul); letter-spacing:1px; }
+  .cab .marca span{ color:#b3202e; }
+  .cab .slogan{ font-style:italic; color:var(--azul); font-size:14px; }
+  .corpo{ padding:28px 40px 8px; }
+  h1{ font-size:22px; color:var(--azul-esc); margin:0 0 4px; }
+  .sub{ color:var(--cinza); margin:0 0 22px; font-size:14px; }
+  h2{ font-size:15px; color:#fff; background:var(--azul); border-radius:6px; padding:7px 12px; margin:26px 0 12px; }
+  p{ line-height:1.55; margin:8px 0; }
+  ol.passos{ counter-reset:passo; list-style:none; padding:0; margin:0; }
+  ol.passos > li{ counter-increment:passo; position:relative; padding:2px 0 16px 46px; margin:0; }
+  ol.passos > li::before{ content:counter(passo); position:absolute; left:0; top:0; width:32px; height:32px; background:var(--azul); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; }
+  ol.passos > li strong{ color:var(--azul-esc); }
+  .dica{ background:var(--claro); border:1px solid var(--borda); border-left:4px solid var(--azul); border-radius:6px; padding:12px 16px; margin:14px 0; font-size:14px; }
+  .dica b{ color:var(--azul-esc); }
+  ul.limpa{ margin:6px 0; padding-left:20px; line-height:1.6; }
+  /* Fluxograma */
+  .fluxo{ display:flex; flex-direction:column; align-items:center; gap:0; margin:10px 0 20px; }
+  .fluxo .box{ width:78%; background:#fff; border:2px solid var(--azul); border-radius:8px; padding:10px 14px; text-align:center; }
+  .fluxo .box .t{ font-weight:700; color:var(--azul-esc); font-size:14px; }
+  .fluxo .box .d{ font-size:12.5px; color:var(--cinza); margin-top:2px; }
+  .fluxo .box.inicio{ background:var(--azul); border-color:var(--azul); }
+  .fluxo .box.inicio .t{ color:#fff; }
+  .fluxo .box.fim{ background:#1f7a4d; border-color:#1f7a4d; }
+  .fluxo .box.fim .t{ color:#fff; }
+  .fluxo .seta{ width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-top:12px solid var(--azul); margin:6px 0; }
+  .rodape{ padding:16px 40px 22px; border-top:1px solid var(--borda); font-size:11px; color:var(--azul-esc); text-align:center; line-height:1.5; margin-top:20px; }
+  .rodape b{ color:var(--azul); }
+  .imprimir{ max-width:820px; margin:14px auto 0; padding:0 8px; }
+  .imprimir button{ background:var(--azul); color:#fff; border:none; padding:10px 20px; border-radius:6px; font-size:14px; cursor:pointer; }
+  @media print{
+    body{ background:#fff; }
+    .imprimir{ display:none; }
+    .cab{ padding:14px 30px; }
+    .corpo{ padding:14px 30px; }
+    h2{ break-after:avoid; }
+    ol.passos > li, .fluxo{ break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="imprimir"><button onclick="window.print()">Imprimir / Salvar em PDF</button></div>
+<div class="folha">
+  <div class="cab">
+    <div class="marca">C<span>V</span>F <small style="font-size:13px;color:var(--cinza);font-weight:600;">MEDICAL</small></div>
+    <div class="slogan">Sua imagem, nossa visão.</div>
+  </div>
+  <div class="corpo">
+    <h1>Portal do Cliente — Guia de Uso</h1>
+    <p class="sub">Como fazer seu primeiro acesso e acompanhar seus equipamentos, orçamentos e documentos.</p>
+
+    <p>O <b>Portal do Cliente da CVF Medical</b> é onde você acompanha, de forma segura e a qualquer hora, tudo o que acontece com seus equipamentos em manutenção: registro de entrada, laudo de peças, orçamentos (com aprovação online), laudos técnicos e o termo de entrega.</p>
+    <p><b>Endereço:</b> https://portal.cvfmedical.com.br</p>
+
+    <h2>Parte 1 — Primeiro acesso (criar seu cadastro)</h2>
+    <ol class="passos">
+      <li>Acesse <strong>https://portal.cvfmedical.com.br</strong> pelo navegador (celular ou computador).</li>
+      <li>Na tela de login, clique em <strong>“Primeiro acesso? Criar cadastro”</strong>.</li>
+      <li>Informe <strong>o mesmo e-mail</strong> que você forneceu à CVF Medical (é por ele que o sistema reconhece seus equipamentos).</li>
+      <li>Crie uma <strong>senha</strong> (mínimo 6 caracteres) e confirme. Use o “olhinho” 👁 para conferir o que digitou.</li>
+      <li>Clique em <strong>“Criar cadastro”</strong>. Pronto — seu acesso está criado.</li>
+    </ol>
+    <div class="dica"><b>Importante:</b> se o e-mail digitado não for o mesmo que está no cadastro da CVF, o portal não encontrará seus equipamentos. Em caso de dúvida, fale com a CVF pelo WhatsApp (16) 99757-7587.</div>
+
+    <h2>Parte 2 — Entrar no portal</h2>
+    <ol class="passos">
+      <li>Na tela de login, digite seu <strong>e-mail</strong> e sua <strong>senha</strong>.</li>
+      <li>Clique em <strong>“Entrar”</strong>.</li>
+    </ol>
+
+    <h2>Parte 3 — O que você encontra no portal</h2>
+    <ul class="limpa">
+      <li><b>Documentos e orientações</b> — materiais de apoio (ex.: orientação de esterilização).</li>
+      <li><b>Orçamentos</b> — cada orçamento com itens, condições e total; aqui você <b>aprova ou recusa</b>.</li>
+      <li><b>Entradas de equipamento</b> — o registro de quando o equipamento chegou à CVF, com fotos.</li>
+      <li><b>Laudo de peças danificadas</b> — as peças e avarias identificadas pela equipe técnica, com imagens.</li>
+      <li><b>Laudos</b> — laudos técnicos em PDF para download.</li>
+      <li><b>Termo de entrega</b> — o comprovante da devolução do equipamento, para você confirmar o recebimento.</li>
+    </ul>
+
+    <h2>Parte 4 — Aprovar (ou recusar) um orçamento</h2>
+    <ol class="passos">
+      <li>Abra a seção <strong>“Orçamentos aguardando sua aprovação”</strong>.</li>
+      <li>Confira os itens, o total e as condições. Use <strong>“Imprimir orçamento”</strong> se quiser salvar em PDF.</li>
+      <li>Clique em <strong>“Aprovar orçamento”</strong> para autorizar o serviço, ou <strong>“Recusar orçamento”</strong>.</li>
+      <li>A CVF recebe sua resposta <strong>na hora</strong> e dá andamento ao serviço.</li>
+    </ol>
+
+    <h2>Parte 5 — Confirmar o recebimento (termo de entrega)</h2>
+    <ol class="passos">
+      <li>Quando o equipamento for devolvido, o <strong>“Termo de entrega”</strong> aparece no portal.</li>
+      <li>Leia o documento e clique em <strong>“Li o documento e confirmo o recebimento”</strong>.</li>
+      <li>A confirmação fica registrada com <strong>data e hora</strong>, e a CVF é avisada automaticamente.</li>
+    </ol>
+
+    <h2>Fluxograma — do orçamento à entrega</h2>
+    <div class="fluxo">
+      <div class="box inicio"><div class="t">Você recebe um e-mail da CVF</div><div class="d">com o orçamento e os documentos em anexo</div></div>
+      <div class="seta"></div>
+      <div class="box"><div class="t">Acessa o portal</div><div class="d">primeiro acesso: “Criar cadastro” com o mesmo e-mail</div></div>
+      <div class="seta"></div>
+      <div class="box"><div class="t">Analisa o orçamento</div><div class="d">itens, condições e total</div></div>
+      <div class="seta"></div>
+      <div class="box"><div class="t">Aprova ou recusa</div><div class="d">a CVF é avisada na hora</div></div>
+      <div class="seta"></div>
+      <div class="box"><div class="t">Acompanha o serviço</div><div class="d">entradas, laudo de peças e laudos técnicos</div></div>
+      <div class="seta"></div>
+      <div class="box"><div class="t">Recebe o equipamento</div><div class="d">termo de entrega disponível no portal</div></div>
+      <div class="seta"></div>
+      <div class="box fim"><div class="t">Confirma o recebimento</div><div class="d">registrado com data e hora</div></div>
+    </div>
+
+    <div class="dica"><b>Precisa de ajuda?</b> Fale com a CVF Medical pelo WhatsApp <b>(16) 99757-7587</b> ou pelo e-mail <b>cvfmedical@cvfmedical.com.br</b>.</div>
+  </div>
+  <div class="rodape">
+    <b>CVF MEDICAL MANUTENÇÃO EM EQUIPAMENTOS CIRÚRGICOS LTDA</b> &nbsp;•&nbsp; CNPJ: 46.948.692/0001-03<br>
+    Rua Sete de Setembro, 1929 - Ribeirão Preto/SP - CEP 14.025-384<br>
+    Tel. / WhatsApp: (16) 99757-7587 &nbsp;•&nbsp; E-mail: cvfmedical@cvfmedical.com.br
+  </div>
+</div>
+</body>
+</html>
