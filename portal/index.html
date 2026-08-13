@@ -316,45 +316,56 @@
             <div id="lista-orcamentos-historico" style="display:none;"></div>
         </div>
 
-        <h2 class="secao">Entradas de equipamento</h2>
-        <div id="lista-entradas"></div>
-        <div id="vazio-entradas" class="vazio" style="display:none;">Nenhuma entrada registrada.</div>
+        <h2 class="secao" id="titulo-entradas">Entradas de equipamento</h2>
+        <div id="conteudo-entradas">
+            <div id="lista-entradas"></div>
+            <div id="vazio-entradas" class="vazio" style="display:none;">Nenhuma entrada registrada.</div>
+        </div>
 
-        <h2 class="secao">Ordens de serviço — laudo de peças danificadas</h2>
-        <p style="color:var(--texto-sec); font-size:13px; margin:-4px 0 10px;">Clique em "Ver laudo" para ver as peças e avarias identificadas, com as fotos.</p>
-        <table>
-            <thead>
-                <tr>
-                    <th>Nº OS</th>
-                    <th>Equipamento</th>
-                    <th>Status</th>
-                    <th>Abertura</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="corpo-tabela"></tbody>
-        </table>
-        <div id="vazio" class="vazio" style="display:none;">Nenhuma Ordem de Serviço encontrada.</div>
+        <h2 class="secao" id="titulo-os">Ordens de serviço — laudo de peças danificadas</h2>
+        <div id="conteudo-os">
+            <p style="color:var(--texto-sec); font-size:13px; margin:-4px 0 10px;">Clique em "Ver laudo" para ver as peças e avarias identificadas, com as fotos.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nº OS</th>
+                        <th>Equipamento</th>
+                        <th>Status</th>
+                        <th>Abertura</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="corpo-tabela"></tbody>
+            </table>
+            <div id="vazio" class="vazio" style="display:none;">Nenhuma Ordem de Serviço encontrada.</div>
+        </div>
 
-        <h2 class="secao">Laudos</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Nº laudo</th>
-                    <th>OS</th>
-                    <th>Etapa</th>
-                    <th>Resultado</th>
-                    <th>Emissão</th>
-                    <th>PDF</th>
-                </tr>
-            </thead>
-            <tbody id="corpo-laudos"></tbody>
-        </table>
-        <div id="vazio-laudos" class="vazio" style="display:none;">Nenhum laudo disponível.</div>
+        <h2 class="secao" id="titulo-laudos">Laudos</h2>
+        <div id="conteudo-laudos">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nº laudo</th>
+                        <th>OS</th>
+                        <th>Etapa</th>
+                        <th>Resultado</th>
+                        <th>Emissão</th>
+                        <th>PDF</th>
+                    </tr>
+                </thead>
+                <tbody id="corpo-laudos"></tbody>
+            </table>
+            <div id="vazio-laudos" class="vazio" style="display:none;">Nenhum laudo disponível.</div>
+        </div>
 
-        <h2 class="secao">Termo de entrega</h2>
+        <h2 class="secao" id="titulo-termos-pend">Termo de entrega — aguardando sua confirmação</h2>
         <div id="lista-termos"></div>
-        <div id="vazio-termos" class="vazio" style="display:none;">Nenhuma entrega registrada.</div>
+        <div id="vazio-termos" class="vazio" style="display:none;">Nenhuma entrega aguardando confirmação.</div>
+
+        <div id="bloco-termos-hist" style="display:none;">
+            <h2 class="secao" id="titulo-termos-hist" style="cursor:pointer; user-select:none;">▸ Histórico de entregas</h2>
+            <div id="lista-termos-hist" style="display:none;"></div>
+        </div>
         </div>
     </div>
 </main>
@@ -383,6 +394,25 @@ async function notificarCVF(assunto, html) {
     } catch (e) {
         console.warn('Falha ao notificar a CVF:', e);
     }
+}
+
+// Torna uma seção recolhível com contador no título (▸/▾ Rótulo (N)). O
+// estado aberto/fechado persiste entre recargas (window._secoesAbertas).
+window._secoesAbertas = window._secoesAbertas || {};
+function configurarRecolhivel(idHeader, idConteudo, rotulo, count, chave, abertoPadrao) {
+    const header = document.getElementById(idHeader);
+    const conteudo = document.getElementById(idConteudo);
+    if (!header || !conteudo) return;
+    if (!(chave in window._secoesAbertas)) window._secoesAbertas[chave] = !!abertoPadrao;
+    header.style.cursor = 'pointer';
+    header.style.userSelect = 'none';
+    const render = () => {
+        const aberto = window._secoesAbertas[chave];
+        header.innerHTML = (aberto ? '▾' : '▸') + ' ' + rotulo + ' (' + count + ')';
+        conteudo.style.display = aberto ? 'block' : 'none';
+    };
+    header.onclick = () => { window._secoesAbertas[chave] = !window._secoesAbertas[chave]; render(); };
+    render();
 }
 
 // Olhinho: mostra/oculta a senha do campo dentro do mesmo .campo-senha.
@@ -692,12 +722,9 @@ async function carregarOrdens() {
     const vazio = document.getElementById('vazio');
     corpo.innerHTML = '';
 
-    if (error || !ordens || ordens.length === 0) {
-        vazio.style.display = 'block';
-        return;
-    }
-    vazio.style.display = 'none';
-    ordens.forEach(os => {
+    const lista = error ? [] : (ordens || []);
+    vazio.style.display = lista.length === 0 ? 'block' : 'none';
+    lista.forEach(os => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${os.numero_os}</td>
@@ -712,6 +739,7 @@ async function carregarOrdens() {
     });
     corpo.querySelectorAll('[data-imprimir-os]').forEach(btn =>
         btn.addEventListener('click', () => imprimirOSDoc(window._osMap[btn.getAttribute('data-imprimir-os')])));
+    configurarRecolhivel('titulo-os', 'conteudo-os', 'Ordens de serviço — laudo de peças danificadas', lista.length, 'os', false);
 }
 
 async function urlAssinada(caminho) {
@@ -736,13 +764,10 @@ async function carregarLaudos() {
         .select('numero_laudo, etapa, resultado, data_emissao, storage_path, ordens_servico(numero_os)')
         .order('data_emissao', { ascending: false });
 
-    if (error || !laudos || laudos.length === 0) {
-        vazio.style.display = 'block';
-        return;
-    }
-    vazio.style.display = 'none';
+    const lista = error ? [] : (laudos || []);
+    vazio.style.display = lista.length === 0 ? 'block' : 'none';
 
-    for (const l of laudos) {
+    for (const l of lista) {
         const tr = document.createElement('tr');
         const badge = l.resultado === 'Aprovado' ? 'badge-aprovado' : l.resultado === 'Reprovado' ? 'badge-recusado' : 'badge-andamento';
         let pdfCel = '-';
@@ -760,6 +785,7 @@ async function carregarLaudos() {
         `;
         corpo.appendChild(tr);
     }
+    configurarRecolhivel('titulo-laudos', 'conteudo-laudos', 'Laudos', lista.length, 'laudos', false);
 }
 
 async function carregarEntradas() {
@@ -772,13 +798,10 @@ async function carregarEntradas() {
         .select('id, codigo_entrada, equipamento_desc, equipamento_fab, equipamento_sn, defeito_relatado, condicao_chegada, status, data_entrada, nf_remessa_numero, nf_remessa_serie, nf_remessa_data_emissao, triagem_avarias')
         .order('data_entrada', { ascending: false });
 
-    if (error || !entradas || entradas.length === 0) {
-        vazio.style.display = 'block';
-        return;
-    }
-    vazio.style.display = 'none';
+    const listaEnt = error ? [] : (entradas || []);
+    vazio.style.display = listaEnt.length === 0 ? 'block' : 'none';
 
-    for (const entrada of entradas) {
+    for (const entrada of listaEnt) {
         const { data: fotos } = await supabaseClient
             .from('fotos_entrada')
             .select('storage_path, descricao')
@@ -810,6 +833,7 @@ async function carregarEntradas() {
     container.querySelectorAll('[data-imprimir-ent]').forEach(btn => {
         btn.addEventListener('click', () => imprimirEntradaDoc(window._entMap[btn.getAttribute('data-imprimir-ent')]));
     });
+    configurarRecolhivel('titulo-entradas', 'conteudo-entradas', 'Entradas de equipamento', listaEnt.length, 'entradas', false);
 }
 
 async function carregarOrcamentos() {
@@ -952,23 +976,24 @@ async function responderOrcamento(orcamentoId, novoStatus) {
 }
 
 async function carregarTermos() {
-    const container = document.getElementById('lista-termos');
+    const contPend = document.getElementById('lista-termos');
+    const contHist = document.getElementById('lista-termos-hist');
     const vazio = document.getElementById('vazio-termos');
-    container.innerHTML = '';
+    const blocoHist = document.getElementById('bloco-termos-hist');
+    const tituloPend = document.getElementById('titulo-termos-pend');
+    contPend.innerHTML = '';
+    contHist.innerHTML = '';
 
     const { data: entregas, error } = await supabaseClient
         .from('entregas')
         .select('id, forma_devolucao, detalhes, data_entrega, nf_devolucao_numero, confirmado_pelo_cliente_em, ordens_servico(numero_os, optica_desc, optica_fab, optica_sn)')
         .order('id', { ascending: false });
 
-    if (error || !entregas || entregas.length === 0) {
-        vazio.style.display = 'block';
-        return;
-    }
-    vazio.style.display = 'none';
-    window._entregas = entregas;
+    const lista = error ? [] : (entregas || []);
+    window._entregas = lista;
 
-    entregas.forEach(e => {
+    let nPend = 0, nHist = 0;
+    lista.forEach(e => {
         const os = e.ordens_servico || {};
         const conf = e.confirmado_pelo_cliente_em;
         const card = document.createElement('div');
@@ -987,14 +1012,25 @@ async function carregarTermos() {
                     ? `<span style="color:#15803d; font-weight:600;">✓ Confirmado em ${formatarData(conf)}</span>`
                     : `<button class="primario" data-confirmar="${e.id}">Li o documento e confirmo o recebimento</button>`}
             </div>`;
-        container.appendChild(card);
+        if (conf) { contHist.appendChild(card); nHist++; }
+        else { contPend.appendChild(card); nPend++; }
     });
 
-    container.querySelectorAll('[data-termo]').forEach(b => b.addEventListener('click', () => {
+    tituloPend.textContent = 'Termo de entrega — aguardando sua confirmação' + (nPend ? ' (' + nPend + ')' : '');
+    vazio.style.display = nPend === 0 ? 'block' : 'none';
+
+    if (nHist > 0) {
+        blocoHist.style.display = 'block';
+        configurarRecolhivel('titulo-termos-hist', 'lista-termos-hist', 'Histórico de entregas', nHist, 'termos-hist', false);
+    } else {
+        blocoHist.style.display = 'none';
+    }
+
+    document.querySelectorAll('[data-termo]').forEach(b => b.addEventListener('click', () => {
         const ent = (window._entregas || []).find(x => String(x.id) === b.getAttribute('data-termo'));
         if (ent) abrirTermoEntrega(ent);
     }));
-    container.querySelectorAll('[data-confirmar]').forEach(b => b.addEventListener('click', () => confirmarEntrega(b.getAttribute('data-confirmar'))));
+    document.querySelectorAll('[data-confirmar]').forEach(b => b.addEventListener('click', () => confirmarEntrega(b.getAttribute('data-confirmar'))));
 }
 
 function abrirTermoEntrega(e) {
