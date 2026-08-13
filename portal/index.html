@@ -469,10 +469,29 @@ function imprimirOrcamentoDoc(o) {
     abrirDocumentoCVF('Orçamento ' + o.numero_orcamento, corpo);
 }
 
+// Rótulos das avarias da triagem (espelha CHECKLIST_AVARIAS do sistema).
+const AVARIAS_PORTAL = {
+    tubo_amassado: 'Tubo de inox amassado / deformado',
+    cristal_trincado: 'Lente distal / cristal trincado ou riscado',
+    fibra_queimada: 'Guia de luz / fibras com queimaduras',
+    ocular_solta: 'Ocular / acoplador com folga ou danificado',
+    umidade_interna: 'Infiltração de umidade / fungos visíveis',
+};
+
 function imprimirEntradaDoc(e) {
     const fotos = (e.fotosUrls && e.fotosUrls.length)
         ? `<div class="secao">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px;">${e.fotosUrls.map(u => `<img src="${u}" style="max-width:200px;max-height:200px;border:1px solid #e4e1d8;border-radius:4px;">`).join('')}</div>`
         : '';
+    const temNf = e.nf_remessa_numero || e.nf_remessa_serie;
+    const nf = temNf ? `
+        <div class="secao">Nota fiscal de remessa</div>
+        <div class="linha"><div class="rotulo">Número / Série</div><div class="valor">${e.nf_remessa_numero || '-'} / ${e.nf_remessa_serie || '-'}</div></div>
+        ${e.nf_remessa_data_emissao ? `<div class="linha"><div class="rotulo">Emissão</div><div class="valor">${formatarData(e.nf_remessa_data_emissao)}</div></div>` : ''}` : '';
+    const av = e.triagem_avarias || {};
+    const listaAv = Object.keys(AVARIAS_PORTAL).filter(k => av[k]).map(k => AVARIAS_PORTAL[k]);
+    const avarias = `
+        <div class="secao">Avarias identificadas na triagem</div>
+        ${listaAv.length ? `<ul style="margin:0;padding-left:18px;line-height:1.6;">${listaAv.map(l => `<li>${l}</li>`).join('')}</ul>` : '<p style="color:#5c5a54;">Nenhuma avaria marcada.</p>'}`;
     const corpo = `
         <h1>Registro de Entrada</h1>
         <div class="linha"><div class="rotulo">Código</div><div class="valor">${e.codigo_entrada || '-'}</div></div>
@@ -481,6 +500,8 @@ function imprimirEntradaDoc(e) {
         <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${e.defeito_relatado || '-'}</div></div>
         <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${e.condicao_chegada || '-'}</div></div>
         <div class="linha"><div class="rotulo">Recebido em</div><div class="valor">${formatarData(e.data_entrada)}</div></div>
+        ${nf}
+        ${avarias}
         ${fotos}`;
     abrirDocumentoCVF('Registro de Entrada ' + (e.codigo_entrada || ''), corpo);
 }
@@ -739,7 +760,7 @@ async function carregarEntradas() {
 
     const { data: entradas, error } = await supabaseClient
         .from('entradas_equipamento')
-        .select('id, codigo_entrada, equipamento_desc, equipamento_fab, equipamento_sn, defeito_relatado, condicao_chegada, status, data_entrada')
+        .select('id, codigo_entrada, equipamento_desc, equipamento_fab, equipamento_sn, defeito_relatado, condicao_chegada, status, data_entrada, nf_remessa_numero, nf_remessa_serie, nf_remessa_data_emissao, triagem_avarias')
         .order('data_entrada', { ascending: false });
 
     if (error || !entradas || entradas.length === 0) {
