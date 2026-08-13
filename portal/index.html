@@ -470,6 +470,9 @@ function imprimirOrcamentoDoc(o) {
 }
 
 function imprimirEntradaDoc(e) {
+    const fotos = (e.fotosUrls && e.fotosUrls.length)
+        ? `<div class="secao">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px;">${e.fotosUrls.map(u => `<img src="${u}" style="max-width:200px;max-height:200px;border:1px solid #e4e1d8;border-radius:4px;">`).join('')}</div>`
+        : '';
     const corpo = `
         <h1>Registro de Entrada</h1>
         <div class="linha"><div class="rotulo">Código</div><div class="valor">${e.codigo_entrada || '-'}</div></div>
@@ -477,7 +480,8 @@ function imprimirEntradaDoc(e) {
         <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${e.equipamento_sn || '-'}</div></div>
         <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${e.defeito_relatado || '-'}</div></div>
         <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${e.condicao_chegada || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Recebido em</div><div class="valor">${formatarData(e.data_entrada)}</div></div>`;
+        <div class="linha"><div class="rotulo">Recebido em</div><div class="valor">${formatarData(e.data_entrada)}</div></div>
+        ${fotos}`;
     abrirDocumentoCVF('Registro de Entrada ' + (e.codigo_entrada || ''), corpo);
 }
 
@@ -750,11 +754,11 @@ async function carregarEntradas() {
             .select('storage_path, descricao')
             .eq('entrada_id', entrada.id);
 
-        let fotosHtml = '';
+        let fotosUrls = [];
         if (fotos && fotos.length > 0) {
-            const urls = await Promise.all(fotos.map(f => urlAssinada(f.storage_path)));
-            fotosHtml = `<div class="fotos-entrada">${urls.filter(Boolean).map(u => `<img src="${u}">`).join('')}</div>`;
+            fotosUrls = (await Promise.all(fotos.map(f => urlAssinada(f.storage_path)))).filter(Boolean);
         }
+        const fotosHtml = fotosUrls.length ? `<div class="fotos-entrada">${fotosUrls.map(u => `<img src="${u}">`).join('')}</div>` : '';
 
         const card = document.createElement('div');
         card.className = 'card-entrada';
@@ -770,7 +774,7 @@ async function carregarEntradas() {
             <div style="margin-top:12px;"><button class="secundario" data-imprimir-ent="${entrada.id}">Imprimir registro de entrada</button></div>
         `;
         window._entMap = window._entMap || {};
-        window._entMap[entrada.id] = entrada;
+        window._entMap[entrada.id] = { ...entrada, fotosUrls };
         container.appendChild(card);
     }
     container.querySelectorAll('[data-imprimir-ent]').forEach(btn => {
