@@ -367,6 +367,16 @@ const SUPABASE_ANON_KEY = "sb_publishable_QVIEwDHz2LkLihA2BZrhHA_9zxLaOEA";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Envia um e-mail de registro para a CVF (aprovação, recusa, confirmação de
+// termo). Fire-and-forget: uma falha aqui não trava a ação do cliente.
+async function notificarCVF(assunto, html) {
+    try {
+        await supabaseClient.functions.invoke('notificar-cvf', { body: { assunto, html } });
+    } catch (e) {
+        console.warn('Falha ao notificar a CVF:', e);
+    }
+}
+
 // Olhinho: mostra/oculta a senha do campo dentro do mesmo .campo-senha.
 function alternarSenha(btn) {
     const inp = btn.parentElement.querySelector('input');
@@ -830,6 +840,20 @@ async function responderOrcamento(orcamentoId, novoStatus) {
         alert('Não foi possível registrar sua resposta. Tente novamente.');
         return;
     }
+
+    // Registro documental para a CVF (e-mail de confirmação da resposta).
+    const info = window._orcMap[orcamentoId] || {};
+    notificarCVF(
+        `Portal: orçamento ${info.numero_orcamento || orcamentoId} ${novoStatus === 'Aprovado' ? 'APROVADO' : 'RECUSADO'} pelo cliente`,
+        `<p>O cliente <strong>${novoStatus === 'Aprovado' ? 'APROVOU' : 'RECUSOU'}</strong> o orçamento pelo portal do cliente.</p>
+         <ul>
+           <li><strong>Orçamento:</strong> ${info.numero_orcamento || '-'}</li>
+           <li><strong>OS:</strong> ${info.numero_os || '-'}</li>
+           <li><strong>Total:</strong> ${formatarMoedaPortal(info.total || 0)}</li>
+           <li><strong>Data/hora:</strong> ${new Date().toLocaleString('pt-BR')}</li>
+         </ul>`
+    );
+
     await carregarOrcamentos();
 }
 
@@ -906,6 +930,21 @@ async function confirmarEntrega(id) {
         alert('Não foi possível registrar a confirmação. Recarregue a página e tente novamente.');
         return;
     }
+
+    // Registro documental para a CVF (e-mail de confirmação do recebimento).
+    const ent = (window._entregas || []).find(e => String(e.id) === String(id));
+    const os = ent && ent.ordens_servico ? ent.ordens_servico : {};
+    notificarCVF(
+        `Portal: termo de entrega CONFIRMADO pelo cliente (OS ${os.numero_os || id})`,
+        `<p>O cliente <strong>confirmou o recebimento</strong> do(s) equipamento(s) pelo portal do cliente.</p>
+         <ul>
+           <li><strong>OS:</strong> ${os.numero_os || '-'}</li>
+           <li><strong>Equipamento:</strong> ${(os.optica_desc || '-')}${os.optica_fab ? ' (' + os.optica_fab + ')' : ''}</li>
+           <li><strong>Nº de série:</strong> ${os.optica_sn || '-'}</li>
+           <li><strong>Data/hora da confirmação:</strong> ${new Date().toLocaleString('pt-BR')}</li>
+         </ul>`
+    );
+
     await carregarTermos();
 }
 
