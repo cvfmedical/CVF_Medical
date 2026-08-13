@@ -307,9 +307,14 @@
         <h2 class="secao">Documentos e orientações</h2>
         <button class="primario" id="btn-orientacao">Baixar orientação de esterilização</button>
 
-        <h2 class="secao">Orçamentos aguardando sua aprovação</h2>
+        <h2 class="secao" id="titulo-orc-pendentes">Orçamentos aguardando sua aprovação</h2>
         <div id="lista-orcamentos"></div>
         <div id="vazio-orcamentos" class="vazio" style="display:none;">Nenhum orçamento aguardando aprovação.</div>
+
+        <div id="bloco-historico-orc" style="display:none;">
+            <h2 class="secao" id="titulo-orc-historico" style="cursor:pointer; user-select:none;"><span id="seta-historico">▸</span> Histórico de orçamentos</h2>
+            <div id="lista-orcamentos-historico" style="display:none;"></div>
+        </div>
 
         <h2 class="secao">Entradas de equipamento</h2>
         <div id="lista-entradas"></div>
@@ -808,9 +813,14 @@ async function carregarEntradas() {
 }
 
 async function carregarOrcamentos() {
-    const container = document.getElementById('lista-orcamentos');
+    const contPend = document.getElementById('lista-orcamentos');
+    const contHist = document.getElementById('lista-orcamentos-historico');
     const vazio = document.getElementById('vazio-orcamentos');
-    container.innerHTML = '';
+    const blocoHist = document.getElementById('bloco-historico-orc');
+    const tituloPend = document.getElementById('titulo-orc-pendentes');
+    const tituloHist = document.getElementById('titulo-orc-historico');
+    contPend.innerHTML = '';
+    contHist.innerHTML = '';
 
     const { data: orcamentos, error } = await supabaseClient
         .from('orcamentos')
@@ -818,13 +828,8 @@ async function carregarOrcamentos() {
         .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
         .order('data_envio', { ascending: false });
 
-    if (error || !orcamentos || orcamentos.length === 0) {
-        vazio.style.display = 'block';
-        return;
-    }
-    vazio.style.display = 'none';
-
-    for (const orc of orcamentos) {
+    let nPend = 0, nHist = 0;
+    for (const orc of (orcamentos || [])) {
         const { data: itens } = await supabaseClient
             .from('orcamento_itens')
             .select('quantidade, preco_unitario, observacao, produtos_servicos(nome)')
@@ -882,16 +887,36 @@ async function carregarOrcamentos() {
                 ` : ''}
             </div>
         `;
-        container.appendChild(card);
+        if (orc.status === 'Enviado ao Cliente') { contPend.appendChild(card); nPend++; }
+        else { contHist.appendChild(card); nHist++; }
     }
 
-    container.querySelectorAll('[data-imprimir-orc]').forEach(btn => {
+    // Pendentes (com contador) e vazio.
+    tituloPend.textContent = 'Orçamentos aguardando sua aprovação' + (nPend ? ' (' + nPend + ')' : '');
+    vazio.style.display = nPend === 0 ? 'block' : 'none';
+
+    // Histórico (aprovados/recusados): recolhível, começa fechado.
+    if (nHist > 0) {
+        blocoHist.style.display = 'block';
+        tituloHist.innerHTML = '<span id="seta-historico">' + (window._histAberto ? '▾' : '▸') + '</span> Histórico de orçamentos (' + nHist + ')';
+        contHist.style.display = window._histAberto ? 'block' : 'none';
+        tituloHist.onclick = () => {
+            window._histAberto = !window._histAberto;
+            contHist.style.display = window._histAberto ? 'block' : 'none';
+            const seta = document.getElementById('seta-historico');
+            if (seta) seta.textContent = window._histAberto ? '▾' : '▸';
+        };
+    } else {
+        blocoHist.style.display = 'none';
+    }
+
+    document.querySelectorAll('[data-imprimir-orc]').forEach(btn => {
         btn.addEventListener('click', () => imprimirOrcamentoDoc(window._orcMap[btn.getAttribute('data-imprimir-orc')]));
     });
-    container.querySelectorAll('[data-aprovar]').forEach(btn => {
+    document.querySelectorAll('[data-aprovar]').forEach(btn => {
         btn.addEventListener('click', () => responderOrcamento(btn.getAttribute('data-aprovar'), 'Aprovado'));
     });
-    container.querySelectorAll('[data-recusar]').forEach(btn => {
+    document.querySelectorAll('[data-recusar]').forEach(btn => {
         btn.addEventListener('click', () => responderOrcamento(btn.getAttribute('data-recusar'), 'Recusado'));
     });
 }
