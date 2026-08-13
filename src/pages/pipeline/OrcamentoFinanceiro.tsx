@@ -620,17 +620,47 @@ export function OrcamentoFinanceiro() {
     }
   }
 
-  // Busca os dados da entrada (para o PDF do Registro de Entrada).
+  // Converte uma foto do storage em data URI (base64) para embutir no PDF.
+  // Buscamos os bytes aqui (em vez de passar a URL para o react-pdf) para
+  // evitar problemas de CORS no fetch interno do gerador de PDF.
+  async function fotoParaDataUri(caminho: string | null | undefined): Promise<string | null> {
+    if (!caminho) return null;
+    const url = await urlAssinadaFoto(caminho);
+    if (!url) return null;
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onloadend = () => resolve(r.result as string);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  // Busca os dados da entrada (para o PDF do Registro de Entrada), com fotos.
   async function buscarEntradaDados(): Promise<DadosEntradaPdf | null> {
     if (!orcamentoSelecionado) return null;
     const { data: entrada } = await supabase
       .from('entradas_equipamento')
-      .select('codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, triagem_avarias')
+      .select('id, codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, triagem_avarias')
       .eq('ordem_servico_id', orcamentoSelecionado.ordem_servico_id)
       .maybeSingle();
     if (!entrada) return null;
     const os = orcamentoSelecionado.ordens_servico;
     const triagem = (entrada.triagem_avarias ?? {}) as Record<string, boolean>;
+
+    const { data: fotos } = await supabase
+      .from('fotos_entrada')
+      .select('storage_path')
+      .eq('entrada_id', entrada.id);
+    const fotosDataUri = (
+      await Promise.all((fotos ?? []).map((f) => fotoParaDataUri(f.storage_path)))
+    ).filter((u): u is string => !!u);
+
     return {
       codigo: entrada.codigo_entrada,
       clienteNome: os?.cliente_nome ?? '',
@@ -642,6 +672,7 @@ export function OrcamentoFinanceiro() {
       nfNumero: entrada.nf_remessa_numero ?? '',
       nfSerie: entrada.nf_remessa_serie ?? '',
       avarias: CHECKLIST_AVARIAS.filter((it) => triagem[it.key]).map((it) => it.label),
+      fotos: fotosDataUri,
     };
   }
 
@@ -685,11 +716,14 @@ export function OrcamentoFinanceiro() {
         numeroOS: os?.numero_os ?? '-',
         clienteNome: os?.cliente_nome ?? '',
         equipamento: os?.optica_desc ?? '-',
-        itens: itens.map((it) => ({
-          nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
-          quantidade: it.quantidade,
-          observacao: it.observacao ?? '',
-        })),
+        itens: await Promise.all(
+          itens.map(async (it) => ({
+            nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
+            quantidade: it.quantidade,
+            observacao: it.observacao ?? '',
+            fotoDataUri: (await fotoParaDataUri(it.foto_peca_danificada_path)) ?? undefined,
+          })),
+        ),
       };
       const dadosEntrada = await buscarEntradaDados();
       const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, anexarOrientacao);

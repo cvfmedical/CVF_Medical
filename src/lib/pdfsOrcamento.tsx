@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image, StyleSheet, pdf } from '@react-pdf/renderer';
 import { EMPRESA, formatarMoeda } from './formato';
 
 // PDFs REAIS (arquivos) dos 3 relatórios enviados ao cliente - usados no envio
@@ -149,6 +149,7 @@ export interface DadosEntradaPdf {
   nfNumero: string;
   nfSerie: string;
   avarias: string[];
+  fotos?: string[]; // data URIs (base64) das fotos da entrada
 }
 
 function DocEntrada({ d }: { d: DadosEntradaPdf }) {
@@ -169,6 +170,16 @@ function DocEntrada({ d }: { d: DadosEntradaPdf }) {
         ) : (
           d.avarias.map((a, i) => <Text key={i}>• {a}</Text>)
         )}
+        {d.fotos && d.fotos.length > 0 && (
+          <>
+            <Text style={s.secao}>Fotos</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {d.fotos.map((f, i) => (
+                <Image key={i} src={f} style={{ width: 150, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 3 }} />
+              ))}
+            </View>
+          </>
+        )}
         <Rodape />
       </Page>
     </Document>
@@ -179,6 +190,7 @@ export interface ItemOSPdf {
   nome: string;
   quantidade: number;
   observacao: string;
+  fotoDataUri?: string; // foto da peça danificada (base64)
 }
 
 export interface DadosOSPdf {
@@ -198,12 +210,20 @@ function DocOS({ d }: { d: DadosOSPdf }) {
           <Text style={s.cItem}>Item / peça</Text>
           <Text style={s.cQtd}>Qtd.</Text>
           <Text style={{ flex: 1.4 }}>Observação / avaria</Text>
+          <Text style={{ width: 90 }}>Foto</Text>
         </View>
         {d.itens.map((it, i) => (
-          <View style={s.td} key={i}>
+          <View style={s.td} key={i} wrap={false}>
             <Text style={s.cItem}>{it.nome}</Text>
             <Text style={s.cQtd}>{it.quantidade}</Text>
             <Text style={{ flex: 1.4 }}>{it.observacao || '-'}</Text>
+            <View style={{ width: 90 }}>
+              {it.fotoDataUri ? (
+                <Image src={it.fotoDataUri} style={{ width: 82, height: 62, objectFit: 'cover', borderRadius: 3 }} />
+              ) : (
+                <Text>-</Text>
+              )}
+            </View>
           </View>
         ))}
         <Rodape />
