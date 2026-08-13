@@ -728,11 +728,17 @@ export function OrcamentoFinanceiro() {
       const dadosEntrada = await buscarEntradaDados();
       const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, anexarOrientacao);
 
-      const html = `<p>Olá!</p>
-        <p>Segue o orçamento <strong>${orcamentoSelecionado.numero_orcamento}</strong> (OS ${os?.numero_os ?? '-'}) no valor de <strong>${formatarMoeda(total)}</strong>.</p>
-        <p><strong>Em anexo</strong>: Registro de Entrada, Ordem de Serviço e Orçamento — escolha qual deseja imprimir.</p>
-        <p>Você também pode acompanhar e aprovar pelo portal do cliente: <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
-        <p>Atenciosamente,<br/>${EMPRESA.razaoSocial}</p>`;
+      const html = `<p>Prezado(a) cliente,</p>
+        <p>A CVF Medical agradece a confiança em nossos serviços. Segue, em anexo, a documentação referente ao orçamento <strong>${orcamentoSelecionado.numero_orcamento}</strong> (Ordem de Serviço ${os?.numero_os ?? '-'}):</p>
+        <ul>
+          <li>Registro de Entrada do equipamento</li>
+          <li>Ordem de Serviço &mdash; identificação das peças e avarias</li>
+          <li>Orçamento de manutenção</li>
+        </ul>
+        <p>Para sua comodidade, você também pode consultar os documentos, acompanhar o andamento e registrar a aprovação diretamente pelo portal do cliente:<br/>
+        <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
+        <p>Atenciosamente,<br/><strong>${EMPRESA.razaoSocial}</strong></p>`;
 
       const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
         body: {
