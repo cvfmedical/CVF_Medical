@@ -12,7 +12,14 @@ import { abrirJanelaImpressao, escreverImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
-import { formatarMoeda, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
+import { formatarMoeda, EMPRESA, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
+import { CHECKLIST_AVARIAS } from '../../lib/checklistAvarias';
+import {
+  gerarAnexosOrcamento,
+  type DadosOrcamentoPdf,
+  type DadosEntradaPdf,
+  type DadosOSPdf,
+} from '../../lib/pdfsOrcamento';
 import { montarCorpoOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
@@ -613,42 +620,107 @@ export function OrcamentoFinanceiro() {
     }
   }
 
-  async function enviarAoCliente() {
+  // Busca os dados da entrada (para o PDF do Registro de Entrada).
+  async function buscarEntradaDados(): Promise<DadosEntradaPdf | null> {
+    if (!orcamentoSelecionado) return null;
+    const { data: entrada } = await supabase
+      .from('entradas_equipamento')
+      .select('codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, triagem_avarias')
+      .eq('ordem_servico_id', orcamentoSelecionado.ordem_servico_id)
+      .maybeSingle();
+    if (!entrada) return null;
+    const os = orcamentoSelecionado.ordens_servico;
+    const triagem = (entrada.triagem_avarias ?? {}) as Record<string, boolean>;
+    return {
+      codigo: entrada.codigo_entrada,
+      clienteNome: os?.cliente_nome ?? '',
+      equipamento: os?.optica_desc ?? '',
+      fabricante: os?.optica_fab ?? '',
+      numeroSerie: os?.optica_sn ?? '',
+      condicaoChegada: entrada.condicao_chegada ?? '',
+      data: entrada.data_entrada ? new Date(entrada.data_entrada).toLocaleDateString('pt-BR') : '',
+      nfNumero: entrada.nf_remessa_numero ?? '',
+      nfSerie: entrada.nf_remessa_serie ?? '',
+      avarias: CHECKLIST_AVARIAS.filter((it) => triagem[it.key]).map((it) => it.label),
+    };
+  }
+
+  // Envio AUTOMÁTICO: gera os 3 PDFs e manda o e-mail pelo servidor (Resend,
+  // via Edge Function) já com os anexos. O cliente recebe pronto.
+  async function enviarPorEmailAutomatico() {
     if (!selecionadoId || !orcamentoSelecionado) return;
+    if (!clienteQuery.data?.email) {
+      alert('Este cliente não tem e-mail cadastrado.');
+      return;
+    }
     setErro(null);
     setEnviando(true);
-    // Abre o Gmail JÁ (dentro do clique, antes das chamadas assíncronas, para
-    // não cair no bloqueador de pop-up) com texto padrão + e-mail do cliente.
-    // Os arquivos não podem ser anexados por link - o usuário anexa os PDFs
-    // gerados em "Imprimir (3 arquivos)", ou o cliente acessa pelo portal.
-    if (clienteQuery.data?.email) {
-      window.open(
-        linkEmail(
-          clienteQuery.data.email,
-          `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`,
-          mensagemCompartilhar(),
-        ),
-        '_blank',
-      );
-    }
     try {
       await persistirPrecosEObservacoes();
+      const os = orcamentoSelecionado.ordens_servico;
+      const itens = itensQuery.data ?? [];
 
-      const { error } = await supabase
-        .from('orcamentos')
-        .update({
-          status: 'Enviado ao Cliente',
-          precificado_por: funcionario?.id ?? null,
-          data_envio: new Date().toISOString(),
-        })
-        .eq('id', selecionadoId);
+      const dadosOrc: DadosOrcamentoPdf = {
+        numeroOrcamento: orcamentoSelecionado.numero_orcamento,
+        numeroOS: os?.numero_os ?? '-',
+        clienteNome: os?.cliente_nome ?? clienteQuery.data.razao_social,
+        equipamento: os?.optica_desc ?? '-',
+        numeroSerie: os?.optica_sn ?? '',
+        itens: itens.map((it) => ({
+          nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
+          quantidade: it.quantidade,
+          precoUnit: Number(precos[it.id]) || 0,
+        })),
+        total,
+        validade: validadeProposta,
+        pagamento: condicoesPagamento,
+        prazo: prazoEntrega,
+        observacoes: observacoesFinanceiro,
+        garantiaResumo: GARANTIA_CVF.resumo,
+        garantiaIntro: GARANTIA_CVF.intro,
+        garantiaItens: GARANTIA_CVF.itens,
+        clausulas: CLAUSULAS_GERAIS,
+      };
+      const dadosOS: DadosOSPdf = {
+        numeroOS: os?.numero_os ?? '-',
+        clienteNome: os?.cliente_nome ?? '',
+        equipamento: os?.optica_desc ?? '-',
+        itens: itens.map((it) => ({
+          nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
+          quantidade: it.quantidade,
+          observacao: it.observacao ?? '',
+        })),
+      };
+      const dadosEntrada = await buscarEntradaDados();
+      const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS);
+
+      const html = `<p>Olá!</p>
+        <p>Segue o orçamento <strong>${orcamentoSelecionado.numero_orcamento}</strong> (OS ${os?.numero_os ?? '-'}) no valor de <strong>${formatarMoeda(total)}</strong>.</p>
+        <p><strong>Em anexo</strong>: Registro de Entrada, Ordem de Serviço e Orçamento — escolha qual deseja imprimir.</p>
+        <p>Você também pode acompanhar e aprovar pelo portal do cliente: <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Atenciosamente,<br/>${EMPRESA.razaoSocial}</p>`;
+
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: {
+          to: clienteQuery.data.email,
+          subject: `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`,
+          html,
+          anexos,
+        },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
 
+      await supabase
+        .from('orcamentos')
+        .update({ status: 'Enviado ao Cliente', precificado_por: funcionario?.id ?? null, data_envio: new Date().toISOString() })
+        .eq('id', selecionadoId);
       await supabase
         .from('ordens_servico')
         .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
         .eq('id', orcamentoSelecionado.ordem_servico_id);
 
+      alert(`E-mail enviado para ${clienteQuery.data.email} com os 3 anexos.`);
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
       qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
@@ -975,8 +1047,13 @@ export function OrcamentoFinanceiro() {
                   </button>
                 )}
                 {naoEnviado && (
-                  <button className="botao-primario" onClick={enviarAoCliente} disabled={enviando}>
-                    {enviando ? 'Enviando...' : 'Enviar ao cliente'}
+                  <button
+                    className="botao-primario"
+                    onClick={enviarPorEmailAutomatico}
+                    disabled={enviando}
+                    title="Envia o e-mail ao cliente com os 3 PDFs anexados, automaticamente"
+                  >
+                    {enviando ? 'Enviando...' : 'Enviar ao cliente (e-mail automático)'}
                   </button>
                 )}
               </div>
