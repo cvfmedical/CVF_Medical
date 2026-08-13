@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { Badge } from '../../components/Badge';
 import { urlAssinadaFoto } from '../../lib/storage';
 import { abrirJanelaImpressao, escreverImpressao } from '../../lib/imprimir';
@@ -207,6 +208,9 @@ export function OrcamentoFinanceiro() {
   // ficam com preço zerado (só de referência, não somam no total nesse
   // caso). null = precificação normal por item.
   const [valorFixoContrato, setValorFixoContrato] = useState<number | null>(null);
+  // Ao restaurar um rascunho minimizado, guarda os preços editados para que o
+  // efeito que recarrega os itens não sobrescreva com os valores do banco.
+  const precosRestauradosRef = useRef<Record<number, string> | null>(null);
 
   const orcamentosQuery = useQuery({
     queryKey: ['orcamentos-todos'],
@@ -282,6 +286,12 @@ export function OrcamentoFinanceiro() {
 
   useEffect(() => {
     if (!itensQuery.data) return;
+    // Restaurando um rascunho minimizado: usa os preços salvos, não os do banco.
+    if (precosRestauradosRef.current) {
+      setPrecos(precosRestauradosRef.current);
+      precosRestauradosRef.current = null;
+      return;
+    }
     const iniciais: Record<number, string> = {};
     for (const item of itensQuery.data) {
       // Já precificado -> usa o valor salvo. Ainda não precificado -> sugere o
@@ -318,6 +328,41 @@ export function OrcamentoFinanceiro() {
     if (match) setPrecoFixoSelecionado(String(match.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [precosFixosQuery.data, orcamentoSelecionado]);
+
+  // Minimizar a precificação preservando TODO o formulário (preços, condições,
+  // valor fixo, etc.) - sobrevive à navegação entre telas. Restaurar reabre o
+  // orçamento (setSelecionadoId) e reaplica os campos.
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela('orcamento-financeiro', {
+    titulo: `Precificação ${orcamentoSelecionado?.numero_orcamento ?? ''}`,
+    obterEstado: () => ({
+      selecionadoId,
+      precos,
+      observacoesFinanceiro,
+      validadeProposta,
+      condicoesPagamento,
+      prazoEntrega,
+      precoFixoSelecionado,
+      valorFixoContrato,
+      anexarOrientacao,
+    }),
+    aoRestaurar: (e) => {
+      precosRestauradosRef.current = (e.precos as Record<number, string>) ?? {};
+      setObservacoesFinanceiro((e.observacoesFinanceiro as string) ?? '');
+      setValidadeProposta((e.validadeProposta as string) ?? '');
+      setCondicoesPagamento((e.condicoesPagamento as string) ?? '');
+      setPrazoEntrega((e.prazoEntrega as string) ?? '');
+      setPrecoFixoSelecionado((e.precoFixoSelecionado as string) ?? '');
+      setValorFixoContrato((e.valorFixoContrato as number | null) ?? null);
+      setAnexarOrientacao(Boolean(e.anexarOrientacao));
+      setErro(null);
+      setSelecionadoId((e.selecionadoId as number | null) ?? null);
+    },
+  });
+
+  function minimizarFinanceiro() {
+    minimizarRascunho();
+    setSelecionadoId(null);
+  }
 
   const total =
     valorFixoContrato != null
@@ -719,6 +764,7 @@ export function OrcamentoFinanceiro() {
             </>
           }
           aoFechar={() => setSelecionadoId(null)}
+          aoMinimizar={minimizarFinanceiro}
           larguraMax={640}
         >
             {orcamentoSelecionado.ordens_servico && (
