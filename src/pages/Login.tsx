@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
+import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
 import cvfMarca from '../assets/cvf-marca.png';
 
@@ -7,6 +8,7 @@ export function Login() {
   const { session, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [verSenha, setVerSenha] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -39,14 +41,25 @@ export function Login() {
         />
 
         <label htmlFor="senha">Senha</label>
-        <input
-          id="senha"
-          type="password"
-          autoComplete="current-password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          required
-        />
+        <div className="campo-senha">
+          <input
+            id="senha"
+            type={verSenha ? 'text' : 'password'}
+            autoComplete="current-password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            required
+          />
+          <button
+            type="button"
+            className="ver-senha"
+            onClick={() => setVerSenha((v) => !v)}
+            title={verSenha ? 'Ocultar senha' : 'Mostrar senha'}
+            aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'}
+          >
+            {verSenha ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+          </button>
+        </div>
 
         {erro && <p className="erro-login">{erro}</p>}
 

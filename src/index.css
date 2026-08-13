@@ -90,6 +90,29 @@ button {
   font-family: var(--font-body);
 }
 
+/* Campo de senha com botão "olhinho" para mostrar/ocultar. */
+.campo-senha {
+  position: relative;
+}
+.campo-senha input {
+  padding-right: 40px;
+}
+.campo-senha .ver-senha {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-400);
+  display: flex;
+  align-items: center;
+  padding: 6px;
+}
+.campo-senha .ver-senha:hover {
+  color: var(--azul-cvf);
+}
+
 .botao-primario {
   width: 100%;
   margin-top: 20px;

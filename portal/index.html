@@ -85,6 +85,14 @@
         border-radius: 6px;
         font-size: 14px;
     }
+    .campo-senha { position: relative; }
+    .campo-senha input { padding-right: 44px; }
+    .campo-senha .ver-senha {
+        position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+        background: none; border: none; cursor: pointer; color: #8c8a83;
+        padding: 4px; display: flex; align-items: center;
+    }
+    .campo-senha .ver-senha svg { width: 20px; height: 20px; }
     button.primario {
         background: var(--azul);
         color: white;
@@ -239,7 +247,10 @@
         <label for="txt-email">E-mail</label>
         <input type="email" id="txt-email" placeholder="seu@email.com">
         <label for="txt-senha">Senha</label>
-        <input type="password" id="txt-senha" placeholder="••••••••">
+        <div class="campo-senha">
+            <input type="password" id="txt-senha" placeholder="••••••••">
+            <button type="button" class="ver-senha" onclick="alternarSenha(this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
         <button class="primario full" id="btn-entrar">Entrar</button>
         <div id="erro-login"></div>
         <p style="text-align:center; margin-top:14px; font-size:14px;">
@@ -253,9 +264,15 @@
         <label for="cad-email">E-mail</label>
         <input type="email" id="cad-email" placeholder="seu@email.com">
         <label for="cad-senha">Senha</label>
-        <input type="password" id="cad-senha" placeholder="mínimo 6 caracteres">
+        <div class="campo-senha">
+            <input type="password" id="cad-senha" placeholder="mínimo 6 caracteres">
+            <button type="button" class="ver-senha" onclick="alternarSenha(this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
         <label for="cad-confirma">Confirmar senha</label>
-        <input type="password" id="cad-confirma" placeholder="repita a senha">
+        <div class="campo-senha">
+            <input type="password" id="cad-confirma" placeholder="repita a senha">
+            <button type="button" class="ver-senha" onclick="alternarSenha(this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
         <button class="primario full" id="btn-cadastrar">Criar cadastro</button>
         <div id="msg-cadastro"></div>
         <p style="text-align:center; margin-top:14px; font-size:14px;">
@@ -267,9 +284,15 @@
         <h2>Definir sua senha</h2>
         <p style="color:var(--texto-sec); font-size:14px; margin-bottom:12px;">Bem-vindo(a)! Crie uma senha para acessar o portal do cliente.</p>
         <label for="txt-nova-senha">Nova senha</label>
-        <input type="password" id="txt-nova-senha" placeholder="mínimo 6 caracteres">
+        <div class="campo-senha">
+            <input type="password" id="txt-nova-senha" placeholder="mínimo 6 caracteres">
+            <button type="button" class="ver-senha" onclick="alternarSenha(this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
         <label for="txt-confirma-senha">Confirmar senha</label>
-        <input type="password" id="txt-confirma-senha" placeholder="repita a senha">
+        <div class="campo-senha">
+            <input type="password" id="txt-confirma-senha" placeholder="repita a senha">
+            <button type="button" class="ver-senha" onclick="alternarSenha(this)" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
         <button class="primario full" id="btn-definir-senha">Salvar senha e entrar</button>
         <div id="erro-senha"></div>
     </div>
@@ -289,7 +312,8 @@
         <div id="lista-entradas"></div>
         <div id="vazio-entradas" class="vazio" style="display:none;">Nenhuma entrada registrada.</div>
 
-        <h2 class="secao">Ordens de serviço</h2>
+        <h2 class="secao">Ordens de serviço — laudo de peças danificadas</h2>
+        <p style="color:var(--texto-sec); font-size:13px; margin:-4px 0 10px;">Clique em "Ver laudo" para ver as peças e avarias identificadas, com as fotos.</p>
         <table>
             <thead>
                 <tr>
@@ -343,6 +367,15 @@ const SUPABASE_ANON_KEY = "sb_publishable_QVIEwDHz2LkLihA2BZrhHA_9zxLaOEA";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Olhinho: mostra/oculta a senha do campo dentro do mesmo .campo-senha.
+function alternarSenha(btn) {
+    const inp = btn.parentElement.querySelector('input');
+    if (!inp) return;
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+    btn.style.color = inp.type === 'text' ? 'var(--azul)' : '#8c8a83';
+    btn.setAttribute('aria-label', inp.type === 'text' ? 'Ocultar senha' : 'Mostrar senha');
+}
+
 // Cabeçalho institucional (usado nos documentos abertos pelo portal).
 const CVF_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 133" style="width:100%;height:auto;display:block"><defs><linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#344d95"/><stop offset="100%" stop-color="#5b78bd"/></linearGradient><clipPath id="cc"><rect x="0" y="0" width="920" height="128"/></clipPath></defs><rect x="0" y="0" width="920" height="128" fill="#4A4F57"/><g transform="translate(40,24) scale(0.42)"><path d="M 141.50,144.75 L 142.75,147.50 L 152.25,147.50 L 153.25,145.25 Z M 318.50,135.50 L 318.75,155.25 L 337.00,156.25 L 336.75,153.00 L 321.75,152.50 L 321.50,135.75 Z M 280.25,138.00 L 277.25,143.25 L 277.50,156.00 L 280.25,155.50 L 281.50,150.75 L 293.25,150.75 L 294.75,155.50 L 297.25,156.00 L 297.25,135.75 L 284.75,135.50 Z M 280.75,142.50 L 286.25,138.50 L 293.50,138.50 L 294.75,146.25 L 281.25,147.75 Z M 240.75,136.50 L 239.00,140.25 L 240.00,154.25 L 257.25,156.00 L 256.75,153.00 L 242.50,152.25 L 242.00,140.25 L 243.50,138.50 L 257.00,138.50 L 257.50,135.75 Z M 216.75,135.25 L 215.25,155.25 L 218.00,156.00 L 218.50,135.75 Z M 175.75,135.50 L 175.00,155.25 L 188.00,156.00 L 193.25,153.50 L 195.50,149.00 L 193.50,138.25 L 187.50,135.25 Z M 178.25,138.75 L 190.75,140.00 L 192.25,149.00 L 189.75,152.25 L 177.75,152.25 Z M 137.00,135.50 L 136.25,153.25 L 140.00,156.00 L 154.25,156.00 L 154.00,153.00 L 139.50,152.00 L 139.25,139.75 L 154.00,138.50 L 154.75,135.75 Z M 91.50,135.75 L 91.50,156.00 L 94.50,155.25 L 95.25,144.50 L 103.50,156.50 L 111.75,144.75 L 112.25,155.50 L 115.25,156.00 L 115.00,135.50 L 112.50,136.00 L 103.50,150.75 L 94.25,136.00 Z M 268.75,127.50 L 277.50,125.75 L 284.75,118.50 L 287.75,97.00 L 315.50,94.50 L 322.75,86.75 L 324.50,79.00 L 270.00,79.75 Z M 270.25,68.00 L 323.50,68.00 L 332.75,62.25 L 337.50,50.75 L 287.50,51.25 L 276.75,57.00 Z M 92.50,111.25 L 100.75,122.75 L 111.25,127.50 L 168.00,128.00 L 164.50,117.00 L 155.75,110.75 L 116.00,110.00 L 109.50,104.00 L 109.50,74.00 L 112.00,69.75 L 167.75,68.50 L 174.50,74.50 L 176.25,124.25 L 182.50,128.25 L 208.00,124.25 L 228.25,113.25 L 243.50,98.00 L 255.75,79.25 L 267.50,50.50 L 258.25,50.25 L 249.25,54.75 L 235.00,79.75 L 223.75,94.00 L 210.50,104.50 L 198.00,109.25 L 192.75,108.25 L 192.50,62.50 L 185.00,52.50 L 179.50,50.25 L 108.75,51.25 L 97.50,58.75 L 92.25,68.50 Z" fill="#FFFFFF" fill-rule="evenodd"/></g><line x1="200" y1="26" x2="200" y2="102" stroke="#6B7078" stroke-width="1"/><text x="222" y="64" font-family="Arial, Helvetica, sans-serif" font-style="italic" font-size="26" fill="#a9bce4" dominant-baseline="middle">Sua imagem, nossa visão.</text><g clip-path="url(#cc)" stroke="#7f9bd6" fill="none"><circle cx="905" cy="30" r="58" stroke-width="1"/><circle cx="905" cy="30" r="44" stroke-width="1"/><circle cx="905" cy="30" r="30" stroke-width="1"/><circle cx="905" cy="30" r="17" stroke-width="1"/></g><rect x="0" y="128" width="920" height="5" fill="url(#ag)"/></svg>';
 
@@ -376,6 +409,11 @@ function formatarMoedaPortal(v) {
 function imprimirOrcamentoDoc(o) {
     const linhas = (o.itens || []).map(i =>
         `<tr><td>${i.nome}</td><td>${i.qtd}</td><td>${formatarMoedaPortal(i.preco)}</td><td>${formatarMoedaPortal(i.preco * i.qtd)}</td></tr>`).join('');
+    const condicoes = (o.validade || o.pagamento || o.prazo) ? `
+        <div class="secao">Condições comerciais</div>
+        <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${o.validade || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${o.pagamento || '-'}</div></div>
+        <div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${o.prazo || '-'}</div></div>` : '';
     const corpo = `
         <h1>Orçamento de Manutenção</h1>
         <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor">${o.numero_orcamento}</div></div>
@@ -383,7 +421,9 @@ function imprimirOrcamentoDoc(o) {
         <div class="linha"><div class="rotulo">Situação</div><div class="valor">${o.status}</div></div>
         <div class="secao">Itens</div>
         <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
+        ${o.temValorFixo ? `<p style="font-size:12px;color:#5c5a54;margin-top:6px;">Valor fechado por contrato — os preços dos itens acima são apenas de referência e não somam no total.</p>` : ''}
         <p style="text-align:right;font-weight:700;font-size:15px;margin-top:12px;">Total: ${formatarMoedaPortal(o.total)}</p>
+        ${condicoes}
         ${o.observacoes ? `<div class="secao">Observações</div><p>${o.observacoes}</p>` : ''}`;
     abrirDocumentoCVF('Orçamento ' + o.numero_orcamento, corpo);
 }
@@ -400,14 +440,41 @@ function imprimirEntradaDoc(e) {
     abrirDocumentoCVF('Registro de Entrada ' + (e.codigo_entrada || ''), corpo);
 }
 
-function imprimirOSDoc(o) {
+async function imprimirOSDoc(o) {
+    // Peças/serviços identificados pela equipe técnica + fotos das peças
+    // danificadas (via orçamento vinculado à OS).
+    let pecasHtml = '<p style="color:#5c5a54">Nenhuma peça registrada ainda.</p>';
+    const { data: orc } = await supabaseClient
+        .from('orcamentos').select('id').eq('ordem_servico_id', o.id).limit(1).maybeSingle();
+    if (orc) {
+        const { data: itens } = await supabaseClient
+            .from('orcamento_itens')
+            .select('quantidade, observacao, foto_peca_danificada_path, descricao_servico, produtos_servicos(nome)')
+            .eq('orcamento_id', orc.id);
+        if (itens && itens.length) {
+            const linhas = [];
+            for (const it of itens) {
+                const nome = it.produtos_servicos ? it.produtos_servicos.nome : (it.descricao_servico || '-');
+                let foto = '-';
+                if (it.foto_peca_danificada_path) {
+                    const u = await urlAssinada(it.foto_peca_danificada_path);
+                    if (u) foto = `<img src="${u}" style="max-width:130px;max-height:100px;border:1px solid #e4e1d8;border-radius:4px;display:block;">`;
+                }
+                linhas.push(`<tr><td>${nome}</td><td style="text-align:center">${it.quantidade}</td><td>${it.observacao || '-'}</td><td>${foto}</td></tr>`);
+            }
+            pecasHtml = `<table><thead><tr><th>Item / peça</th><th>Qtd.</th><th>Observação / avaria</th><th>Foto</th></tr></thead><tbody>${linhas.join('')}</tbody></table>`;
+        }
+    }
     const corpo = `
-        <h1>Ordem de Serviço</h1>
+        <h1>Laudo de Identificação de Peças Danificadas</h1>
+        <p style="color:#5c5a54;font-size:13px;margin:-6px 0 10px;">Ordem de Serviço ${o.numero_os} — peças e avarias identificadas pela equipe técnica, com as imagens.</p>
         <div class="linha"><div class="rotulo">Nº OS</div><div class="valor">${o.numero_os}</div></div>
         <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${o.optica_desc || '-'} ${o.optica_fab ? '(' + o.optica_fab + ')' : ''}</div></div>
         <div class="linha"><div class="rotulo">Status</div><div class="valor">${o.status_os || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Abertura</div><div class="valor">${formatarData(o.data_abertura)}</div></div>`;
-    abrirDocumentoCVF('Ordem de Serviço ' + o.numero_os, corpo);
+        <div class="linha"><div class="rotulo">Abertura</div><div class="valor">${formatarData(o.data_abertura)}</div></div>
+        <div class="secao">Peças danificadas identificadas</div>
+        ${pecasHtml}`;
+    abrirDocumentoCVF('Laudo de Pecas Danificadas - OS ' + o.numero_os, corpo);
 }
 
 const telaLogin = document.getElementById('tela-login');
@@ -562,7 +629,7 @@ async function carregarOrdens() {
             <td>${os.optica_desc || '-'} ${os.optica_fab ? '(' + os.optica_fab + ')' : ''}</td>
             <td><span class="badge ${classeBadge(os.status_os)}">${os.status_os || '-'}</span></td>
             <td>${formatarData(os.data_abertura)}</td>
-            <td><button class="secundario" data-imprimir-os="${os.id}">Imprimir</button></td>
+            <td><button class="secundario" data-imprimir-os="${os.id}">Ver laudo</button></td>
         `;
         window._osMap = window._osMap || {};
         window._osMap[os.id] = os;
@@ -677,7 +744,7 @@ async function carregarOrcamentos() {
 
     const { data: orcamentos, error } = await supabaseClient
         .from('orcamentos')
-        .select('id, numero_orcamento, status, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
+        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
         .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
         .order('data_envio', { ascending: false });
 
@@ -693,6 +760,13 @@ async function carregarOrcamentos() {
             .select('quantidade, preco_unitario, observacao, produtos_servicos(nome)')
             .eq('orcamento_id', orc.id);
 
+        // Total: se há valor fixo de contrato, ele É o total (itens ficam só de
+        // referência). Senão, soma os itens.
+        const temValorFixo = orc.valor_fixo_contrato != null;
+        const totalCalc = temValorFixo
+            ? Number(orc.valor_fixo_contrato)
+            : (itens || []).reduce((s, i) => s + (i.preco_unitario || 0) * i.quantidade, 0);
+
         window._orcMap = window._orcMap || {};
         window._orcMap[orc.id] = {
             numero_orcamento: orc.numero_orcamento,
@@ -700,7 +774,11 @@ async function carregarOrcamentos() {
             status: orc.status,
             observacoes: orc.observacoes_financeiro || '',
             itens: (itens || []).map(i => ({ nome: i.produtos_servicos ? i.produtos_servicos.nome : '', qtd: i.quantidade, preco: i.preco_unitario || 0 })),
-            total: (itens || []).reduce((s, i) => s + (i.preco_unitario || 0) * i.quantidade, 0),
+            total: totalCalc,
+            temValorFixo: temValorFixo,
+            validade: orc.validade_proposta || '',
+            pagamento: orc.condicoes_pagamento || '',
+            prazo: orc.prazo_entrega || '',
         };
         const total = window._orcMap[orc.id].total;
         const linhas = (itens || []).map(i => `<tr><td>${i.produtos_servicos ? i.produtos_servicos.nome : ''}</td><td>${i.quantidade}</td><td>${formatarMoedaPortal(i.preco_unitario || 0)}</td></tr>`).join('');
