@@ -4,7 +4,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
-import { STATUS_VOLTA_MANUTENCAO } from '../../lib/statusOS';
+import { STATUS_VOLTA_MANUTENCAO, STATUS_TESTE_ESTANQUEIDADE, STATUS_TESTE_AUTOCLAVE } from '../../lib/statusOS';
 
 interface TesteEstanqueidadeRow {
   id: number;
@@ -27,7 +27,7 @@ const METODO_ISO = 'ISO 8600-7 (pressurizado e submerso)';
 const METODO_CAMARA = 'Câmara pré-pressurizada (desvio da norma)';
 
 export function TesteEstanqueidade() {
-  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_ESTANQUEIDADE]);
   const padroesQuery = useQuery({
     queryKey: ['padroes-calibracao-ativos-est'],
     queryFn: async () => {
@@ -151,7 +151,7 @@ export function TesteEstanqueidade() {
           await supabase
             .from('ordens_servico')
             .update({
-              status_os: dados.resultado === 'Reprovado' ? STATUS_VOLTA_MANUTENCAO : '8. TESTE DE AUTOCLAVE',
+              status_os: dados.resultado === 'Reprovado' ? STATUS_VOLTA_MANUTENCAO : STATUS_TESTE_AUTOCLAVE,
             })
             .eq('id', dados.ordem_servico_id as number);
         }}

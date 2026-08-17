@@ -79,7 +79,6 @@ export interface DadosOrcamentoPdf {
   total: number;
   validade: string;
   pagamento: string;
-  prazo: string;
   observacoes: string;
   garantiaResumo: string;
   garantiaIntro: string;
@@ -126,7 +125,6 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
         <Text style={s.secao}>Condições comerciais</Text>
         <View style={s.linha}><Text style={s.rotulo}>Validade da proposta</Text><Text style={s.valor}>{d.validade || '-'}</Text></View>
         <View style={s.linha}><Text style={s.rotulo}>Condições de pagamento</Text><Text style={s.valor}>{d.pagamento || '-'}</Text></View>
-        <View style={s.linha}><Text style={s.rotulo}>Prazo de entrega</Text><Text style={s.valor}>{d.prazo || '-'}</Text></View>
 
         <View wrap={false}>
           <Text style={s.secao}>Garantia</Text>
@@ -213,6 +211,7 @@ export interface DadosOSPdf {
   equipamento: string;
   itens: ItemOSPdf[];
   observacoesTecnico?: string | null;
+  prazoEntrega?: string | null;
 }
 
 function DocOS({ d }: { d: DadosOSPdf }) {
@@ -221,6 +220,9 @@ function DocOS({ d }: { d: DadosOSPdf }) {
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Ordem de Serviço" subtitulo={`${d.numeroOS} · ${d.clienteNome}`} />
         <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>{d.equipamento}</Text>
+        {d.prazoEntrega ? (
+          <View style={s.linha}><Text style={s.rotulo}>Prazo de entrega</Text><Text style={s.valor}>{d.prazoEntrega}</Text></View>
+        ) : null}
         {d.itens.length > 0 && (
           <>
             <View style={s.th}>

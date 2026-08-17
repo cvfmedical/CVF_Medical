@@ -476,11 +476,10 @@ const CLAUSULAS_PORTAL = [
 function imprimirOrcamentoDoc(o) {
     const linhas = (o.itens || []).map(i =>
         `<tr><td>${i.nome}</td><td>${i.qtd}</td><td>${formatarMoedaPortal(i.preco)}</td><td>${formatarMoedaPortal(i.preco * i.qtd)}</td></tr>`).join('');
-    const condicoes = (o.validade || o.pagamento || o.prazo) ? `
+    const condicoes = (o.validade || o.pagamento) ? `
         <div class="secao">Condições comerciais</div>
         <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${o.validade || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${o.pagamento || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${o.prazo || '-'}</div></div>` : '';
+        <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${o.pagamento || '-'}</div></div>` : '';
     const garantia = `
         <div class="secao">Garantia</div>
         <p style="margin-bottom:4px;">${GARANTIA_PORTAL.resumo}</p>
@@ -583,6 +582,7 @@ async function imprimirOSDoc(o) {
         <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${o.optica_desc || '-'} ${o.optica_fab ? '(' + o.optica_fab + ')' : ''}</div></div>
         <div class="linha"><div class="rotulo">Status</div><div class="valor">${o.status_os || '-'}</div></div>
         <div class="linha"><div class="rotulo">Abertura</div><div class="valor">${formatarData(o.data_abertura)}</div></div>
+        ${o.prazo_entrega ? `<div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${o.prazo_entrega}</div></div>` : ''}
         <div class="secao">Peças danificadas identificadas</div>
         ${pecasHtml}
         ${obsGeraisHtml}`;
@@ -722,7 +722,7 @@ function classeBadge(status) {
 async function carregarOrdens() {
     const { data: ordens, error } = await supabaseClient
         .from('ordens_servico')
-        .select('id, numero_os, optica_desc, optica_fab, status_os, data_abertura')
+        .select('id, numero_os, optica_desc, optica_fab, status_os, data_abertura, prazo_entrega')
         .order('data_abertura', { ascending: false });
 
     const corpo = document.getElementById('corpo-tabela');
@@ -855,7 +855,7 @@ async function carregarOrcamentos() {
 
     const { data: orcamentos, error } = await supabaseClient
         .from('orcamentos')
-        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, prazo_entrega, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
+        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc)')
         .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
         .order('data_envio', { ascending: false });
 
@@ -890,7 +890,6 @@ async function carregarOrcamentos() {
             temValorFixo: temValorFixo,
             validade: orc.validade_proposta || '',
             pagamento: orc.condicoes_pagamento || '',
-            prazo: orc.prazo_entrega || '',
             enviadoEm: orc.data_envio || '',
             respostaEm: orc.data_resposta_cliente || '',
         };

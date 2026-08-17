@@ -34,7 +34,6 @@ export const MISSAO_VISAO_VALORES: { rotulo: string; texto: string }[] = [
 export const CONDICOES_COMERCIAIS_PADRAO = {
   validadeProposta: '10 dias',
   condicoesPagamento: '28 DDL',
-  prazoEntrega: '3 dias',
 };
 
 // Garantia institucional da CVF - texto fixo impresso no relatório ao

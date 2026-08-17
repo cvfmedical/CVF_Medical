@@ -20,6 +20,7 @@ interface OSResumo {
   optica_sn: string | null;
   defeito_relatado: string | null;
   triagem_avarias: ChecklistAvarias | null;
+  prazo_entrega: string | null;
 }
 
 interface EntradaResumo {
@@ -54,6 +55,7 @@ export function RegistroEntrada() {
   const osId = searchParams.get('os');
 
   const [avarias, setAvarias] = useState<ChecklistAvarias>({});
+  const [prazoEntrega, setPrazoEntrega] = useState('');
   const [fotosExistentes, setFotosExistentes] = useState<FotoExistente[]>([]);
   const [fotosNovas, setFotosNovas] = useState<File[]>([]);
   const [salvando, setSalvando] = useState(false);
@@ -65,7 +67,7 @@ export function RegistroEntrada() {
     queryFn: async (): Promise<OSResumo> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias')
+        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
@@ -104,7 +106,10 @@ export function RegistroEntrada() {
   });
 
   useEffect(() => {
-    if (osQuery.data) setAvarias(osQuery.data.triagem_avarias ?? {});
+    if (osQuery.data) {
+      setAvarias(osQuery.data.triagem_avarias ?? {});
+      setPrazoEntrega(osQuery.data.prazo_entrega ?? '');
+    }
   }, [osQuery.data]);
 
   async function carregarFotos(entradaId: number): Promise<FotoExistente[]> {
@@ -145,7 +150,7 @@ export function RegistroEntrada() {
     try {
       const { error: erroOS } = await supabase
         .from('ordens_servico')
-        .update({ triagem_avarias: avarias })
+        .update({ triagem_avarias: avarias, prazo_entrega: prazoEntrega || null })
         .eq('id', osQuery.data.id);
       if (erroOS) throw erroOS;
 
@@ -263,6 +268,11 @@ export function RegistroEntrada() {
             <span style={{ fontSize: 13 }}>{item.label}</span>
           </div>
         ))}
+      </div>
+
+      <div className="campo-form">
+        <label>Prazo de entrega</label>
+        <input type="text" value={prazoEntrega} onChange={(e) => setPrazoEntrega(e.target.value)} />
       </div>
 
       {entradaQuery.data && (

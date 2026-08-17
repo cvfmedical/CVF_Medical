@@ -3,7 +3,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
-import { STATUS_VOLTA_MANUTENCAO, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
+import { STATUS_VOLTA_MANUTENCAO, STATUS_CHECKPOINT_B, STATUS_TESTE_QUALIDADE } from '../../lib/statusOS';
 
 interface TesteQualidadeRow {
   id: number;
@@ -13,7 +13,7 @@ interface TesteQualidadeRow {
 }
 
 export function TesteQualidade() {
-  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_QUALIDADE]);
   if (isLoading) return <CarregandoTela />;
 
   return (

@@ -3,7 +3,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
-import { STATUS_VOLTA_MANUTENCAO } from '../../lib/statusOS';
+import { STATUS_VOLTA_MANUTENCAO, STATUS_TESTE_AUTOCLAVE, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
 
 interface TesteAutoclaveRow {
   id: number;
@@ -15,7 +15,7 @@ interface TesteAutoclaveRow {
 }
 
 export function TesteAutoclave() {
-  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_AUTOCLAVE]);
   if (isLoading) return <CarregandoTela />;
 
   return (
@@ -74,8 +74,7 @@ export function TesteAutoclave() {
           await supabase
             .from('ordens_servico')
             .update({
-              status_os:
-                dados.resultado === 'Reprovado' ? STATUS_VOLTA_MANUTENCAO : '9. BANCADA DE VISÃO - CHECKPOINT B',
+              status_os: dados.resultado === 'Reprovado' ? STATUS_VOLTA_MANUTENCAO : STATUS_CHECKPOINT_B,
             })
             .eq('id', dados.ordem_servico_id as number);
         }}

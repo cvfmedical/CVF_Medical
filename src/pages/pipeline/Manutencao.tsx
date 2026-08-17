@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
+import { STATUS_VOLTA_MANUTENCAO, STATUS_CHECKPOINT_A } from '../../lib/statusOS';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
@@ -37,7 +38,7 @@ interface OSDetalhe {
 export function Manutencao() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
-  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_VOLTA_MANUTENCAO]);
   const [modalAberto, setModalAberto] = useState(false);
   const [osId, setOsId] = useState('');
   const [dataInicio, setDataInicio] = useState('');
@@ -183,7 +184,7 @@ export function Manutencao() {
       if (dataFim) {
         await supabase
           .from('ordens_servico')
-          .update({ status_os: '5. BANCADA DE VISÃO - CHECKPOINT A' })
+          .update({ status_os: STATUS_CHECKPOINT_A })
           .eq('id', Number(osId));
       }
 

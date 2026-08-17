@@ -8,10 +8,15 @@ export interface OrdemServicoResumo {
   status_os: string | null;
 }
 
-// Lista de OS pra popular selects (Manutenção, Selagem, Estanqueidade,
-// Autoclave, Entrega, Laudos) - todas essas telas referenciam uma OS já
-// aberta, não criam OS nova.
-export function useOrdensServicoOpcoes() {
+// Lista de OS pra popular selects (Manutenção, Estanqueidade, Autoclave,
+// Teste de Qualidade, Entrega, Laudos) - todas essas telas referenciam uma
+// OS já aberta, não criam OS nova.
+//
+// statusPermitidos filtra as opções pelo status_os certo daquela etapa
+// (mesmo padrão já usado em Entrega.tsx) - sem isso, o dropdown mostrava
+// TODAS as OS de qualquer status, inclusive já entregues ou ainda em
+// triagem, o que não fazia sentido pra uma tela de etapa específica.
+export function useOrdensServicoOpcoes(statusPermitidos?: string[]) {
   const query = useQuery({
     queryKey: ['ordens-servico-opcoes'],
     queryFn: async (): Promise<OrdemServicoResumo[]> => {
@@ -24,7 +29,11 @@ export function useOrdensServicoOpcoes() {
     },
   });
 
-  const opcoes = (query.data ?? []).map((os) => ({
+  const dados = statusPermitidos
+    ? (query.data ?? []).filter((os) => statusPermitidos.includes(os.status_os ?? ''))
+    : (query.data ?? []);
+
+  const opcoes = dados.map((os) => ({
     value: String(os.id),
     label: `${os.numero_os} - ${os.cliente_nome}`,
   }));

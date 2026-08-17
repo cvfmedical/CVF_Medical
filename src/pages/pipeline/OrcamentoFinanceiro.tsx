@@ -35,7 +35,6 @@ interface Orcamento {
   valor_fixo_contrato: number | null;
   validade_proposta: string | null;
   condicoes_pagamento: string | null;
-  prazo_entrega: string | null;
   desconto: number | null;
   bonificacao: boolean | null;
   ordens_servico: {
@@ -45,6 +44,7 @@ interface Orcamento {
     optica_desc: string | null;
     optica_fab: string | null;
     optica_sn: string | null;
+    prazo_entrega: string | null;
   } | null;
 }
 
@@ -92,7 +92,6 @@ const OPCOES_PAGAMENTO = [
   '4x (28/56/84/112 DDL)',
   '50% de sinal; 50% em 15 DDL no faturamento.',
 ];
-const OPCOES_PRAZO = ['3 dias', '4 dias', '5 dias'];
 
 // Select com opções + "Outro" que libera um campo de texto livre.
 function CampoSelecao({
@@ -141,62 +140,6 @@ function CampoSelecao({
   );
 }
 
-// Opções em botões de rádio (uma só) + "Outro" com campo de texto livre.
-function CampoRadio({
-  valor,
-  aoMudar,
-  opcoes,
-  placeholder,
-}: {
-  valor: string;
-  aoMudar: (v: string) => void;
-  opcoes: string[];
-  placeholder?: string;
-}) {
-  const [outro, setOutro] = useState(valor !== '' && !opcoes.includes(valor));
-  const estiloOpcao = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 } as const;
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {opcoes.map((o) => (
-          <label key={o} style={estiloOpcao}>
-            <input
-              type="radio"
-              style={{ width: 'auto' }}
-              checked={!outro && valor === o}
-              onChange={() => {
-                setOutro(false);
-                aoMudar(o);
-              }}
-            />
-            {o}
-          </label>
-        ))}
-        <label style={estiloOpcao}>
-          <input
-            type="radio"
-            style={{ width: 'auto' }}
-            checked={outro}
-            onChange={() => {
-              setOutro(true);
-              aoMudar('');
-            }}
-          />
-          Outro
-        </label>
-      </div>
-      {outro && (
-        <input
-          style={{ marginTop: 6 }}
-          value={valor}
-          placeholder={placeholder}
-          onChange={(e) => aoMudar(e.target.value)}
-        />
-      )}
-    </div>
-  );
-}
-
 export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
@@ -204,7 +147,6 @@ export function OrcamentoFinanceiro() {
   const [observacoesFinanceiro, setObservacoesFinanceiro] = useState('');
   const [validadeProposta, setValidadeProposta] = useState('');
   const [condicoesPagamento, setCondicoesPagamento] = useState('');
-  const [prazoEntrega, setPrazoEntrega] = useState('');
   const [anexarOrientacao, setAnexarOrientacao] = useState(false);
   // E-mails extras (cópia) para o envio automático, além do e-mail cadastrado
   // do cliente - pré-preenchido a partir do cadastro do cliente
@@ -236,7 +178,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -366,7 +308,6 @@ export function OrcamentoFinanceiro() {
       observacoesFinanceiro,
       validadeProposta,
       condicoesPagamento,
-      prazoEntrega,
       precoFixoSelecionado,
       valorFixoContrato,
       desconto,
@@ -379,7 +320,6 @@ export function OrcamentoFinanceiro() {
       setObservacoesFinanceiro((e.observacoesFinanceiro as string) ?? '');
       setValidadeProposta((e.validadeProposta as string) ?? '');
       setCondicoesPagamento((e.condicoesPagamento as string) ?? '');
-      setPrazoEntrega((e.prazoEntrega as string) ?? '');
       setPrecoFixoSelecionado((e.precoFixoSelecionado as string) ?? '');
       setValorFixoContrato((e.valorFixoContrato as number | null) ?? null);
       setDesconto((e.desconto as string) ?? '');
@@ -485,6 +425,7 @@ export function OrcamentoFinanceiro() {
         optica_sn: orcamentoSelecionado.ordens_servico.optica_sn,
         defeito_relatado: null,
         observacoes_tecnico: orcamentoSelecionado.observacoes_tecnico,
+        prazo_entrega: orcamentoSelecionado.ordens_servico.prazo_entrega,
       },
       itens,
     );
@@ -541,7 +482,6 @@ export function OrcamentoFinanceiro() {
       <div class="secao">Condições comerciais</div>
       <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
       <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${condicoesPagamento || '-'}</div></div>
-      <div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${prazoEntrega || '-'}</div></div>
       <div style="page-break-inside:avoid;font-size:10px;line-height:1.32;color:var(--ink-600);margin-top:8px;">
         <div class="secao" style="margin-bottom:4px;">Garantia</div>
         <div style="font-size:11px;color:var(--ink-900);margin-bottom:2px;">${GARANTIA_CVF.resumo}</div>
@@ -601,7 +541,6 @@ export function OrcamentoFinanceiro() {
     setObservacoesFinanceiro(o.observacoes_financeiro ?? '');
     setValidadeProposta(o.validade_proposta ?? CONDICOES_COMERCIAIS_PADRAO.validadeProposta);
     setCondicoesPagamento(o.condicoes_pagamento ?? CONDICOES_COMERCIAIS_PADRAO.condicoesPagamento);
-    setPrazoEntrega(o.prazo_entrega ?? CONDICOES_COMERCIAIS_PADRAO.prazoEntrega);
     setPrecoFixoSelecionado('');
     setValorFixoContrato(o.valor_fixo_contrato ?? null);
     setDesconto(o.desconto ? String(o.desconto) : '');
@@ -627,7 +566,6 @@ export function OrcamentoFinanceiro() {
         valor_fixo_contrato: valorFixoContrato,
         validade_proposta: validadeProposta || null,
         condicoes_pagamento: condicoesPagamento || null,
-        prazo_entrega: prazoEntrega || null,
         desconto: descontoNum || 0,
         bonificacao,
       })
@@ -748,7 +686,6 @@ export function OrcamentoFinanceiro() {
         total,
         validade: validadeProposta,
         pagamento: condicoesPagamento,
-        prazo: prazoEntrega,
         observacoes: observacoesFinanceiro,
         garantiaResumo: GARANTIA_CVF.resumo,
         garantiaIntro: GARANTIA_CVF.intro,
@@ -768,6 +705,7 @@ export function OrcamentoFinanceiro() {
           })),
         ),
         observacoesTecnico: orcamentoSelecionado.observacoes_tecnico,
+        prazoEntrega: os?.prazo_entrega ?? null,
       };
       const dadosEntrada = await buscarEntradaDados();
       const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, anexarOrientacao);
@@ -1106,16 +1044,6 @@ export function OrcamentoFinanceiro() {
                 placeholder="Escreva a condição de pagamento"
               />
             </div>
-            <div className="campo-form">
-              <label>Prazo de entrega</label>
-              <CampoRadio
-                valor={prazoEntrega}
-                aoMudar={setPrazoEntrega}
-                opcoes={OPCOES_PRAZO}
-                placeholder="Escreva o prazo"
-              />
-            </div>
-
             <div className="campo-form">
               <label>Observações do financeiro</label>
               <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />

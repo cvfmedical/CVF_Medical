@@ -24,6 +24,7 @@ export interface DadosOSParaRelatorio {
   // quando o serviço não envolve troca de peça (nada entra na tabela de
   // itens, então sem isso o relatório ficaria vazio).
   observacoes_tecnico?: string | null;
+  prazo_entrega?: string | null;
 }
 
 export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRelatorioOS[]): string {
@@ -47,6 +48,7 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
     <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${os.optica_desc ?? '-'} (${os.optica_fab ?? '-'})</div></div>
     <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${os.optica_sn ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${os.defeito_relatado ?? '-'}</div></div>
+    ${os.prazo_entrega ? `<div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${os.prazo_entrega}</div></div>` : ''}
     ${itens.length > 0 ? `
     <div class="secao">Peças/serviços identificados</div>
     <table class="itens-os">

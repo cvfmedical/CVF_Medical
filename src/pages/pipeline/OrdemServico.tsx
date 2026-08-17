@@ -21,6 +21,7 @@ export function OrdemServico() {
     optica_fab: '',
     optica_sn: '',
     defeito_relatado: '',
+    prazo_entrega: '7 dias',
     status_os: STATUS_OS_ORDENADOS[0] as string,
   });
 
@@ -52,6 +53,7 @@ export function OrdemServico() {
         optica_fab: form.optica_fab || null,
         optica_sn: form.optica_sn || null,
         defeito_relatado: form.defeito_relatado || null,
+        prazo_entrega: form.prazo_entrega || null,
         status_os: form.status_os,
       });
       if (error) throw error;
@@ -113,6 +115,15 @@ export function OrdemServico() {
         <textarea
           value={form.defeito_relatado}
           onChange={(e) => setForm((f) => ({ ...f, defeito_relatado: e.target.value }))}
+        />
+      </div>
+
+      <div className="campo-form">
+        <label>Prazo de entrega</label>
+        <input
+          type="text"
+          value={form.prazo_entrega}
+          onChange={(e) => setForm((f) => ({ ...f, prazo_entrega: e.target.value }))}
         />
       </div>
 

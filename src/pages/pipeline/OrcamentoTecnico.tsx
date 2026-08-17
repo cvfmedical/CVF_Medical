@@ -27,6 +27,7 @@ interface OSDetalhe {
   optica_fab: string | null;
   optica_sn: string | null;
   defeito_relatado: string | null;
+  prazo_entrega: string | null;
 }
 
 interface Cliente {
@@ -121,7 +122,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<OSDetalhe> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado')
+        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
