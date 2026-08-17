@@ -53,6 +53,16 @@ interface CatalogoOtica {
   angulo_graus: number | null;
 }
 
+// Catálogo de produtos e serviços - usado aqui como catálogo de OUTROS tipos
+// de equipamento (não-ótica: peças de mão de shaver, motores, cabos etc.),
+// já que o Catálogo de óticas é específico para métricas ISO 8600.
+interface ProdutoCatalogo {
+  id: number;
+  nome: string;
+  marca_fabricante: string | null;
+  tipo: string | null;
+}
+
 interface Cliente {
   id: number;
   razao_social: string;
@@ -174,6 +184,28 @@ export function EntradaEquipamento() {
     const partes = [item.tipo, item.diametro_mm ? `${item.diametro_mm}mm` : null, item.angulo_graus != null ? `${item.angulo_graus}°` : null];
     const descricao = partes.filter(Boolean).join(' ');
     setForm((f) => ({ ...f, equipamento_fab: item.fabricante, equipamento_desc: descricao || item.modelo }));
+  }
+
+  // Catálogo de produtos/serviços usado como fonte de OUTROS equipamentos
+  // (não-ótica) - ex.: peça de mão de shaver, motor, cabo, fonte de luz.
+  const produtosCatalogoQuery = useQuery({
+    queryKey: ['produtos-servicos-catalogo-entrada'],
+    queryFn: async (): Promise<ProdutoCatalogo[]> => {
+      const { data, error } = await supabase
+        .from('produtos_servicos')
+        .select('id, nome, marca_fabricante, tipo')
+        .eq('status_ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return data as ProdutoCatalogo[];
+    },
+  });
+
+  function preencherDeProduto(produtoId: string) {
+    const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === produtoId);
+    if (!item) return;
+    const descricao = [item.nome, item.tipo ? `(${item.tipo})` : null].filter(Boolean).join(' ');
+    setForm((f) => ({ ...f, equipamento_fab: item.marca_fabricante ?? '', equipamento_desc: descricao }));
   }
 
   const entradasQuery = useQuery({
@@ -533,6 +565,21 @@ export function EntradaEquipamento() {
               </select>
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                 Preenche descrição e fabricante abaixo - o número de série e o resto continuam manuais.
+              </p>
+            </div>
+            <div className="campo-form">
+              <label>Ou selecionar de outro tipo de produto/equipamento (não-ótica)</label>
+              <select defaultValue="" onChange={(e) => preencherDeProduto(e.target.value)}>
+                <option value="">Preencher manualmente...</option>
+                {(produtosCatalogoQuery.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome} {p.marca_fabricante ? `- ${p.marca_fabricante}` : ''} {p.tipo ? `(${p.tipo})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Para peças/equipamentos que não são ópticas (ex.: peça de mão de shaver, motor, fonte de luz) — vêm do
+                cadastro de Produtos e serviços.
               </p>
             </div>
             <div className="campo-form">
