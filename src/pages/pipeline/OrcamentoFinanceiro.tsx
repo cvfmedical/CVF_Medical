@@ -475,6 +475,7 @@ export function OrcamentoFinanceiro() {
         optica_fab: orcamentoSelecionado.ordens_servico.optica_fab,
         optica_sn: orcamentoSelecionado.ordens_servico.optica_sn,
         defeito_relatado: null,
+        observacoes_tecnico: orcamentoSelecionado.observacoes_tecnico,
       },
       itens,
     );
@@ -757,6 +758,7 @@ export function OrcamentoFinanceiro() {
             fotoDataUri: (await fotoParaDataUri(it.foto_peca_danificada_path)) ?? undefined,
           })),
         ),
+        observacoesTecnico: orcamentoSelecionado.observacoes_tecnico,
       };
       const dadosEntrada = await buscarEntradaDados();
       const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, anexarOrientacao);

@@ -212,6 +212,7 @@ export interface DadosOSPdf {
   clienteNome: string;
   equipamento: string;
   itens: ItemOSPdf[];
+  observacoesTecnico?: string | null;
 }
 
 function DocOS({ d }: { d: DadosOSPdf }) {
@@ -220,26 +221,38 @@ function DocOS({ d }: { d: DadosOSPdf }) {
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Ordem de Serviço" subtitulo={`${d.numeroOS} · ${d.clienteNome}`} />
         <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>{d.equipamento}</Text>
-        <View style={s.th}>
-          <Text style={s.cItem}>Item / peça</Text>
-          <Text style={s.cQtd}>Qtd.</Text>
-          <Text style={{ flex: 1.4 }}>Observação / avaria</Text>
-          <Text style={{ width: 90 }}>Foto</Text>
-        </View>
-        {d.itens.map((it, i) => (
-          <View style={s.td} key={i} wrap={false}>
-            <Text style={s.cItem}>{it.nome}</Text>
-            <Text style={s.cQtd}>{it.quantidade}</Text>
-            <Text style={{ flex: 1.4 }}>{it.observacao || '-'}</Text>
-            <View style={{ width: 90 }}>
-              {it.fotoDataUri ? (
-                <Image src={it.fotoDataUri} style={{ width: 82, height: 62, objectFit: 'cover', borderRadius: 3 }} />
-              ) : (
-                <Text>-</Text>
-              )}
+        {d.itens.length > 0 && (
+          <>
+            <View style={s.th}>
+              <Text style={s.cItem}>Item / peça</Text>
+              <Text style={s.cQtd}>Qtd.</Text>
+              <Text style={{ flex: 1.4 }}>Observação / avaria</Text>
+              <Text style={{ width: 90 }}>Foto</Text>
             </View>
-          </View>
-        ))}
+            {d.itens.map((it, i) => (
+              <View style={s.td} key={i} wrap={false}>
+                <Text style={s.cItem}>{it.nome}</Text>
+                <Text style={s.cQtd}>{it.quantidade}</Text>
+                <Text style={{ flex: 1.4 }}>{it.observacao || '-'}</Text>
+                <View style={{ width: 90 }}>
+                  {it.fotoDataUri ? (
+                    <Image src={it.fotoDataUri} style={{ width: 82, height: 62, objectFit: 'cover', borderRadius: 3 }} />
+                  ) : (
+                    <Text>-</Text>
+                  )}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+        {d.observacoesTecnico ? (
+          <>
+            <Text style={s.secao}>Observações técnicas gerais</Text>
+            <Text>{d.observacoesTecnico}</Text>
+          </>
+        ) : d.itens.length === 0 ? (
+          <Text style={{ color: cinza, marginTop: 8 }}>Nenhuma peça ou observação registrada ainda.</Text>
+        ) : null}
         <Rodape />
       </Page>
     </Document>

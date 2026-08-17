@@ -66,6 +66,11 @@ export function OrcamentoTecnico() {
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
   const [justificativaLivre, setJustificativaLivre] = useState('');
   const [fotoItem, setFotoItem] = useState<File | null>(null);
+  // Observações técnicas gerais (não por item) - essencial quando o serviço
+  // não envolve troca de peça (ex.: "PEÇA DE MÃO DE SHAVER" travada, resolvido
+  // só com limpeza/ajuste, sem adicionar item nenhum).
+  const [observacoesGerais, setObservacoesGerais] = useState('');
+  const [salvandoObs, setSalvandoObs] = useState(false);
 
   // Mostra tanto OS ainda em triagem (orçamento novo) quanto OS que já
   // têm um orçamento em montagem (status "Aguardando Orçamento") - antes
@@ -176,6 +181,28 @@ export function OrcamentoTecnico() {
       return data as ItemOrcamento[];
     },
   });
+
+  useEffect(() => {
+    setObservacoesGerais(orcamentoQuery.data?.observacoes_tecnico ?? '');
+  }, [orcamentoQuery.data?.id, orcamentoQuery.data?.observacoes_tecnico]);
+
+  async function salvarObservacoesGerais() {
+    if (!orcamentoQuery.data) return;
+    setSalvandoObs(true);
+    setErro(null);
+    try {
+      const { error } = await supabase
+        .from('orcamentos')
+        .update({ observacoes_tecnico: observacoesGerais.trim() || null })
+        .eq('id', orcamentoQuery.data.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['orcamento-por-os', osId] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setSalvandoObs(false);
+    }
+  }
 
   async function criarOrcamento() {
     setErro(null);
@@ -290,7 +317,11 @@ export function OrcamentoTecnico() {
         fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
       })),
     );
-    imprimirRelatorioOS(clienteQuery.data, osDetalheQuery.data, itens);
+    imprimirRelatorioOS(
+      clienteQuery.data,
+      { ...osDetalheQuery.data, observacoes_tecnico: observacoesGerais.trim() || null },
+      itens,
+    );
   }
 
   function nomeItem(item: ItemOrcamento) {
@@ -374,11 +405,23 @@ export function OrcamentoTecnico() {
             </tbody>
           </table>
 
+          <div className="campo-form" style={{ marginTop: 16 }}>
+            <label>Observações técnicas gerais (defeito/serviço quando não há troca de peça)</label>
+            <textarea
+              placeholder="Ex: peça travada por acúmulo de resíduo - resolvido com limpeza e lubrificação, sem substituição de peças."
+              value={observacoesGerais}
+              onChange={(e) => setObservacoesGerais(e.target.value)}
+            />
+            <button className="botao-secundario botao-pequeno" onClick={salvarObservacoesGerais} disabled={salvandoObs} style={{ marginTop: 6 }}>
+              {salvandoObs ? 'Salvando...' : 'Salvar observações'}
+            </button>
+          </div>
+
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button
               className="botao-secundario"
               onClick={imprimirRelatorioTecnico}
-              disabled={(itensQuery.data ?? []).length === 0}
+              disabled={(itensQuery.data ?? []).length === 0 && !observacoesGerais.trim()}
             >
               Imprimir relatório técnico
             </button>

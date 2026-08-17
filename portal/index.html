@@ -551,8 +551,9 @@ async function imprimirOSDoc(o) {
     // Peças/serviços identificados pela equipe técnica + fotos das peças
     // danificadas (via orçamento vinculado à OS).
     let pecasHtml = '<p style="color:#5c5a54">Nenhuma peça registrada ainda.</p>';
+    let obsGeraisHtml = '';
     const { data: orc } = await supabaseClient
-        .from('orcamentos').select('id').eq('ordem_servico_id', o.id).limit(1).maybeSingle();
+        .from('orcamentos').select('id, observacoes_tecnico').eq('ordem_servico_id', o.id).limit(1).maybeSingle();
     if (orc) {
         const { data: itens } = await supabaseClient
             .from('orcamento_itens')
@@ -571,6 +572,9 @@ async function imprimirOSDoc(o) {
             }
             pecasHtml = `<table><thead><tr><th>Item / peça</th><th>Qtd.</th><th>Observação / avaria</th><th>Foto</th></tr></thead><tbody>${linhas.join('')}</tbody></table>`;
         }
+        if (orc.observacoes_tecnico) {
+            obsGeraisHtml = `<div class="secao">Observações técnicas gerais</div><p>${orc.observacoes_tecnico}</p>`;
+        }
     }
     const corpo = `
         <h1>Laudo de Identificação de Peças Danificadas</h1>
@@ -580,7 +584,8 @@ async function imprimirOSDoc(o) {
         <div class="linha"><div class="rotulo">Status</div><div class="valor">${o.status_os || '-'}</div></div>
         <div class="linha"><div class="rotulo">Abertura</div><div class="valor">${formatarData(o.data_abertura)}</div></div>
         <div class="secao">Peças danificadas identificadas</div>
-        ${pecasHtml}`;
+        ${pecasHtml}
+        ${obsGeraisHtml}`;
     abrirDocumentoCVF('Laudo de Pecas Danificadas - OS ' + o.numero_os, corpo);
 }
 

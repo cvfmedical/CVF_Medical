@@ -20,6 +20,10 @@ export interface DadosOSParaRelatorio {
   optica_fab: string | null;
   optica_sn: string | null;
   defeito_relatado: string | null;
+  // Observações gerais do técnico - texto livre, especialmente importante
+  // quando o serviço não envolve troca de peça (nada entra na tabela de
+  // itens, então sem isso o relatório ficaria vazio).
+  observacoes_tecnico?: string | null;
 }
 
 export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRelatorioOS[]): string {
@@ -43,11 +47,17 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
     <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${os.optica_desc ?? '-'} (${os.optica_fab ?? '-'})</div></div>
     <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${os.optica_sn ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${os.defeito_relatado ?? '-'}</div></div>
+    ${itens.length > 0 ? `
     <div class="secao">Peças/serviços identificados</div>
     <table class="itens-os">
       <thead><tr><th>Item</th><th class="col-qtd">Qtd.</th><th>Observação / avaria</th><th class="col-foto">Foto</th></tr></thead>
       <tbody>${linhas}</tbody>
-    </table>
+    </table>` : ''}
+    ${os.observacoes_tecnico ? `
+    <div class="secao">Observações técnicas gerais</div>
+    <p>${os.observacoes_tecnico}</p>` : ''}
+    ${itens.length === 0 && !os.observacoes_tecnico ? `
+    <p style="color:#666;">Nenhuma peça ou observação registrada ainda.</p>` : ''}
     <p style="font-size:12px; color:#666; margin-top:12px;">
       Este relatório mostra apenas o que foi identificado tecnicamente - os valores são definidos e enviados
       separadamente pelo setor financeiro, no orçamento.
