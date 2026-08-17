@@ -38,7 +38,10 @@ export function ConfiguracoesUsuarios() {
       setErro(`${f.nome} não tem e-mail cadastrado - edite o funcionário em "Funcionários / técnicos" antes de convidar.`);
       return;
     }
-    if (!confirm(`Enviar convite de acesso web para ${f.nome} (${f.email})?`)) return;
+    const mensagem = f.auth_user_id
+      ? `Reenviar convite de acesso web para ${f.nome} (${f.email})? Use isso se o link anterior expirou antes dele definir a senha.`
+      : `Enviar convite de acesso web para ${f.nome} (${f.email})?`;
+    if (!confirm(mensagem)) return;
     setConvidando(f.id);
     try {
       const { data, error } = await supabase.functions.invoke('convidar-funcionario', {
@@ -61,7 +64,8 @@ export function ConfiguracoesUsuarios() {
       <h1>Configurações e usuários</h1>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Só administradores podem convidar. O convite envia um e-mail com um link para o funcionário definir a
-        própria senha - ninguém, nem o administrador, vê ou define a senha por ele.
+        própria senha - ninguém, nem o administrador, vê ou define a senha por ele. Se o link expirar antes de ser
+        usado, clique em "Reenviar convite".
       </p>
 
       {erro && <p className="erro-login">{erro}</p>}
@@ -92,11 +96,9 @@ export function ConfiguracoesUsuarios() {
                 <Badge tono={f.auth_user_id ? 'teal' : 'copper'}>{f.auth_user_id ? 'Vinculado' : 'Sem acesso'}</Badge>
               </td>
               <td className="acoes-tabela">
-                {!f.auth_user_id && (
-                  <button className="botao-secundario" disabled={convidando === f.id} onClick={() => convidar(f)}>
-                    {convidando === f.id ? 'Enviando...' : 'Convidar'}
-                  </button>
-                )}
+                <button className="botao-secundario" disabled={convidando === f.id} onClick={() => convidar(f)}>
+                  {convidando === f.id ? 'Enviando...' : f.auth_user_id ? 'Reenviar convite' : 'Convidar'}
+                </button>
               </td>
             </tr>
           ))}

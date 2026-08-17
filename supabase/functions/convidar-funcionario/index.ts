@@ -98,14 +98,69 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
+  const origem = req.headers.get('origin') ?? 'https://systemcvfmedical.netlify.app';
+
+  // Já tem conta vinculada: só bloqueia se a conta já foi confirmada (senha
+  // definida). Se o convite anterior expirou sem o funcionário ter clicado,
+  // reenviamos um link novo em vez de travar - o link de convite do Supabase
+  // vence rápido (às vezes minutos, se algum scanner de e-mail "clicar" nele
+  // antes da pessoa) e antes não havia como reenviar.
   if (funcionario.auth_user_id) {
-    return new Response(JSON.stringify({ error: 'Este funcionário já tem conta web vinculada.' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    const { data: existente, error: existenteError } = await supabaseAdmin.auth.admin.getUserById(
+      funcionario.auth_user_id,
+    );
+    if (existenteError || !existente.user) {
+      // Referência órfã (conta não existe mais no Auth) - segue para criar um convite novo.
+    } else if (existente.user.email_confirmed_at) {
+      return new Response(JSON.stringify({ error: 'Este funcionário já tem conta web vinculada e confirmada.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } else {
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: funcionario.email,
+        options: { redirectTo: `${origem}/definir-senha` },
+      });
+      if (linkError || !linkData) {
+        return new Response(JSON.stringify({ error: linkError?.message ?? 'Erro ao gerar novo link de convite.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      const remetente = Deno.env.get('RESEND_FROM') ?? 'Q-CVF Medical <onboarding@resend.dev>';
+      if (!resendApiKey) {
+        return new Response(JSON.stringify({ error: 'RESEND_API_KEY não configurada.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: remetente,
+          to: funcionario.email,
+          subject: 'Q-CVF Medical - Convite de acesso (reenvio)',
+          html: `<p>Olá, ${funcionario.nome}.</p><p>Segue um novo link para definir sua senha de acesso ao Q-CVF Medical (o anterior expirou):</p><p><a href="${linkData.properties.action_link}">Definir minha senha</a></p>`,
+        }),
+      });
+      if (!resp.ok) {
+        const detalhe = await resp.json().catch(() => ({}));
+        return new Response(JSON.stringify({ error: 'Falha ao reenviar e-mail via Resend.', detalhe }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true, reenviado: true, auth_user_id: funcionario.auth_user_id }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
   }
 
-  const origem = req.headers.get('origin') ?? 'https://systemcvfmedical.netlify.app';
   const { data: convite, error: conviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(funcionario.email, {
     redirectTo: `${origem}/definir-senha`,
   });
@@ -119,6 +174,6 @@ Deno.serve(async (req: Request) => {
   await supabaseAdmin.from('funcionarios').update({ auth_user_id: convite.user.id }).eq('id', funcionarioId);
 
   return new Response(JSON.stringify({ ok: true, auth_user_id: convite.user.id }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });
