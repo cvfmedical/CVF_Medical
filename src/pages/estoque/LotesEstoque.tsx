@@ -70,7 +70,7 @@ export function LotesEstoque() {
         {
           name: 'produto_servico_id',
           label: 'Produto/peça',
-          type: 'select',
+          type: 'combobox',
           obrigatorio: true,
           opcoes: (produtosQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.nome })),
         },

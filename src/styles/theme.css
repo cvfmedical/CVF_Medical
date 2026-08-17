@@ -28,14 +28,23 @@
   --teal-800: #244840;
   --teal-500-12: rgba(62, 122, 111, 0.12);
 
+  --ambar-500: #b8842c;
+  --ambar-800: #7a5619;
+  --ambar-500-12: rgba(184, 132, 44, 0.12);
+
+  --roxo-500: #6b5b95;
+  --roxo-800: #453a63;
+  --roxo-500-12: rgba(107, 91, 149, 0.12);
+
   --ink-900: #21201c;
   --ink-600: #5c5a54;
-  --ink-400: #8c8a83;
+  --ink-400: #6b6862;
   --ink-400-rail: #9ba0a5; /* equivalente claro de ink-400 sobre graphite */
 
   --paper-50: #f5f3ee;
+  --paper-100: #e9e5da;
   --paper-0: #ffffff;
-  --border: #e4e1d8;
+  --border: #cfcabd;
 
   --danger-500: #c1503e;
   --danger-500-12: rgba(193, 80, 62, 0.12);

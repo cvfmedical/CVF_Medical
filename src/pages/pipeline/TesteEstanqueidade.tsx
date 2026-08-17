@@ -79,7 +79,7 @@ export function TesteEstanqueidade() {
           },
         ]}
         campos={[
-          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
+          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'combobox', opcoes, obrigatorio: true },
           {
             name: 'metodo_observacao',
             label: 'Método de observação das bolhas',
@@ -99,7 +99,7 @@ export function TesteEstanqueidade() {
           {
             name: 'calibracao_id',
             label: 'Padrão de calibração (manômetro) - obrigatório',
-            type: 'select',
+            type: 'combobox',
             opcoes: (padroesQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.identificacao })),
             obrigatorio: true,
           },

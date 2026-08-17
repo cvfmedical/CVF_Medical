@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 async function gerarNumeroOS(): Promise<string> {
   return gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
@@ -77,14 +78,11 @@ export function OrdemServico() {
 
       <div className="campo-form">
         <label>Cliente *</label>
-        <select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-          <option value="">Selecione...</option>
-          {(clientesQuery.data ?? []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.razao_social}
-            </option>
-          ))}
-        </select>
+        <ComboboxBusca
+          opcoes={(clientesQuery.data ?? []).map((c) => ({ value: String(c.id), label: c.razao_social }))}
+          valor={String(form.cliente_id ?? '')}
+          onChange={(valor) => setForm((f) => ({ ...f, cliente_id: valor }))}
+        />
       </div>
       <div className="campo-form">
         <label>Descrição do equipamento</label>

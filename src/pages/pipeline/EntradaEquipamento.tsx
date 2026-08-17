@@ -15,6 +15,7 @@ import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartil
 import { CapturaFoto } from '../../components/CapturaFoto';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface Entrada {
   id: number;
@@ -38,6 +39,7 @@ interface Entrada {
   numero_controle_cliente: string | null;
   eh_otica: boolean | null;
   catalogo_otica_id: number | null;
+  cliente_final_id: number | null;
 }
 
 interface FotoEntrada {
@@ -70,6 +72,8 @@ interface Cliente {
   razao_social: string;
   telefone: string | null;
   email: string | null;
+  eh_terceirizado: boolean;
+  representante_id: number | null;
 }
 
 async function gerarCodigoEntrada(): Promise<string> {
@@ -112,6 +116,9 @@ export function EntradaEquipamento() {
   // cobrir entrada digitada na mão.
   const [ehOtica, setEhOtica] = useState<boolean | null>(null);
   const [catalogoOticaId, setCatalogoOticaId] = useState('');
+  // Preenchido só quando o Cliente selecionado é um terceirizado - identifica
+  // qual cliente final (unidade atendida) está sendo atendido nesta entrada.
+  const [clienteFinalId, setClienteFinalId] = useState('');
   const [convertendo, setConvertendo] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<Entrada | null>(null);
   const [fotosDetalhe, setFotosDetalhe] = useState<{ id: number; url: string | null }[]>([]);
@@ -172,7 +179,10 @@ export function EntradaEquipamento() {
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes-completo'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('clientes').select('id, razao_social, telefone, email').order('razao_social');
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, razao_social, telefone, email, eh_terceirizado, representante_id')
+        .order('razao_social');
       if (error) throw error;
       return data as Cliente[];
     },
@@ -250,6 +260,7 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(null);
     setCatalogoOticaId('');
+    setClienteFinalId('');
     setErro(null);
     setModalAberto(true);
   }
@@ -292,6 +303,7 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(e.eh_otica ?? null);
     setCatalogoOticaId(e.catalogo_otica_id ? String(e.catalogo_otica_id) : '');
+    setClienteFinalId(e.cliente_final_id ? String(e.cliente_final_id) : '');
     setErro(null);
     setModalAberto(true);
     carregarFotosExistentes(e.id);
@@ -359,6 +371,7 @@ export function EntradaEquipamento() {
         numero_controle_cliente: form.numero_controle_cliente || null,
         eh_otica: ehOtica,
         catalogo_otica_id: catalogoOticaId ? Number(catalogoOticaId) : null,
+        cliente_final_id: clienteFinalId ? Number(clienteFinalId) : null,
       };
 
       if (editando) {
@@ -435,6 +448,7 @@ export function EntradaEquipamento() {
           triagem_avarias: entrada.triagem_avarias ?? {},
           eh_otica: entrada.eh_otica,
           catalogo_otica_id: entrada.catalogo_otica_id,
+          cliente_final_id: entrada.cliente_final_id,
         })
         .select('id')
         .single();
@@ -579,25 +593,41 @@ export function EntradaEquipamento() {
             )}
             <div className="campo-form">
               <label>Cliente *</label>
-              <select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-                <option value="">Selecione...</option>
-                {(clientesQuery.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.razao_social}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(clientesQuery.data ?? []).map((c) => ({ value: String(c.id), label: c.razao_social }))}
+                valor={String(form.cliente_id ?? '')}
+                onChange={(valor) => {
+                  setForm((f) => ({ ...f, cliente_id: valor }));
+                  setClienteFinalId('');
+                }}
+              />
             </div>
+            {cliente(Number(form.cliente_id))?.eh_terceirizado && (
+              <div className="campo-form">
+                <label>Unidade atendida (cliente final)</label>
+                <ComboboxBusca
+                  opcoes={(clientesQuery.data ?? [])
+                    .filter((c) => c.representante_id === Number(form.cliente_id))
+                    .map((c) => ({ value: String(c.id), label: c.razao_social }))}
+                  valor={clienteFinalId}
+                  onChange={setClienteFinalId}
+                />
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                  Cliente é um terceirizado - identifique qual unidade está sendo atendida (informativo; orçamento e
+                  NF continuam endereçados ao cliente selecionado acima).
+                </p>
+              </div>
+            )}
             <div className="campo-form">
               <label>Selecionar do catálogo de óticas (opcional)</label>
-              <select defaultValue="" onChange={(e) => preencherDoCatalogo(e.target.value)}>
-                <option value="">Preencher manualmente...</option>
-                {(catalogoQuery.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.fabricante} - {c.modelo} {c.tipo ? `(${c.tipo})` : ''}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(catalogoQuery.data ?? []).map((c) => ({
+                  value: String(c.id),
+                  label: `${c.fabricante} - ${c.modelo} ${c.tipo ? `(${c.tipo})` : ''}`,
+                }))}
+                valor=""
+                onChange={(valor) => preencherDoCatalogo(valor)}
+              />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                 Preenche descrição e fabricante abaixo - o número de série e o resto continuam manuais.
               </p>

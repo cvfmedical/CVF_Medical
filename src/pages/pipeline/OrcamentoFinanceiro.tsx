@@ -55,6 +55,7 @@ interface Orcamento {
     optica_sn: string | null;
     prazo_entrega: string | null;
     eh_otica: boolean | null;
+    cliente_final_id: number | null;
   } | null;
 }
 
@@ -192,7 +193,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica, cliente_final_id)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -242,6 +243,20 @@ export function OrcamentoFinanceiro() {
         .single();
       if (error) throw error;
       return data as Cliente;
+    },
+  });
+
+  const clienteFinalQuery = useQuery({
+    queryKey: ['cliente-final-do-orcamento', orcamentoSelecionado?.ordens_servico?.cliente_final_id],
+    enabled: !!orcamentoSelecionado?.ordens_servico?.cliente_final_id,
+    queryFn: async (): Promise<{ razao_social: string }> => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('razao_social')
+        .eq('id', orcamentoSelecionado!.ordens_servico!.cliente_final_id!)
+        .single();
+      if (error) throw error;
+      return data;
     },
   });
 
@@ -438,6 +453,7 @@ export function OrcamentoFinanceiro() {
       {
         numero_os: orcamentoSelecionado.ordens_servico.numero_os,
         cliente_nome: orcamentoSelecionado.ordens_servico.cliente_nome,
+        cliente_final_nome: clienteFinalQuery.data?.razao_social ?? null,
         optica_desc: orcamentoSelecionado.ordens_servico.optica_desc,
         optica_fab: orcamentoSelecionado.ordens_servico.optica_fab,
         optica_sn: orcamentoSelecionado.ordens_servico.optica_sn,
@@ -483,6 +499,7 @@ export function OrcamentoFinanceiro() {
     return `
       <h1>Orçamento de Manutenção</h1>
       <p class="subtitulo">Nº ${orcamentoSelecionado!.numero_orcamento} · OS ${os?.numero_os ?? '-'} · ${os?.cliente_nome ?? '-'}</p>
+      ${clienteFinalQuery.data ? `<p class="subtitulo">Unidade atendida: ${clienteFinalQuery.data.razao_social}</p>` : ''}
       <p class="subtitulo">${os?.optica_desc ?? '-'}${os?.optica_fab ? ' (' + os.optica_fab + ')' : ''}${os?.optica_sn ? ' · Nº série ' + os.optica_sn : ''}</p>
       <div class="secao">Itens</div>
       <table class="dados">
@@ -697,6 +714,7 @@ export function OrcamentoFinanceiro() {
         numeroOrcamento: orcamentoSelecionado.numero_orcamento,
         numeroOS: os?.numero_os ?? '-',
         clienteNome: os?.cliente_nome ?? clienteQuery.data.razao_social,
+        clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
         equipamento: os?.optica_desc ?? '-',
         numeroSerie: os?.optica_sn ?? '',
         itens: itens.map((it) => ({
@@ -720,6 +738,7 @@ export function OrcamentoFinanceiro() {
       const dadosOS: DadosOSPdf = {
         numeroOS: os?.numero_os ?? '-',
         clienteNome: os?.cliente_nome ?? '',
+        clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
         equipamento: os?.optica_desc ?? '-',
         itens: await Promise.all(
           itens.map(async (it) => ({

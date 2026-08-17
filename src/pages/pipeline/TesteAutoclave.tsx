@@ -42,7 +42,7 @@ export function TesteAutoclave() {
           },
         ]}
         campos={[
-          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
+          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'combobox', opcoes, obrigatorio: true },
           { name: 'numero_ciclo', label: 'Número do ciclo', type: 'text' },
           { name: 'temperatura_celsius', label: 'Temperatura (°C)', type: 'number' },
           { name: 'tempo_minutos', label: 'Tempo (minutos)', type: 'number' },

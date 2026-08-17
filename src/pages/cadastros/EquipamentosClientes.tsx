@@ -79,7 +79,7 @@ export function EquipamentosClientes() {
         },
       ]}
       campos={[
-        { name: 'cliente_id', label: 'Cliente', type: 'select', opcoes: opcoesCliente, obrigatorio: true },
+        { name: 'cliente_id', label: 'Cliente', type: 'combobox', opcoes: opcoesCliente, obrigatorio: true },
         {
           name: '_catalogo',
           label: 'Puxar do catálogo de óticas (preenche os campos abaixo)',

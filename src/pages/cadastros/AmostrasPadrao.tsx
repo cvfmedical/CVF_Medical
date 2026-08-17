@@ -87,7 +87,7 @@ export function AmostrasPadrao() {
         {
           name: 'catalogo_otica_id',
           label: 'Modelo de ótica',
-          type: 'select',
+          type: 'combobox',
           obrigatorio: true,
           opcoes: (modelosQuery.data ?? []).map((o) => ({
             value: String(o.id),
@@ -103,7 +103,7 @@ export function AmostrasPadrao() {
         {
           name: 'calibracao_id',
           label: 'Padrão de calibração usado (alvo)',
-          type: 'select',
+          type: 'combobox',
           opcoes: (padroesQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.identificacao })),
         },
         { name: 'data_medicao', label: 'Data da medição', type: 'date' },

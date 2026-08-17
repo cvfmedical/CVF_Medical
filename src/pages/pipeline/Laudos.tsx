@@ -11,6 +11,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { Badge } from '../../components/Badge';
 import { LaudoPdf } from './LaudoPdf';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface Laudo {
   id: number;
@@ -183,17 +184,11 @@ export function Laudos() {
         >
             <div className="campo-form">
               <label>Ordem de serviço *</label>
-              <select
-                value={form.ordem_servico_id}
-                onChange={(e) => setForm((f) => ({ ...f, ordem_servico_id: e.target.value }))}
-              >
-                <option value="">Selecione...</option>
-                {opcoesOS.map((op) => (
-                  <option key={op.value} value={op.value}>
-                    {op.label}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={opcoesOS}
+                valor={String(form.ordem_servico_id ?? '')}
+                onChange={(valor) => setForm((f) => ({ ...f, ordem_servico_id: valor }))}
+              />
             </div>
             <div className="campo-form">
               <label>Resultado</label>

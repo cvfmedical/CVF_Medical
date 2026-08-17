@@ -16,6 +16,7 @@ export interface ItemRelatorioOS {
 export interface DadosOSParaRelatorio {
   numero_os: string;
   cliente_nome: string;
+  cliente_final_nome?: string | null;
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
@@ -45,6 +46,7 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
     <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
     <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${os.numero_os}</div></div>
     <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${os.cliente_nome}</div></div>
+    ${os.cliente_final_nome ? `<div class="linha"><div class="rotulo">Unidade atendida</div><div class="valor">${os.cliente_final_nome}</div></div>` : ''}
     <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${os.optica_desc ?? '-'} (${os.optica_fab ?? '-'})</div></div>
     <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${os.optica_sn ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${os.defeito_relatado ?? '-'}</div></div>

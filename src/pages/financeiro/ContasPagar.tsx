@@ -81,7 +81,7 @@ export function ContasPagar() {
         {
           name: 'fornecedor_id',
           label: 'Fornecedor',
-          type: 'select',
+          type: 'combobox',
           opcoes: (fornecedoresQuery.data ?? []).map((f) => ({ value: String(f.id), label: f.razao_social })),
         },
         { name: 'descricao', label: 'Descrição', type: 'textarea', obrigatorio: true },

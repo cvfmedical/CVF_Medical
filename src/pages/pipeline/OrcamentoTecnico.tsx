@@ -12,6 +12,7 @@ import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface Orcamento {
   id: number;
@@ -363,14 +364,7 @@ export function OrcamentoTecnico() {
 
       <div className="campo-form" style={{ maxWidth: 420 }}>
         <label>Ordem de serviço</label>
-        <select value={osId} onChange={(e) => setOsId(e.target.value)}>
-          <option value="">Selecione...</option>
-          {(opcoesOSQuery.data ?? []).map((op) => (
-            <option key={op.value} value={op.value}>
-              {op.label}
-            </option>
-          ))}
-        </select>
+        <ComboboxBusca opcoes={opcoesOSQuery.data ?? []} valor={osId} onChange={setOsId} />
         <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
           Mostra OS em triagem (orçamento novo) e OS com orçamento já iniciado, ainda não enviado ao financeiro.
         </p>
@@ -488,17 +482,11 @@ export function OrcamentoTecnico() {
         <ModalJanela titulo="Adicionar item" aoFechar={() => setModalAberto(false)}>
             <div className="campo-form">
               <label>Produto/serviço do catálogo (deixe em branco se for só mão de obra)</label>
-              <select
-                value={novoItem.produto_servico_id}
-                onChange={(e) => setNovoItem((f) => ({ ...f, produto_servico_id: e.target.value }))}
-              >
-                <option value="">Selecione...</option>
-                {(produtosQuery.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(produtosQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.nome }))}
+                valor={String(novoItem.produto_servico_id ?? '')}
+                onChange={(valor) => setNovoItem((f) => ({ ...f, produto_servico_id: valor }))}
+              />
             </div>
             <div className="campo-form">
               <label>Serviço prestado (quando não há troca de peça)</label>

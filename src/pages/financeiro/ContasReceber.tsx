@@ -8,6 +8,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface ContaReceber {
   id: number;
@@ -229,14 +230,11 @@ export function ContasReceber() {
         >
             <div className="campo-form">
               <label>Cliente *</label>
-              <select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-                <option value="">Selecione...</option>
-                {(clientesQuery.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.razao_social}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(clientesQuery.data ?? []).map((c) => ({ value: String(c.id), label: c.razao_social }))}
+                valor={String(form.cliente_id ?? '')}
+                onChange={(valor) => setForm((f) => ({ ...f, cliente_id: valor }))}
+              />
             </div>
             <div className="campo-form">
               <label>Descrição</label>

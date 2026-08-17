@@ -8,6 +8,8 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPencil, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { Badge } from '../../components/Badge';
 
 interface Cliente {
   id: number;
@@ -15,6 +17,8 @@ interface Cliente {
   cnpj: string;
   nome_fantasia: string | null;
   hospital_clinica: string | null;
+  eh_terceirizado: boolean;
+  representante_id: number | null;
   telefone: string | null;
   email: string | null;
   emails_adicionais: string | null;
@@ -37,6 +41,8 @@ const formVazio = {
   cnpj: '',
   nome_fantasia: '',
   hospital_clinica: '',
+  eh_terceirizado: false,
+  representante_id: '',
   telefone: '',
   email: '',
   emails_adicionais: '',
@@ -113,6 +119,8 @@ export function Clientes() {
       cnpj: c.cnpj,
       nome_fantasia: c.nome_fantasia ?? '',
       hospital_clinica: c.hospital_clinica ?? '',
+      eh_terceirizado: c.eh_terceirizado,
+      representante_id: c.representante_id ? String(c.representante_id) : '',
       telefone: c.telefone ?? '',
       email: c.email ?? '',
       emails_adicionais: c.emails_adicionais ?? '',
@@ -209,7 +217,12 @@ export function Clientes() {
     }
     setSalvando(true);
     try {
-      const dados = { ...form, cnpj: formatarCnpj(form.cnpj), data_abertura: form.data_abertura || null };
+      const dados = {
+        ...form,
+        cnpj: formatarCnpj(form.cnpj),
+        data_abertura: form.data_abertura || null,
+        representante_id: form.representante_id ? Number(form.representante_id) : null,
+      };
       if (editando) {
         const { error } = await supabase.from('clientes').update(dados).eq('id', editando.id);
         if (error) throw error;
@@ -243,6 +256,7 @@ export function Clientes() {
         <thead>
           <tr>
             <th>Razão social</th>
+            <th></th>
             <th>Nome fantasia</th>
             <th>CNPJ</th>
             <th>Cidade/UF</th>
@@ -255,6 +269,7 @@ export function Clientes() {
           {linhas.map((c) => (
             <tr key={c.id}>
               <td>{c.razao_social}</td>
+              <td>{c.eh_terceirizado && <Badge tono="copper">Terceirizado</Badge>}</td>
               <td>{c.nome_fantasia}</td>
               <td className="mono">{c.cnpj}</td>
               <td>{c.cidade ? `${c.cidade}/${c.uf}` : '-'}</td>
@@ -272,7 +287,7 @@ export function Clientes() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhum registro encontrado.</td>
+              <td colSpan={8}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>
@@ -316,6 +331,39 @@ export function Clientes() {
               <label>Hospital/clínica (unidade atendida)</label>
               <input type="text" value={form.hospital_clinica} onChange={(e) => setForm((f) => ({ ...f, hospital_clinica: e.target.value }))} />
             </div>
+
+            <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                id="eh_terceirizado"
+                checked={form.eh_terceirizado}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, eh_terceirizado: e.target.checked, representante_id: e.target.checked ? '' : f.representante_id }))
+                }
+                style={{ width: 'auto' }}
+              />
+              <label htmlFor="eh_terceirizado" style={{ marginBottom: 0 }}>
+                Este cliente é um terceirizado/representante?
+              </label>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -8, marginBottom: 12 }}>
+              Marque quando este cliente atende outros clientes em nome deles (ex: um distribuidor) - na Entrada de
+              equipamento ele é selecionado como Cliente, e a NF/orçamento saem endereçados a ele.
+            </p>
+
+            {!form.eh_terceirizado && (
+              <div className="campo-form">
+                <label>Terceirizado responsável (se este cliente é atendido por um representante)</label>
+                <ComboboxBusca
+                  opcoes={(query.data ?? [])
+                    .filter((c) => c.eh_terceirizado && c.id !== editando?.id)
+                    .map((c) => ({ value: String(c.id), label: c.razao_social }))}
+                  valor={form.representante_id}
+                  onChange={(valor) => setForm((f) => ({ ...f, representante_id: valor }))}
+                />
+              </div>
+            )}
+
             <div className="campo-form">
               <label>Telefone</label>
               <input type="text" value={form.telefone} onChange={(e) => setForm((f) => ({ ...f, telefone: e.target.value }))} />

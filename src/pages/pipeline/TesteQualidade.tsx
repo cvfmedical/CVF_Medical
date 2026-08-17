@@ -37,7 +37,7 @@ export function TesteQualidade() {
           { chave: 'observacoes', label: 'Observações' },
         ]}
         campos={[
-          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
+          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'combobox', opcoes, obrigatorio: true },
           { name: 'resultado', label: 'Resultado', type: 'select', opcoes: ['Aprovado', 'Reprovado'], obrigatorio: true },
           { name: 'observacoes', label: 'Observações', type: 'textarea' },
         ]}

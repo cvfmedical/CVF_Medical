@@ -1,3 +1,5 @@
+import type { TonoBadge } from '../components/Badge';
+
 // Espelho de STATUS_OS_ORDENADOS em cadastros.py. Fluxo real (plano de
 // migração, seção 4): qualquer reprovação nos checkpoints 5, 7, 8 ou 9
 // retorna a OS para "4. EM MANUTENÇÃO".
@@ -36,3 +38,33 @@ export const STATUS_DEVOLUCAO_SEM_REPARO = 'Devolução sem reparo (orçamento r
 // precisa dela vai direto de "Checkpoint A" pra "Teste de estanqueidade").
 // Os dois caminhos convergem de volta no Checkpoint B (9).
 export const STATUS_TESTE_QUALIDADE = '6B. TESTE DE QUALIDADE / FUNCIONAMENTO';
+
+// Cor por status: ambar = fila/espera, copper = ação/aprovação/em
+// manutenção, roxo = em teste de laboratório, teal = concluído, danger =
+// crítico/reprovado. Agrupa os 11 status em 5 famílias de cor deliberadamente
+// (mais que isso vira ruído visual pra quem tem dificuldade com cor).
+export function tonoDoStatusOS(status: string | null | undefined): TonoBadge {
+  if (!status) return 'neutro';
+  if (status === STATUS_DEVOLUCAO_SEM_REPARO) return 'danger';
+  if (
+    status === STATUS_TRIAGEM ||
+    status === STATUS_AGUARDANDO_ORCAMENTO ||
+    status === STATUS_AGUARDANDO_PRECIFICACAO
+  ) {
+    return 'ambar';
+  }
+  if (status === '3. AGUARDANDO APROVAÇÃO DO CLIENTE' || status === STATUS_VOLTA_MANUTENCAO) {
+    return 'copper';
+  }
+  if (
+    status === STATUS_CHECKPOINT_A ||
+    status === STATUS_TESTE_QUALIDADE ||
+    status === STATUS_TESTE_ESTANQUEIDADE ||
+    status === STATUS_TESTE_AUTOCLAVE ||
+    status === STATUS_CHECKPOINT_B
+  ) {
+    return 'roxo';
+  }
+  if (status === STATUS_PRONTO_ENTREGA || status === '11. ENTREGUE AO CLIENTE') return 'teal';
+  return 'neutro';
+}

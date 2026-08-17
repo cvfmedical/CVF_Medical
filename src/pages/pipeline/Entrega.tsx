@@ -77,7 +77,7 @@ export function Entrega() {
         { chave: 'detalhes', label: 'Detalhes' },
       ]}
       campos={[
-        { name: 'ordem_servico_id', label: 'Ordem de serviço (só liberadas p/ entrega)', type: 'select', opcoes: opcoesEntrega, obrigatorio: true },
+        { name: 'ordem_servico_id', label: 'Ordem de serviço (só liberadas p/ entrega)', type: 'combobox', opcoes: opcoesEntrega, obrigatorio: true },
         {
           name: 'forma_devolucao',
           label: 'Forma de devolução',

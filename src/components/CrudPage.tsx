@@ -6,8 +6,9 @@ import { mensagemErro } from '../lib/erros';
 import { useRascunhos } from '../contexts/RascunhosContext';
 import { ModalJanela } from './ModalJanela';
 import { CarregandoTela } from './CarregandoTela';
+import { ComboboxBusca } from './ComboboxBusca';
 
-export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'date';
+export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'combobox' | 'checkbox' | 'date';
 
 export interface OpcaoSelect {
   value: string;
@@ -276,6 +277,12 @@ export function CrudPage<Row extends { id: number }>({
                     </option>
                   ))}
                 </select>
+              ) : campo.type === 'combobox' ? (
+                <ComboboxBusca
+                  opcoes={normalizarOpcoes(campo.opcoes)}
+                  valor={String(formData[campo.name] ?? '')}
+                  onChange={(valor) => atualizarCampo(campo, valor)}
+                />
               ) : campo.type === 'checkbox' ? (
                 <input
                   type="checkbox"

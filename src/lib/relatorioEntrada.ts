@@ -32,6 +32,7 @@ export function montarCorpoRegistroEntrada(
   cliente: { razao_social: string } | undefined,
   entrada: DadosEntradaParaRelatorio,
   fotosUrls: string[],
+  clienteFinal?: { razao_social: string } | null,
 ): string {
   const avariasMarcadas = CHECKLIST_AVARIAS.filter((item) => entrada.triagem_avarias?.[item.key]).map(
     (item) => item.label,
@@ -45,6 +46,7 @@ export function montarCorpoRegistroEntrada(
     <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
     <div class="linha"><div class="rotulo">Código</div><div class="valor mono">${entrada.codigo_entrada}</div></div>
     <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${cliente?.razao_social ?? ''}</div></div>
+    ${clienteFinal ? `<div class="linha"><div class="rotulo">Unidade atendida</div><div class="valor">${clienteFinal.razao_social}</div></div>` : ''}
     <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${entrada.equipamento_desc ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Fabricante</div><div class="valor">${entrada.equipamento_fab ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${entrada.equipamento_sn ?? '-'}</div></div>

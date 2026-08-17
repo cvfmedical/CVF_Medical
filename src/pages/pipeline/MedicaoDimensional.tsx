@@ -55,12 +55,12 @@ export function MedicaoDimensional() {
           },
         ]}
         campos={[
-          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
+          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'combobox', opcoes, obrigatorio: true },
           { name: 'diametro_max_mm', label: 'Diâmetro máx. do círculo circunscrito (mm)', type: 'number', obrigatorio: true },
           {
             name: 'calibracao_id',
             label: 'Padrão de calibração (paquímetro >= 0,05 mm)',
-            type: 'select',
+            type: 'combobox',
             opcoes: (padroesQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.identificacao })),
           },
           {

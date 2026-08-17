@@ -134,17 +134,17 @@ button {
 }
 
 .botao-secundario {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--ink-600);
+  background: var(--copper-500-12);
+  border: 1px solid var(--copper-500);
+  color: var(--copper-800);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 13px;
 }
 
 .botao-secundario:hover {
-  border-color: var(--ink-400);
-  color: var(--ink-900);
+  background: var(--copper-500);
+  color: #fff;
 }
 
 .botao-secundario.perigo {
@@ -424,6 +424,16 @@ button {
   color: var(--danger-500);
 }
 
+.badge-ambar {
+  background: var(--ambar-500-12);
+  color: var(--ambar-800);
+}
+
+.badge-roxo {
+  background: var(--roxo-500-12);
+  color: var(--roxo-800);
+}
+
 /* ===================== CrudPage ===================== */
 .crud-cabecalho {
   display: flex;
@@ -482,13 +492,21 @@ button {
   background: var(--paper-50);
 }
 
+.tabela-crud tbody tr:nth-child(even) {
+  background: var(--paper-100);
+}
+
+.tabela-crud tbody tr:nth-child(even):hover {
+  background: var(--paper-50);
+}
+
 .acoes-tabela {
   white-space: nowrap;
   text-align: right;
 }
 
 .botao-icone {
-  background: none;
+  background: var(--copper-500-12);
   border: none;
   border-radius: 6px;
   width: 30px;
@@ -496,18 +514,23 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink-400);
+  color: var(--copper-800);
   margin-left: 2px;
 }
 
 .botao-icone:hover {
-  background: var(--paper-50);
-  color: var(--ink-900);
+  background: var(--copper-500);
+  color: #fff;
+}
+
+.botao-icone.perigo {
+  background: var(--danger-500-12);
+  color: var(--danger-500);
 }
 
 .botao-icone.perigo:hover {
-  color: var(--danger-500);
-  background: var(--danger-500-12);
+  color: #fff;
+  background: var(--danger-500);
 }
 
 .modal-fundo {
@@ -556,6 +579,79 @@ button {
   font-family: var(--font-body);
   color: var(--ink-900);
   background: var(--paper-0);
+}
+
+/* ===================== ComboboxBusca ===================== */
+.combobox-busca {
+  position: relative;
+}
+
+.combobox-busca input {
+  width: 100%;
+  padding: 8px 30px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  color: var(--ink-900);
+  background: var(--paper-0);
+}
+
+.combobox-busca input:disabled {
+  opacity: 0.6;
+}
+
+.combobox-limpar {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--ink-400);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.combobox-limpar:hover {
+  color: var(--danger-500);
+}
+
+.combobox-lista {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--paper-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(27, 29, 32, 0.14);
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+}
+
+.combobox-item {
+  padding: 7px 9px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--ink-900);
+  cursor: pointer;
+}
+
+.combobox-item.ativo {
+  background: var(--copper-500-12);
+  color: var(--copper-800);
+}
+
+.combobox-vazio {
+  color: var(--ink-400);
+  cursor: default;
 }
 
 .modal-acoes {

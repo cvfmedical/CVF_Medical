@@ -336,7 +336,7 @@ export function Faturamento() {
                 ) : l.contaId == null ? (
                   <Badge tono="neutro">Aguardando entrega</Badge>
                 ) : (
-                  <Badge tono="neutro">Não faturado</Badge>
+                  <Badge tono="ambar">Não faturado</Badge>
                 )}
               </td>
               <td className="acoes-tabela">

@@ -9,6 +9,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface SolicitacaoCompra {
   id: number;
@@ -234,17 +235,11 @@ export function SolicitacoesCompra() {
 
             <div className="campo-form">
               <label>Produto/peça já cadastrado (opcional)</label>
-              <select
-                value={form.produto_servico_id}
-                onChange={(e) => setForm((f) => ({ ...f, produto_servico_id: e.target.value }))}
-              >
-                <option value="">Selecione...</option>
-                {(produtosQuery.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(produtosQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.nome }))}
+                valor={String(form.produto_servico_id ?? '')}
+                onChange={(valor) => setForm((f) => ({ ...f, produto_servico_id: valor }))}
+              />
             </div>
             {!form.produto_servico_id && (
               <div className="campo-form">
@@ -261,14 +256,11 @@ export function SolicitacoesCompra() {
             </div>
             <div className="campo-form">
               <label>Fornecedor (opcional)</label>
-              <select value={form.fornecedor_id} onChange={(e) => setForm((f) => ({ ...f, fornecedor_id: e.target.value }))}>
-                <option value="">Selecione...</option>
-                {(fornecedoresQuery.data ?? []).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.razao_social}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(fornecedoresQuery.data ?? []).map((f) => ({ value: String(f.id), label: f.razao_social }))}
+                valor={String(form.fornecedor_id ?? '')}
+                onChange={(valor) => setForm((f) => ({ ...f, fornecedor_id: valor }))}
+              />
             </div>
             <div className="campo-form">
               <label>Observações</label>

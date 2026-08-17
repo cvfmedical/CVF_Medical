@@ -182,7 +182,7 @@ export function ContratosManutencao() {
         {
           name: 'cliente_id',
           label: 'Cliente',
-          type: 'select',
+          type: 'combobox',
           obrigatorio: true,
           opcoes: (clientesQuery.data ?? []).map((c) => ({ value: String(c.id), label: c.razao_social })),
         },

@@ -9,6 +9,7 @@ import { CapturaFoto } from '../../components/CapturaFoto';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface ProdutoServico {
   id: number;
@@ -364,14 +365,11 @@ export function ProdutosServicos() {
             </div>
             <div className="campo-form">
               <label>Categoria</label>
-              <select value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}>
-                <option value="">Selecione...</option>
-                {(categoriasQuery.data ?? []).map((c) => (
-                  <option key={c.id} value={c.descricao}>
-                    {c.descricao}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(categoriasQuery.data ?? []).map((c) => ({ value: c.descricao, label: c.descricao }))}
+                valor={form.categoria}
+                onChange={(valor) => setForm((f) => ({ ...f, categoria: valor }))}
+              />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                 Não achou a categoria certa? Cadastre em "Categorias de produtos/serviços" (Cadastros Gerais).
               </p>
@@ -386,14 +384,11 @@ export function ProdutosServicos() {
             </div>
             <div className="campo-form">
               <label>Fornecedor padrão</label>
-              <select value={form.fornecedor_id} onChange={(e) => setForm((f) => ({ ...f, fornecedor_id: e.target.value }))}>
-                <option value="">Selecione...</option>
-                {(fornecedoresQuery.data ?? []).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.razao_social}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(fornecedoresQuery.data ?? []).map((f) => ({ value: String(f.id), label: f.razao_social }))}
+                valor={String(form.fornecedor_id ?? '')}
+                onChange={(valor) => setForm((f) => ({ ...f, fornecedor_id: valor }))}
+              />
             </div>
             <div className="campo-form">
               <label>NCM (para nota fiscal)</label>

@@ -6,7 +6,7 @@ import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAva
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
-import { STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
+import { tonoDoStatusOS } from '../../lib/statusOS';
 
 interface OrdemServico {
   id: number;
@@ -28,13 +28,6 @@ interface OrdemServico {
 // ele muda sozinho conforme a OS avança pelas telas do fluxo real
 // (orçamento, aprovação do cliente, manutenção, selagem, testes,
 // entrega); editar isso à mão aqui destoava do fluxo de verdade.
-function tonoStatus(status: string | null): 'copper' | 'teal' | 'neutro' | 'danger' {
-  if (!status) return 'neutro';
-  if (status === STATUS_DEVOLUCAO_SEM_REPARO) return 'danger';
-  if (status.startsWith('11.')) return 'teal';
-  if (status.startsWith('3.')) return 'copper';
-  return 'neutro';
-}
 
 export function OrdensServicoPanel() {
   const navigate = useNavigate();
@@ -98,7 +91,7 @@ export function OrdensServicoPanel() {
               <td>{os.optica_desc}</td>
               <td className="mono">{os.optica_sn}</td>
               <td>
-                <Badge tono={tonoStatus(os.status_os)}>{os.status_os ?? '-'}</Badge>
+                <Badge tono={tonoDoStatusOS(os.status_os)}>{os.status_os ?? '-'}</Badge>
               </td>
               <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
               <td className="acoes-tabela">

@@ -61,7 +61,7 @@ export function TesteLuz() {
           },
         ]}
         campos={[
-          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'select', opcoes, obrigatorio: true },
+          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'combobox', opcoes, obrigatorio: true },
           { name: 'diametro_mm', label: 'Diâmetro da ótica (mm)', type: 'number' },
           { name: 'lux_medido', label: 'Lux medido (luxímetro)', type: 'number' },
           { name: 'lux_baseline', label: 'Baseline do diâmetro (lux de referência)', type: 'number' },
@@ -69,7 +69,7 @@ export function TesteLuz() {
           {
             name: 'calibracao_id',
             label: 'Padrão de calibração (luxímetro)',
-            type: 'select',
+            type: 'combobox',
             opcoes: (padroesQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.identificacao })),
           },
           {

@@ -70,6 +70,7 @@ export interface DadosOrcamentoPdf {
   numeroOrcamento: string;
   numeroOS: string;
   clienteNome: string;
+  clienteFinalNome?: string | null;
   equipamento: string;
   numeroSerie: string;
   itens: ItemOrcamentoPdf[];
@@ -92,6 +93,9 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
     <Document>
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Orçamento de Manutenção" subtitulo={`Nº ${d.numeroOrcamento} · OS ${d.numeroOS} · ${d.clienteNome}`} />
+        {d.clienteFinalNome && (
+          <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
+        )}
         <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>
           {d.equipamento}{d.numeroSerie ? ` · Nº série ${d.numeroSerie}` : ''}
         </Text>
@@ -219,6 +223,7 @@ export interface ItemOSPdf {
 export interface DadosOSPdf {
   numeroOS: string;
   clienteNome: string;
+  clienteFinalNome?: string | null;
   equipamento: string;
   itens: ItemOSPdf[];
   observacoesTecnico?: string | null;
@@ -230,6 +235,9 @@ function DocOS({ d }: { d: DadosOSPdf }) {
     <Document>
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Ordem de Serviço" subtitulo={`${d.numeroOS} · ${d.clienteNome}`} />
+        {d.clienteFinalNome && (
+          <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
+        )}
         <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>{d.equipamento}</Text>
         {d.prazoEntrega ? (
           <View style={s.linha}><Text style={s.rotulo}>Prazo de entrega</Text><Text style={s.valor}>{d.prazoEntrega}</Text></View>
