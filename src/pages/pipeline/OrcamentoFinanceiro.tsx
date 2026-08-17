@@ -12,7 +12,15 @@ import { abrirJanelaImpressao, escreverImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
-import { formatarMoeda, EMPRESA, CONDICOES_COMERCIAIS_PADRAO, GARANTIA_CVF, CLAUSULAS_GERAIS } from '../../lib/formato';
+import {
+  formatarMoeda,
+  EMPRESA,
+  CONDICOES_COMERCIAIS_PADRAO,
+  GARANTIA_CVF,
+  CLAUSULAS_GERAIS,
+  CHECKLIST_OTICA,
+  AVISO_MANUTENCAO,
+} from '../../lib/formato';
 import { CHECKLIST_AVARIAS } from '../../lib/checklistAvarias';
 import {
   gerarAnexosOrcamento,
@@ -45,6 +53,7 @@ interface Orcamento {
     optica_fab: string | null;
     optica_sn: string | null;
     prazo_entrega: string | null;
+    eh_otica: boolean | null;
   } | null;
 }
 
@@ -178,7 +187,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -479,6 +488,12 @@ export function OrcamentoFinanceiro() {
              <p style="text-align:right;margin:2px 0 0;color:var(--ink-600);">Desconto: - ${formatarMoeda(descontoNum)}</p>`
           : ''}
       <p class="total-linha">Total: ${formatarMoeda(total)}</p>
+      ${os?.eh_otica ? `
+      <div class="secao">Procedimentos de manutenção incluídos</div>
+      <ul class="check">
+        ${CHECKLIST_OTICA.map((item) => `<li>${item}</li>`).join('')}
+      </ul>
+      <p class="alerta">${AVISO_MANUTENCAO}</p>` : ''}
       <div class="secao">Condições comerciais</div>
       <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
       <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${condicoesPagamento || '-'}</div></div>
@@ -687,6 +702,7 @@ export function OrcamentoFinanceiro() {
         validade: validadeProposta,
         pagamento: condicoesPagamento,
         observacoes: observacoesFinanceiro,
+        ehOtica: os?.eh_otica ?? false,
         garantiaResumo: GARANTIA_CVF.resumo,
         garantiaIntro: GARANTIA_CVF.intro,
         garantiaItens: GARANTIA_CVF.itens,

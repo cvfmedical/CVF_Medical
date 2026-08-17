@@ -36,6 +36,8 @@ interface Entrada {
   nf_remessa_data_emissao: string | null;
   nf_remessa_valor: number | null;
   numero_controle_cliente: string | null;
+  eh_otica: boolean | null;
+  catalogo_otica_id: number | null;
 }
 
 interface FotoEntrada {
@@ -104,6 +106,12 @@ export function EntradaEquipamento() {
   const [fotos, setFotos] = useState<File[]>([]);
   const [form, setForm] = useState(formVazio);
   const [avarias, setAvarias] = useState<ChecklistAvarias>({});
+  // Indica se o equipamento é uma ótica (dispara o checklist específico e o
+  // fluxo simplificado de não-ótica mais adiante no pipeline). Preenchido
+  // automaticamente ao escolher um dos catálogos, mas continua editável pra
+  // cobrir entrada digitada na mão.
+  const [ehOtica, setEhOtica] = useState<boolean | null>(null);
+  const [catalogoOticaId, setCatalogoOticaId] = useState('');
   const [convertendo, setConvertendo] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<Entrada | null>(null);
   const [fotosDetalhe, setFotosDetalhe] = useState<{ id: number; url: string | null }[]>([]);
@@ -123,6 +131,8 @@ export function EntradaEquipamento() {
       condicoesSelecionadas,
       condicaoParaAdicionar,
       editando,
+      ehOtica,
+      catalogoOticaId,
     }),
     aoRestaurar: (e) => {
       setForm((e.form as typeof formVazio) ?? formVazio);
@@ -134,6 +144,8 @@ export function EntradaEquipamento() {
       setCondicoesSelecionadas((e.condicoesSelecionadas as string[]) ?? []);
       setCondicaoParaAdicionar((e.condicaoParaAdicionar as string) ?? '');
       setEditando((e.editando as Entrada | null) ?? null);
+      setEhOtica((e.ehOtica as boolean | null) ?? null);
+      setCatalogoOticaId((e.catalogoOticaId as string) ?? '');
       setErro(null);
       setModalAberto(true);
     },
@@ -184,6 +196,8 @@ export function EntradaEquipamento() {
     const partes = [item.tipo, item.diametro_mm ? `${item.diametro_mm}mm` : null, item.angulo_graus != null ? `${item.angulo_graus}°` : null];
     const descricao = partes.filter(Boolean).join(' ');
     setForm((f) => ({ ...f, equipamento_fab: item.fabricante, equipamento_desc: descricao || item.modelo }));
+    setEhOtica(true);
+    setCatalogoOticaId(catalogoId);
   }
 
   // Catálogo de produtos/serviços usado como fonte de OUTROS equipamentos
@@ -206,6 +220,8 @@ export function EntradaEquipamento() {
     if (!item) return;
     const descricao = [item.nome, item.tipo ? `(${item.tipo})` : null].filter(Boolean).join(' ');
     setForm((f) => ({ ...f, equipamento_fab: item.marca_fabricante ?? '', equipamento_desc: descricao }));
+    setEhOtica(false);
+    setCatalogoOticaId('');
   }
 
   const entradasQuery = useQuery({
@@ -232,6 +248,8 @@ export function EntradaEquipamento() {
     setFotosExistentes([]);
     setCondicoesSelecionadas([]);
     setCondicaoParaAdicionar('');
+    setEhOtica(null);
+    setCatalogoOticaId('');
     setErro(null);
     setModalAberto(true);
   }
@@ -272,6 +290,8 @@ export function EntradaEquipamento() {
     setFotos([]);
     setCondicoesSelecionadas(e.condicao_chegada ? e.condicao_chegada.split('; ').filter(Boolean) : []);
     setCondicaoParaAdicionar('');
+    setEhOtica(e.eh_otica ?? null);
+    setCatalogoOticaId(e.catalogo_otica_id ? String(e.catalogo_otica_id) : '');
     setErro(null);
     setModalAberto(true);
     carregarFotosExistentes(e.id);
@@ -337,6 +357,8 @@ export function EntradaEquipamento() {
         nf_remessa_data_emissao: form.nf_remessa_data_emissao || null,
         nf_remessa_valor: form.nf_remessa_valor ? Number(form.nf_remessa_valor) : null,
         numero_controle_cliente: form.numero_controle_cliente || null,
+        eh_otica: ehOtica,
+        catalogo_otica_id: catalogoOticaId ? Number(catalogoOticaId) : null,
       };
 
       if (editando) {
@@ -411,6 +433,8 @@ export function EntradaEquipamento() {
           defeito_relatado: entrada.defeito_relatado,
           status_os: '1. TRIAGEM / RECEBIMENTO',
           triagem_avarias: entrada.triagem_avarias ?? {},
+          eh_otica: entrada.eh_otica,
+          catalogo_otica_id: entrada.catalogo_otica_id,
         })
         .select('id')
         .single();
@@ -580,6 +604,22 @@ export function EntradaEquipamento() {
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                 Para peças/equipamentos que não são ópticas (ex.: peça de mão de shaver, motor, fonte de luz) — vêm do
                 cadastro de Produtos e serviços.
+              </p>
+            </div>
+            <div className="campo-form">
+              <label>Este equipamento é uma ótica?</label>
+              <select
+                value={ehOtica === null ? '' : ehOtica ? 'sim' : 'nao'}
+                onChange={(e) => setEhOtica(e.target.value === '' ? null : e.target.value === 'sim')}
+              >
+                <option value="">Não informado</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Já preenchido sozinho ao usar um dos catálogos acima - confira/ajuste se a entrada foi digitada na
+                mão. Define se o checklist de manutenção de óticas aparece no orçamento e se o equipamento passa
+                pelos ensaios ópticos (ISO 8600).
               </p>
             </div>
             <div className="campo-form">

@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, Image, StyleSheet, pdf } from '@react-pdf/renderer';
-import { EMPRESA, formatarMoeda } from './formato';
+import { EMPRESA, formatarMoeda, CHECKLIST_OTICA, AVISO_MANUTENCAO } from './formato';
 
 // PDFs REAIS (arquivos) dos 3 relatórios enviados ao cliente - usados no envio
 // automático por e-mail (anexos). São documentos limpos, em texto/tabela; as
@@ -80,6 +80,7 @@ export interface DadosOrcamentoPdf {
   validade: string;
   pagamento: string;
   observacoes: string;
+  ehOtica?: boolean | null;
   garantiaResumo: string;
   garantiaIntro: string;
   garantiaItens: string[];
@@ -121,6 +122,16 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
           </>
         ) : null}
         <Text style={s.total}>Total: {formatarMoeda(d.total)}</Text>
+
+        {d.ehOtica && (
+          <View wrap={false}>
+            <Text style={s.secao}>Procedimentos de manutenção incluídos</Text>
+            {CHECKLIST_OTICA.map((item, i) => (
+              <Text style={s.item} key={i}>• {item}</Text>
+            ))}
+            <Text style={s.alerta}>{AVISO_MANUTENCAO}</Text>
+          </View>
+        )}
 
         <Text style={s.secao}>Condições comerciais</Text>
         <View style={s.linha}><Text style={s.rotulo}>Validade da proposta</Text><Text style={s.valor}>{d.validade || '-'}</Text></View>

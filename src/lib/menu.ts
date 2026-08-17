@@ -82,7 +82,6 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Medição dimensional (ISO 8600-4)', path: '/medicao-dimensional', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
       { label: 'Auto-validação do sistema', path: '/auto-validacao', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Ensaios ópticos (ISO 8600)' },
       // Pós-reparo & selagem
-      { label: 'Selagem', path: '/selagem', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
       { label: 'Teste de estanqueidade', path: '/teste-estanqueidade', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
       { label: 'Teste de autoclave', path: '/teste-autoclave', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },
       { label: 'Teste de qualidade / funcionamento', path: '/teste-qualidade', categoria: 'laboratorio_qualidade', implementado: false, grupo: 'Pós-reparo & selagem' },

@@ -14,7 +14,7 @@ import { BancadaVisaoPdf, type DadosBancadaPdf } from './BancadaVisaoPdf';
 import {
   STATUS_CHECKPOINT_A,
   STATUS_CHECKPOINT_B,
-  STATUS_SELAGEM,
+  STATUS_TESTE_ESTANQUEIDADE,
   STATUS_PRONTO_ENTREGA,
   STATUS_VOLTA_MANUTENCAO,
   STATUS_TESTE_QUALIDADE,
@@ -632,7 +632,7 @@ export function BancadaVisao() {
         resultado === 'Reprovado'
           ? STATUS_VOLTA_MANUTENCAO
           : etapa === 'checkpoint_a'
-            ? (precisaSelagem ? STATUS_SELAGEM : STATUS_TESTE_QUALIDADE)
+            ? (precisaSelagem ? STATUS_TESTE_ESTANQUEIDADE : STATUS_TESTE_QUALIDADE)
             : STATUS_PRONTO_ENTREGA;
       await supabase.from('ordens_servico').update({ status_os: novoStatus }).eq('id', osSelecionada.id);
 
@@ -788,7 +788,7 @@ export function BancadaVisao() {
               value={precisaSelagem ? 'sim' : 'nao'}
               onChange={(e) => setPrecisaSelagem(e.target.value === 'sim')}
             >
-              <option value="sim">Sim (ótica selável - vai para Selagem)</option>
+              <option value="sim">Sim (ótica selável - vai para Teste de estanqueidade)</option>
               <option value="nao">Não (ex: bomba de infusão - vai para Teste de Qualidade)</option>
             </select>
           </div>
@@ -892,7 +892,7 @@ export function BancadaVisao() {
               value={precisaSelagem ? 'sim' : 'nao'}
               onChange={(e) => setPrecisaSelagem(e.target.value === 'sim')}
             >
-              <option value="sim">Sim (ótica selável - vai para Selagem)</option>
+              <option value="sim">Sim (ótica selável - vai para Teste de estanqueidade)</option>
               <option value="nao">Não (ex: bomba de infusão - vai para Teste de Qualidade)</option>
             </select>
           </div>

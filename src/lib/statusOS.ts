@@ -8,7 +8,6 @@ export const STATUS_OS_ORDENADOS = [
   '3. AGUARDANDO APROVAÇÃO DO CLIENTE',
   '4. EM MANUTENÇÃO',
   '5. BANCADA DE VISÃO - CHECKPOINT A',
-  '6. SELAGEM',
   '7. TESTE DE ESTANQUEIDADE',
   '8. TESTE DE AUTOCLAVE',
   '9. BANCADA DE VISÃO - CHECKPOINT B',
@@ -21,7 +20,6 @@ export const STATUS_TRIAGEM = '1. TRIAGEM / RECEBIMENTO';
 export const STATUS_AGUARDANDO_ORCAMENTO = '2. AGUARDANDO ORÇAMENTO';
 export const STATUS_AGUARDANDO_PRECIFICACAO = '2B. AGUARDANDO PRECIFICAÇÃO';
 export const STATUS_CHECKPOINT_A = '5. BANCADA DE VISÃO - CHECKPOINT A';
-export const STATUS_SELAGEM = '6. SELAGEM';
 export const STATUS_TESTE_ESTANQUEIDADE = '7. TESTE DE ESTANQUEIDADE';
 export const STATUS_TESTE_AUTOCLAVE = '8. TESTE DE AUTOCLAVE';
 export const STATUS_CHECKPOINT_B = '9. BANCADA DE VISÃO - CHECKPOINT B';
@@ -31,8 +29,10 @@ export const STATUS_PRONTO_ENTREGA = '10. PRONTO PARA ENTREGA';
 // "avanços", são saídas do fluxo de reparo.
 export const STATUS_DEVOLUCAO_SEM_REPARO = 'Devolução sem reparo (orçamento recusado)';
 
-// Caminho alternativo ao Checkpoint A: substitui a sequência inteira
-// 6 (Selagem) -> 7 (Estanqueidade) -> 8 (Autoclave) pra equipamentos que
-// não são óticas seláveis - o técnico escolhe na hora do Checkpoint A.
+// Caminho alternativo ao Checkpoint A: substitui a sequência
+// Estanqueidade (7) -> Autoclave (8) pra equipamentos que não são óticas
+// seláveis - o técnico escolhe na hora do Checkpoint A. A etapa de Selagem
+// foi removida do fluxo (não é mais rastreada como status próprio - quem
+// precisa dela vai direto de "Checkpoint A" pra "Teste de estanqueidade").
 // Os dois caminhos convergem de volta no Checkpoint B (9).
 export const STATUS_TESTE_QUALIDADE = '6B. TESTE DE QUALIDADE / FUNCIONAMENTO';

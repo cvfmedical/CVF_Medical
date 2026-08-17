@@ -73,6 +73,23 @@ export const CLAUSULAS_GERAIS: { titulo: string; texto: string }[] = [
   },
 ];
 
+// Checklist fixo de procedimentos padrão de manutenção de óticas, impresso
+// no orçamento (entre os itens precificados e as condições comerciais)
+// quando o equipamento é uma ótica (entradas_equipamento/ordens_servico.eh_otica).
+export const CHECKLIST_OTICA = [
+  'Recuperação da estrutura do equipamento: polimento, jateamento e gravação a laser',
+  'Limpeza interna',
+  'Substituição de Kit de Vedação',
+  'Endoscópio hermeticamente selado a laser (quando aplicável)',
+  'Teste de estanqueidade',
+  'Teste em autoclave',
+  'Testes de parâmetros de funcionamento',
+];
+
+// Aviso fixo impresso junto do checklist acima.
+export const AVISO_MANUTENCAO =
+  'Durante o processo de execução da manutenção, caso identificado algum problema no equipamento ou outro defeito, será enviado novo orçamento ou devolução do equipamento sem conserto.';
+
 const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtNumero = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
