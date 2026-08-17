@@ -82,7 +82,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: funcionario, error: funcionarioError } = await supabaseAdmin
     .from('funcionarios')
-    .select('id, nome, email, auth_user_id')
+    .select('id, nome, email, auth_user_id, senha_definida')
     .eq('id', funcionarioId)
     .single();
 
@@ -100,18 +100,19 @@ Deno.serve(async (req: Request) => {
   }
   const origem = req.headers.get('origin') ?? 'https://systemcvfmedical.netlify.app';
 
-  // Já tem conta vinculada: só bloqueia se a conta já foi confirmada (senha
-  // definida). Se o convite anterior expirou sem o funcionário ter clicado,
-  // reenviamos um link novo em vez de travar - o link de convite do Supabase
-  // vence rápido (às vezes minutos, se algum scanner de e-mail "clicar" nele
-  // antes da pessoa) e antes não havia como reenviar.
+  // Já tem conta vinculada: só bloqueia se a senha já foi realmente definida
+  // (funcionarios.senha_definida, marcado pela própria tela de definir senha
+  // após o updateUser ter sucesso). Não dá pra usar campos do Supabase Auth
+  // pra isso (email_confirmed_at/last_sign_in_at podem já vir preenchidos por
+  // scanners de segurança de e-mail que "clicam" o link de convite sozinhos,
+  // antes da pessoa sequer abrir o e-mail).
   if (funcionario.auth_user_id) {
     const { data: existente, error: existenteError } = await supabaseAdmin.auth.admin.getUserById(
       funcionario.auth_user_id,
     );
     if (existenteError || !existente.user) {
       // Referência órfã (conta não existe mais no Auth) - segue para criar um convite novo.
-    } else if (existente.user.email_confirmed_at) {
+    } else if (funcionario.senha_definida) {
       return new Response(JSON.stringify({ error: 'Este funcionário já tem conta web vinculada e confirmada.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

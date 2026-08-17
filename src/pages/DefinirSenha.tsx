@@ -51,11 +51,16 @@ export function DefinirSenha() {
     }
     setEnviando(true);
     const { error } = await supabase.auth.updateUser({ password: senha });
-    setEnviando(false);
     if (error) {
+      setEnviando(false);
       setErro('Não foi possível definir a senha: ' + error.message);
       return;
     }
+    // Marca no nosso banco que a senha foi realmente definida - não dá pra
+    // confiar nos campos do Auth (last_sign_in_at/email_confirmed_at podem
+    // já vir preenchidos por scanners de e-mail que "clicam" o link sozinhos).
+    await supabase.rpc('marcar_senha_definida');
+    setEnviando(false);
     setConcluido(true);
   }
 

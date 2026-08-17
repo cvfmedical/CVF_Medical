@@ -72,6 +72,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Destinatário e assunto são obrigatórios.' }, 400);
   }
 
+  // Cópia fixa para o financeiro ver todo orçamento enviado (o Resend não
+  // passa pelo Gmail, então sem isso nada aparece na caixa do financeiro).
+  // Sobrepõe via env se um dia precisar trocar/desativar.
+  const copiaFinanceiro = Deno.env.get('RESEND_BCC_ORCAMENTO') ?? 'financeiro@cvfmedical.com.br';
+
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -81,6 +86,7 @@ Deno.serve(async (req: Request) => {
     body: JSON.stringify({
       from: remetente,
       to: destinatarios,
+      bcc: copiaFinanceiro || undefined,
       subject: corpo.subject,
       html: corpo.html,
       attachments: (corpo.anexos ?? []).map((a) => ({ filename: a.filename, content: a.content })),
