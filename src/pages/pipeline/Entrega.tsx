@@ -5,6 +5,9 @@ import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { imprimirOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
+import { imprimirEtiquetaDespacho } from '../../lib/etiquetaDespacho';
+import { IconPrinter } from '@tabler/icons-react';
+import { mensagemErro } from '../../lib/erros';
 
 interface EntregaRow {
   id: number;
@@ -32,6 +35,47 @@ export function Entrega() {
     return s === STATUS_PRONTO_ENTREGA || s === STATUS_DEVOLUCAO_SEM_REPARO;
   };
   const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)));
+
+  async function imprimirEtiqueta(ordemServicoId: number) {
+    const os = porId(ordemServicoId);
+    if (!os) return;
+    const { data: cliente, error } = await supabase
+      .from('clientes')
+      .select('razao_social, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
+      .eq('id', os.cliente_id)
+      .single();
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    let clienteFinalNome: string | null = null;
+    const { data: osCompleta } = await supabase
+      .from('ordens_servico')
+      .select('cliente_final_id')
+      .eq('id', ordemServicoId)
+      .single();
+    if (osCompleta?.cliente_final_id) {
+      const { data: clienteFinal } = await supabase
+        .from('clientes')
+        .select('razao_social')
+        .eq('id', osCompleta.cliente_final_id)
+        .single();
+      clienteFinalNome = clienteFinal?.razao_social ?? null;
+    }
+    imprimirEtiquetaDespacho({
+      numeroOS: os.numero_os,
+      clienteNome: cliente.razao_social,
+      clienteFinalNome,
+      logradouro: cliente.logradouro,
+      numeroEndereco: cliente.numero_endereco,
+      complemento: cliente.complemento,
+      bairro: cliente.bairro,
+      cidade: cliente.cidade,
+      uf: cliente.uf,
+      cep: cliente.cep,
+      equipamento: os.optica_desc,
+    });
+  }
 
   return (
     <div>
@@ -76,6 +120,15 @@ export function Entrega() {
         },
         { chave: 'detalhes', label: 'Detalhes' },
       ]}
+      acoesExtras={(row) => (
+        <button
+          className="botao-icone"
+          title="Imprimir etiqueta de despacho"
+          onClick={() => imprimirEtiqueta(row.ordem_servico_id)}
+        >
+          <IconPrinter size={16} />
+        </button>
+      )}
       campos={[
         { name: 'ordem_servico_id', label: 'Ordem de serviço (só liberadas p/ entrega)', type: 'combobox', opcoes: opcoesEntrega, obrigatorio: true },
         {

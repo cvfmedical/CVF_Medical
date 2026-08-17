@@ -57,6 +57,9 @@ export interface CrudPageProps<Row extends { id: number }> {
   // Efeito colateral pós-salvar (ex: telas de teste que precisam voltar o
   // status da OS para "Em Manutenção" quando o resultado é reprovado).
   aposSalvar?: (dadosEnviados: Record<string, unknown>) => Promise<void>;
+  // Botões extras na linha da tabela, antes de Editar/Excluir (ex:
+  // "Imprimir etiqueta" em Entrega.tsx).
+  acoesExtras?: (row: Row) => React.ReactNode;
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -70,6 +73,7 @@ export function CrudPage<Row extends { id: number }>({
   validar,
   antesDeEnviar,
   aposSalvar,
+  acoesExtras,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -226,6 +230,7 @@ export function CrudPage<Row extends { id: number }>({
                   </td>
                 ))}
                 <td className="acoes-tabela">
+                  {acoesExtras?.(row)}
                   <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(row)}>
                     <IconPencil size={16} />
                   </button>
