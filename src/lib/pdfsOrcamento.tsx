@@ -75,6 +75,7 @@ export interface DadosOrcamentoPdf {
   itens: ItemOrcamentoPdf[];
   subtotal: number;
   desconto: number;
+  bonificacao: boolean;
   total: number;
   validade: string;
   pagamento: string;
@@ -109,7 +110,12 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
             <Text style={s.cNum}>{formatarMoeda(it.precoUnit * it.quantidade)}</Text>
           </View>
         ))}
-        {d.desconto > 0 ? (
+        {d.bonificacao ? (
+          <>
+            <Text style={{ textAlign: 'right', color: cinza, marginTop: 6 }}>Subtotal: {formatarMoeda(d.subtotal)}</Text>
+            <Text style={{ textAlign: 'right', color: azul, fontWeight: 700, marginTop: 2 }}>Bonificação de fidelidade (serviço em cortesia)</Text>
+          </>
+        ) : d.desconto > 0 ? (
           <>
             <Text style={{ textAlign: 'right', color: cinza, marginTop: 6 }}>Subtotal: {formatarMoeda(d.subtotal)}</Text>
             <Text style={{ textAlign: 'right', color: cinza, marginTop: 2 }}>Desconto: - {formatarMoeda(d.desconto)}</Text>

@@ -17,7 +17,7 @@ interface Anexo {
 }
 
 interface Corpo {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   anexos?: Anexo[];
@@ -67,7 +67,10 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json({ error: 'Corpo inválido.' }, 400);
   }
-  if (!corpo.to || !corpo.subject) return json({ error: 'Destinatário e assunto são obrigatórios.' }, 400);
+  const destinatarios = Array.isArray(corpo.to) ? corpo.to.filter(Boolean) : corpo.to ? [corpo.to] : [];
+  if (destinatarios.length === 0 || !corpo.subject) {
+    return json({ error: 'Destinatário e assunto são obrigatórios.' }, 400);
+  }
 
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -77,7 +80,7 @@ Deno.serve(async (req: Request) => {
     },
     body: JSON.stringify({
       from: remetente,
-      to: corpo.to,
+      to: destinatarios,
       subject: corpo.subject,
       html: corpo.html,
       attachments: (corpo.anexos ?? []).map((a) => ({ filename: a.filename, content: a.content })),

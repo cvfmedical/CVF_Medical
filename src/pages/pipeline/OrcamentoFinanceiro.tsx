@@ -37,6 +37,7 @@ interface Orcamento {
   condicoes_pagamento: string | null;
   prazo_entrega: string | null;
   desconto: number | null;
+  bonificacao: boolean | null;
   ordens_servico: {
     numero_os: string;
     cliente_nome: string;
@@ -204,6 +205,10 @@ export function OrcamentoFinanceiro() {
   const [condicoesPagamento, setCondicoesPagamento] = useState('');
   const [prazoEntrega, setPrazoEntrega] = useState('');
   const [anexarOrientacao, setAnexarOrientacao] = useState(false);
+  // E-mails extras (cópia) para o envio automático, além do e-mail cadastrado
+  // do cliente - ex.: outro contato do financeiro do cliente. Só desta sessão,
+  // não é salvo no cadastro.
+  const [emailsAdicionais, setEmailsAdicionais] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -217,6 +222,9 @@ export function OrcamentoFinanceiro() {
   // caso). null = precificação normal por item.
   const [valorFixoContrato, setValorFixoContrato] = useState<number | null>(null);
   const [desconto, setDesconto] = useState('');
+  // Bonificação de fidelidade: serviço em cortesia (100% de desconto, total
+  // R$ 0,00). Não gera conta a receber (ver trigger no banco).
+  const [bonificacao, setBonificacao] = useState(false);
   // Ao restaurar um rascunho minimizado, guarda os preços editados para que o
   // efeito que recarrega os itens não sobrescreva com os valores do banco.
   const precosRestauradosRef = useRef<Record<number, string> | null>(null);
@@ -227,7 +235,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, desconto, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, prazo_entrega, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -353,7 +361,9 @@ export function OrcamentoFinanceiro() {
       precoFixoSelecionado,
       valorFixoContrato,
       desconto,
+      bonificacao,
       anexarOrientacao,
+      emailsAdicionais,
     }),
     aoRestaurar: (e) => {
       precosRestauradosRef.current = (e.precos as Record<number, string>) ?? {};
@@ -364,7 +374,9 @@ export function OrcamentoFinanceiro() {
       setPrecoFixoSelecionado((e.precoFixoSelecionado as string) ?? '');
       setValorFixoContrato((e.valorFixoContrato as number | null) ?? null);
       setDesconto((e.desconto as string) ?? '');
+      setBonificacao(Boolean(e.bonificacao));
       setAnexarOrientacao(Boolean(e.anexarOrientacao));
+      setEmailsAdicionais((e.emailsAdicionais as string) ?? '');
       setErro(null);
       setSelecionadoId((e.selecionadoId as number | null) ?? null);
     },
@@ -379,8 +391,8 @@ export function OrcamentoFinanceiro() {
     valorFixoContrato != null
       ? valorFixoContrato
       : (itensQuery.data ?? []).reduce((soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade, 0);
-  const descontoNum = Number(desconto) || 0;
-  const total = Math.max(subtotal - descontoNum, 0);
+  const descontoNum = bonificacao ? subtotal : Number(desconto) || 0;
+  const total = bonificacao ? 0 : Math.max(subtotal - descontoNum, 0);
 
   // Valor de contrato vira o total do orçamento direto - os itens ficam
   // com preço zerado (só de referência de quais peças foram usadas, não
@@ -508,10 +520,13 @@ export function OrcamentoFinanceiro() {
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
         <tbody>${linhas}</tbody>
       </table>
-      ${descontoNum > 0
+      ${bonificacao
         ? `<p style="text-align:right;margin:6px 0 0;color:var(--ink-600);">Subtotal: ${formatarMoeda(subtotal)}</p>
-           <p style="text-align:right;margin:2px 0 0;color:var(--ink-600);">Desconto: - ${formatarMoeda(descontoNum)}</p>`
-        : ''}
+           <p style="text-align:right;margin:2px 0 0;font-weight:600;color:var(--copper-500);">Bonificação de fidelidade (serviço em cortesia)</p>`
+        : descontoNum > 0
+          ? `<p style="text-align:right;margin:6px 0 0;color:var(--ink-600);">Subtotal: ${formatarMoeda(subtotal)}</p>
+             <p style="text-align:right;margin:2px 0 0;color:var(--ink-600);">Desconto: - ${formatarMoeda(descontoNum)}</p>`
+          : ''}
       <p class="total-linha">Total: ${formatarMoeda(total)}</p>
       <div class="secao">Condições comerciais</div>
       <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
@@ -580,7 +595,9 @@ export function OrcamentoFinanceiro() {
     setPrecoFixoSelecionado('');
     setValorFixoContrato(o.valor_fixo_contrato ?? null);
     setDesconto(o.desconto ? String(o.desconto) : '');
+    setBonificacao(!!o.bonificacao);
     setAnexarOrientacao(false);
+    setEmailsAdicionais('');
     setErro(null);
   }
 
@@ -602,6 +619,7 @@ export function OrcamentoFinanceiro() {
         condicoes_pagamento: condicoesPagamento || null,
         prazo_entrega: prazoEntrega || null,
         desconto: descontoNum || 0,
+        bonificacao,
       })
       .eq('id', selecionadoId!);
     if (error) throw error;
@@ -716,6 +734,7 @@ export function OrcamentoFinanceiro() {
         })),
         subtotal,
         desconto: descontoNum,
+        bonificacao,
         total,
         validade: validadeProposta,
         pagamento: condicoesPagamento,
@@ -754,9 +773,15 @@ export function OrcamentoFinanceiro() {
         <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
         <p>Atenciosamente,<br/><strong>${EMPRESA.razaoSocial}</strong></p>`;
 
+      const extras = emailsAdicionais
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean);
+      const destinatarios = [clienteQuery.data.email, ...extras];
+
       const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
         body: {
-          to: clienteQuery.data.email,
+          to: destinatarios,
           subject: `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`,
           html,
           anexos,
@@ -774,7 +799,7 @@ export function OrcamentoFinanceiro() {
         .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
         .eq('id', orcamentoSelecionado.ordem_servico_id);
 
-      alert(`E-mail enviado para ${clienteQuery.data.email} com os 3 anexos.`);
+      alert(`E-mail enviado para ${destinatarios.join(', ')} com os 3 anexos.`);
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
       qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
@@ -1016,15 +1041,40 @@ export function OrcamentoFinanceiro() {
                   type="number"
                   min={0}
                   step="0.01"
-                  value={desconto}
+                  value={bonificacao ? subtotal : desconto}
+                  disabled={bonificacao}
                   onChange={(e) => setDesconto(e.target.value)}
                   style={{ width: 120, textAlign: 'right', padding: '6px 8px' }}
                 />
               </div>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 10,
+                  fontSize: 13,
+                  color: 'var(--ink-600)',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  style={{ width: 'auto' }}
+                  checked={bonificacao}
+                  onChange={(e) => setBonificacao(e.target.checked)}
+                />
+                Bonificação de fidelidade (serviço em cortesia — total R$ 0,00)
+              </label>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
                 <span>Total</span>
                 <span>{formatarMoeda(total)}</span>
               </div>
+              {bonificacao && (
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', margin: '4px 0 0' }}>
+                  Não gera conta a receber ao aprovar.
+                </p>
+              )}
             </div>
 
             <div className="campo-form">
@@ -1074,6 +1124,20 @@ export function OrcamentoFinanceiro() {
                 Inclui, ao final, a orientação de manuseio/limpeza/esterilização das ópticas (para o cliente repassar ao hospital).
               </p>
             </div>
+
+            <div className="campo-form">
+              <label>E-mails adicionais (cópia) — opcional</label>
+              <input
+                type="text"
+                value={emailsAdicionais}
+                onChange={(e) => setEmailsAdicionais(e.target.value)}
+                placeholder="Ex.: financeiro@cliente.com.br, compras@cliente.com.br"
+              />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Separe por vírgula. Vão junto com o e-mail cadastrado do cliente ({clienteQuery.data?.email ?? '-'}) no envio automático.
+              </p>
+            </div>
+
             {orcamentoSelecionado.observacoes_tecnico && (
               <div className="campo-form">
                 <label>Observações do técnico</label>
