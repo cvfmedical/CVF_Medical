@@ -69,7 +69,7 @@ export function ConfiguracoesUsuarios() {
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Só administradores podem convidar. O convite envia um e-mail com um link para o funcionário definir a
         própria senha - ninguém, nem o administrador, vê ou define a senha por ele. Se o link expirar antes de ser
-        usado, clique em "Reenviar convite" - nesse caso o link E um código de 6 dígitos aparecem na tela pra você
+        usado, clique em "Reenviar convite" - nesse caso o link E um código de acesso aparecem na tela pra você
         repassar manualmente (não é enviado por e-mail de novo). Prefira repassar o código: links enviados por
         WhatsApp costumam expirar sozinhos porque o próprio app "clica" neles pra gerar a prévia da mensagem.
       </p>
@@ -84,7 +84,7 @@ export function ConfiguracoesUsuarios() {
           </p>
 
           <p style={{ fontSize: 13, marginBottom: 4 }}>
-            <strong>Recomendado - repasse por WhatsApp este código de 6 dígitos</strong> (o link abaixo costuma expirar
+            <strong>Recomendado - repasse por WhatsApp este código de acesso</strong> (o link abaixo costuma expirar
             sozinho quando mandado por WhatsApp, porque o próprio app busca a URL pra montar a prévia da mensagem, e
             isso já consome o link antes da pessoa clicar; o código não tem esse problema). Peça pra pessoa abrir{' '}
             <em>Recebeu um código de acesso em vez de um link?</em> na tela de login e digitar o e-mail + este código:

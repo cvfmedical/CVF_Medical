@@ -36,7 +36,7 @@ export function CodigoAcesso() {
         <h1>Q-CVF Medical</h1>
         <p className="subtitulo">Entrar com código de acesso</p>
         <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
-          Digite o e-mail cadastrado e o código de 6 dígitos que o administrador te repassou.
+          Digite o e-mail cadastrado e o código de acesso que o administrador te repassou.
         </p>
 
         <label htmlFor="email">E-mail</label>
@@ -55,7 +55,6 @@ export function CodigoAcesso() {
           type="text"
           inputMode="numeric"
           autoComplete="one-time-code"
-          maxLength={6}
           value={codigo}
           onChange={(e) => setCodigo(e.target.value)}
           required
