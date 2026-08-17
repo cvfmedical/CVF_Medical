@@ -12,6 +12,7 @@ import { abrirJanelaImpressao, escreverImpressao } from '../../lib/imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { montarCorpoRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
+import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import {
   formatarMoeda,
   EMPRESA,
@@ -108,16 +109,19 @@ function CampoSelecao({
   aoMudar,
   opcoes,
   placeholder,
+  disabled,
 }: {
   valor: string;
   aoMudar: (v: string) => void;
   opcoes: string[];
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [outro, setOutro] = useState(valor !== '' && !opcoes.includes(valor));
   return (
     <>
       <select
+        disabled={disabled}
         value={outro ? '__outro__' : valor}
         onChange={(e) => {
           if (e.target.value === '__outro__') {
@@ -139,6 +143,7 @@ function CampoSelecao({
       </select>
       {outro && (
         <input
+          disabled={disabled}
           style={{ marginTop: 6 }}
           value={valor}
           placeholder={placeholder}
@@ -203,9 +208,13 @@ export function OrcamentoFinanceiro() {
   const naoEnviado =
     orcamentoSelecionado?.status === 'Aguardando Precificação' ||
     orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
+  // Travado (Trilha A): uma vez realmente enviado/respondido, a tela vira
+  // somente-leitura - só dá pra editar de novo revertendo a precificação.
+  const travado = !!orcamentoSelecionado && !naoEnviado;
   const podeAprovarManualmente =
     orcamentoSelecionado?.status === 'Enviado ao Cliente' ||
     orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
+  const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -827,6 +836,22 @@ export function OrcamentoFinanceiro() {
     qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
   }
 
+  // Desbloqueia o Orçamento Técnico (e, depois, a OS - uma vez o técnico
+  // excluindo o orçamento): só reverte preços/status, não apaga os itens.
+  // Bloqueado no banco se o reparo já começou fisicamente.
+  async function reverterPrecificacao() {
+    if (!selecionadoId) return;
+    setErro(null);
+    try {
+      const { error } = await supabase.rpc('reverter_precificacao_orcamento', { p_orcamento_id: selecionadoId });
+      if (error) throw error;
+      setSelecionadoId(null);
+      qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    }
+  }
+
   if (orcamentosQuery.isLoading) return <CarregandoTela />;
 
   return (
@@ -967,7 +992,7 @@ export function OrcamentoFinanceiro() {
                         type="number"
                         value={precos[item.id] ?? ''}
                         onChange={(e) => setPrecos((p) => ({ ...p, [item.id]: e.target.value }))}
-                        disabled={valorFixoContrato != null}
+                        disabled={valorFixoContrato != null || travado}
                         style={{ width: 110 }}
                       />
                     </td>
@@ -977,7 +1002,7 @@ export function OrcamentoFinanceiro() {
                           <IconPhoto size={16} />
                         </button>
                       )}
-                      <button className="botao-icone perigo" title="Remover item" onClick={() => excluirItem(item.id)}>
+                      <button className="botao-icone perigo" title="Remover item" onClick={() => excluirItem(item.id)} disabled={travado}>
                         <IconTrash size={16} />
                       </button>
                     </td>
@@ -1007,7 +1032,7 @@ export function OrcamentoFinanceiro() {
                   min={0}
                   step="0.01"
                   value={bonificacao ? subtotal : desconto}
-                  disabled={bonificacao}
+                  disabled={bonificacao || travado}
                   onChange={(e) => setDesconto(e.target.value)}
                   style={{ width: 120, textAlign: 'right', padding: '6px 8px' }}
                 />
@@ -1027,6 +1052,7 @@ export function OrcamentoFinanceiro() {
                   type="checkbox"
                   style={{ width: 'auto' }}
                   checked={bonificacao}
+                  disabled={travado}
                   onChange={(e) => setBonificacao(e.target.checked)}
                 />
                 Bonificação de fidelidade (serviço em cortesia — total R$ 0,00)
@@ -1049,6 +1075,7 @@ export function OrcamentoFinanceiro() {
                 aoMudar={setValidadeProposta}
                 opcoes={OPCOES_VALIDADE}
                 placeholder="Ex.: 20 dias"
+                disabled={travado}
               />
             </div>
             <div className="campo-form">
@@ -1058,11 +1085,12 @@ export function OrcamentoFinanceiro() {
                 aoMudar={setCondicoesPagamento}
                 opcoes={OPCOES_PAGAMENTO}
                 placeholder="Escreva a condição de pagamento"
+                disabled={travado}
               />
             </div>
             <div className="campo-form">
               <label>Observações do financeiro</label>
-              <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} />
+              <textarea value={observacoesFinanceiro} onChange={(e) => setObservacoesFinanceiro(e.target.value)} disabled={travado} />
             </div>
 
             <div className="campo-form">
@@ -1106,6 +1134,13 @@ export function OrcamentoFinanceiro() {
               </div>
             )}
 
+            {travado && (
+              <p style={{ fontSize: 12, color: 'var(--copper-500)' }}>
+                Este orçamento já foi enviado/respondido - os campos acima ficam somente-leitura. Use "Reverter
+                precificação" pra editar de novo.
+              </p>
+            )}
+
             {erro && <p className="erro-login">{erro}</p>}
 
             <div className="modal-acoes" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
@@ -1123,15 +1158,30 @@ export function OrcamentoFinanceiro() {
                 <button className="botao-secundario" onClick={() => compartilhar('email')}>
                   E-mail
                 </button>
-                <button className="botao-secundario perigo" onClick={excluirOrcamento}>
-                  Excluir orçamento
-                </button>
+                {orcamentoSelecionado.status === 'Aguardando Precificação' ? (
+                  <button className="botao-secundario perigo" onClick={excluirOrcamento}>
+                    Excluir orçamento
+                  </button>
+                ) : (
+                  <button
+                    className="botao-secundario perigo"
+                    onClick={() =>
+                      pedirConfirmacao(reverterPrecificacao, {
+                        titulo: 'Reverter precificação',
+                        mensagem:
+                          'Confirma reverter? Os preços voltam a zero e o orçamento volta para "Aguardando Precificação" - o técnico poderá editar os itens de novo. Bloqueado se o reparo já começou fisicamente.',
+                      })
+                    }
+                  >
+                    Reverter precificação
+                  </button>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="botao-secundario" onClick={() => setSelecionadoId(null)}>
                   Fechar
                 </button>
-                <button className="botao-secundario" onClick={salvarAlteracoes} disabled={salvando}>
+                <button className="botao-secundario" onClick={salvarAlteracoes} disabled={salvando || travado}>
                   {salvando ? 'Salvando...' : 'Salvar alterações'}
                 </button>
                 {podeAprovarManualmente && (
@@ -1153,6 +1203,7 @@ export function OrcamentoFinanceiro() {
             </div>
         </ModalJanela>
       )}
+      {ModalConfirmacao}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
+import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 
 interface Orcamento {
   id: number;
@@ -72,6 +73,8 @@ export function OrcamentoTecnico() {
   // só com limpeza/ajuste, sem adicionar item nenhum).
   const [observacoesGerais, setObservacoesGerais] = useState('');
   const [salvandoObs, setSalvandoObs] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
 
   // Mostra tanto OS ainda em triagem (orçamento novo) quanto OS que já
   // têm um orçamento em montagem (status "Aguardando Orçamento") - antes
@@ -297,6 +300,26 @@ export function OrcamentoTecnico() {
     if (url) window.open(url, '_blank');
   }
 
+  // Desbloqueia a OS (tela Registro de Entrada) excluindo o orçamento
+  // inteiro - só funciona enquanto ainda está em "Aguardando Precificação"
+  // (RLS): se o financeiro já começou a precificar, primeiro ele precisa
+  // reverter a precificação (Orçamento Financeiro) antes disso funcionar.
+  async function excluirOrcamentoTecnico() {
+    if (!orcamentoQuery.data) return;
+    setErro(null);
+    setExcluindo(true);
+    try {
+      const { error } = await supabase.from('orcamentos').delete().eq('id', orcamentoQuery.data.id);
+      if (error) throw error;
+      setOsId('');
+      qc.invalidateQueries({ queryKey: ['ordens-servico-para-orcamento-tecnico'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setExcluindo(false);
+    }
+  }
+
   function finalizar() {
     // O status da OS já foi sincronizado pelo gatilho no banco assim que
     // o orçamento foi criado (status "Aguardando Precificação") - aqui só
@@ -329,6 +352,10 @@ export function OrcamentoTecnico() {
     if (item.produto_servico_id) return produtosQuery.data?.find((p) => p.id === item.produto_servico_id)?.nome ?? '-';
     return item.descricao_servico ?? '-';
   }
+
+  // Travado (Trilha A): assim que o financeiro começa a precificar (status
+  // sai de "Aguardando Precificação"), o técnico não edita mais os itens.
+  const travado = orcamentoQuery.data?.status !== 'Aguardando Precificação';
 
   return (
     <div>
@@ -366,10 +393,16 @@ export function OrcamentoTecnico() {
             <p className="mono" style={{ color: 'var(--ink-400)' }}>
               {orcamentoQuery.data.numero_orcamento} — {orcamentoQuery.data.status}
             </p>
-            <button className="botao-primario botao-pequeno" onClick={abrirModalItem}>
+            <button className="botao-primario botao-pequeno" onClick={abrirModalItem} disabled={travado}>
               <IconPlus size={16} /> Adicionar item
             </button>
           </div>
+          {travado && (
+            <p style={{ fontSize: 12, color: 'var(--copper-500)' }}>
+              Este orçamento já foi precificado - peça ao financeiro reverter a precificação pra editar os itens de
+              novo.
+            </p>
+          )}
 
           <table className="tabela-crud">
             <thead>
@@ -392,7 +425,7 @@ export function OrcamentoTecnico() {
                         <IconPhoto size={16} />
                       </button>
                     )}
-                    <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)}>
+                    <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)} disabled={travado}>
                       <IconTrash size={16} />
                     </button>
                   </td>
@@ -412,13 +445,16 @@ export function OrcamentoTecnico() {
               placeholder="Ex: peça travada por acúmulo de resíduo - resolvido com limpeza e lubrificação, sem substituição de peças."
               value={observacoesGerais}
               onChange={(e) => setObservacoesGerais(e.target.value)}
+              disabled={travado}
             />
-            <button className="botao-secundario botao-pequeno" onClick={salvarObservacoesGerais} disabled={salvandoObs} style={{ marginTop: 6 }}>
+            <button className="botao-secundario botao-pequeno" onClick={salvarObservacoesGerais} disabled={salvandoObs || travado} style={{ marginTop: 6 }}>
               {salvandoObs ? 'Salvando...' : 'Salvar observações'}
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          {erro && <p className="erro-login">{erro}</p>}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
             <button
               className="botao-secundario"
               onClick={imprimirRelatorioTecnico}
@@ -429,9 +465,24 @@ export function OrcamentoTecnico() {
             <button className="botao-primario" onClick={finalizar}>
               Finalizar identificação de danos
             </button>
+            {!travado && (
+              <button
+                className="botao-secundario perigo"
+                disabled={excluindo}
+                onClick={() =>
+                  pedirConfirmacao(excluirOrcamentoTecnico, {
+                    titulo: 'Excluir orçamento',
+                    mensagem: `Confirma excluir o orçamento ${orcamentoQuery.data?.numero_orcamento} inteiro (com todos os itens)? Isso libera a OS pra edição na tela de Registro de Entrada. Não pode ser desfeito.`,
+                  })
+                }
+              >
+                {excluindo ? 'Excluindo...' : 'Excluir orçamento'}
+              </button>
+            )}
           </div>
         </div>
       )}
+      {ModalConfirmacao}
 
       {modalAberto && (
         <ModalJanela titulo="Adicionar item" aoFechar={() => setModalAberto(false)}>

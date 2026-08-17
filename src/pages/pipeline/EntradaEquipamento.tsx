@@ -535,7 +535,12 @@ export function EntradaEquipamento() {
                 <button className="botao-icone" title="Enviar link ao cliente" onClick={() => compartilharLink(e)}>
                   <IconShare size={16} />
                 </button>
-                <button className="botao-icone perigo" title="Excluir" onClick={() => excluir(e)}>
+                <button
+                  className="botao-icone perigo"
+                  title={e.ordem_servico_id ? 'Já convertida em OS - não pode mais ser excluída' : 'Excluir'}
+                  onClick={() => excluir(e)}
+                  disabled={!!e.ordem_servico_id}
+                >
                   <IconTrash size={16} />
                 </button>
                 {!e.ordem_servico_id && (
@@ -566,6 +571,12 @@ export function EntradaEquipamento() {
           aoMinimizar={minimizarEntrada}
           larguraMax={560}
         >
+            {!!editando?.ordem_servico_id && (
+              <p style={{ fontSize: 12, color: 'var(--copper-500)', marginTop: -8, marginBottom: 12 }}>
+                Esta entrada já foi convertida em OS - os dados ficam somente-leitura (o checklist de avarias
+                continua editável, na tela Registro de Entrada).
+              </p>
+            )}
             <div className="campo-form">
               <label>Cliente *</label>
               <select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
@@ -859,7 +870,7 @@ export function EntradaEquipamento() {
               <button className="botao-secundario" onClick={() => setModalAberto(false)} disabled={salvando}>
                 Cancelar
               </button>
-              <button className="botao-primario" onClick={salvar} disabled={salvando}>
+              <button className="botao-primario" onClick={salvar} disabled={salvando || !!editando?.ordem_servico_id}>
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>

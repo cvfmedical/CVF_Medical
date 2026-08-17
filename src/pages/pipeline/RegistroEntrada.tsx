@@ -91,6 +91,23 @@ export function RegistroEntrada() {
     },
   });
 
+  // Travado (Trilha A): uma vez que existe um orçamento pra essa OS, a
+  // revisão da OS (checklist de avarias/prazo/fotos) fica somente-leitura -
+  // o resto do pipeline (status_os) continua livre, só essa tela é que trava.
+  const orcamentoExisteQuery = useQuery({
+    queryKey: ['orcamento-existe-para-os', osId],
+    enabled: !!osId,
+    queryFn: async (): Promise<boolean> => {
+      const { count, error } = await supabase
+        .from('orcamentos')
+        .select('id', { count: 'exact', head: true })
+        .eq('ordem_servico_id', Number(osId));
+      if (error) throw error;
+      return (count ?? 0) > 0;
+    },
+  });
+  const travado = !!orcamentoExisteQuery.data;
+
   const clienteQuery = useQuery({
     queryKey: ['cliente-registro-entrada', osQuery.data?.cliente_id],
     enabled: !!osQuery.data?.cliente_id,
@@ -260,11 +277,23 @@ export function RegistroEntrada() {
         )}
       </div>
 
+      {travado && (
+        <p style={{ fontSize: 12, color: 'var(--copper-500)', marginBottom: 8 }}>
+          Esta OS já tem um orçamento iniciado - o checklist de avarias, o prazo de entrega e as fotos ficam
+          somente-leitura. Peça ao técnico excluir o orçamento (na tela Montar orçamento) pra editar de novo.
+        </p>
+      )}
+
       <div className="campo-form">
         <label>Avarias identificadas (marque tudo que se aplica)</label>
         {CHECKLIST_AVARIAS.map((item) => (
           <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <input type="checkbox" checked={Boolean(avarias[item.key])} onChange={() => alternarAvaria(item.key)} />
+            <input
+              type="checkbox"
+              checked={Boolean(avarias[item.key])}
+              onChange={() => alternarAvaria(item.key)}
+              disabled={travado}
+            />
             <span style={{ fontSize: 13 }}>{item.label}</span>
           </div>
         ))}
@@ -272,7 +301,7 @@ export function RegistroEntrada() {
 
       <div className="campo-form">
         <label>Prazo de entrega</label>
-        <input type="text" value={prazoEntrega} onChange={(e) => setPrazoEntrega(e.target.value)} />
+        <input type="text" value={prazoEntrega} onChange={(e) => setPrazoEntrega(e.target.value)} disabled={travado} />
       </div>
 
       {entradaQuery.data && (
@@ -291,6 +320,7 @@ export function RegistroEntrada() {
                     title="Excluir foto"
                     style={{ position: 'absolute', top: -8, right: -8, background: 'var(--paper-0)', borderRadius: '50%' }}
                     onClick={() => excluirFotoExistente(f)}
+                    disabled={travado}
                   >
                     <IconX size={14} />
                   </button>
@@ -298,15 +328,17 @@ export function RegistroEntrada() {
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => setFotosNovas((lista) => [...lista, ...Array.from(e.target.files ?? [])])}
-            />
-            <CapturaFoto onCapturar={(arquivo) => setFotosNovas((lista) => [...lista, arquivo])} />
-          </div>
+          {!travado && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => setFotosNovas((lista) => [...lista, ...Array.from(e.target.files ?? [])])}
+              />
+              <CapturaFoto onCapturar={(arquivo) => setFotosNovas((lista) => [...lista, arquivo])} />
+            </div>
+          )}
           {fotosNovas.length > 0 && (
             <ul style={{ listStyle: 'none', padding: 0, marginTop: 8 }}>
               {fotosNovas.map((foto, i) => (
@@ -329,7 +361,7 @@ export function RegistroEntrada() {
       {erro && <p className="erro-login">{erro}</p>}
 
       <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-        <button className="botao-secundario" onClick={salvar} disabled={salvando}>
+        <button className="botao-secundario" onClick={salvar} disabled={salvando || travado}>
           {salvando ? 'Salvando...' : 'Salvar'}
         </button>
         <button className="botao-secundario" onClick={gerarRegistro} disabled={salvando}>
