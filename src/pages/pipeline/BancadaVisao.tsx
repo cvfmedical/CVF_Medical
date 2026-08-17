@@ -11,6 +11,7 @@ import { statusMetricas, FATOR_CALIB_PADRAO, type MetricasOticas } from '../../l
 import { conformeFov, conformeDirecao, desvioFovPct } from '../../lib/iso8600';
 import { lerLeituras, estatisticaRepetibilidade } from '../../lib/incerteza';
 import { BancadaVisaoPdf, type DadosBancadaPdf } from './BancadaVisaoPdf';
+import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import {
   STATUS_CHECKPOINT_A,
   STATUS_CHECKPOINT_B,
@@ -34,6 +35,8 @@ interface OSResumo {
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
+  eh_otica: boolean | null;
+  catalogo_otica_id: number | null;
 }
 
 interface CatalogoOticaSpec {
@@ -150,7 +153,7 @@ export function BancadaVisao() {
     queryFn: async (): Promise<OSResumo[]> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn')
+        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, eh_otica, catalogo_otica_id')
         .eq('status_os', statusAlvo)
         .order('data_abertura', { ascending: false });
       if (error) throw error;
@@ -159,6 +162,9 @@ export function BancadaVisao() {
   });
 
   const osSelecionada = osQuery.data?.find((o) => String(o.id) === osId) ?? null;
+  const naoOtica = osSelecionada?.eh_otica === false;
+  const ehAdministrador = funcionario?.nivel_acesso === 'Administrador';
+  const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
 
   const clienteQuery = useQuery({
     queryKey: ['cliente-bancada-visao', osSelecionada?.cliente_id],
@@ -223,6 +229,24 @@ export function BancadaVisao() {
   const calibsValidas = (calibsQuery.data ?? []).filter(
     (c) => !!c.data_validade && new Date(c.data_validade + 'T00:00:00') >= hojeCalib,
   );
+
+  // Pré-seleciona o modelo da ótica sozinho a partir do que já foi escolhido
+  // na Entrada do equipamento (catalogo_otica_id) - evita o técnico ter que
+  // procurar de novo no combo, com risco de escolher o modelo errado.
+  // Continua editável pro caso raro de a entrada ter sido cadastrada errada.
+  useEffect(() => {
+    setModeloId(osSelecionada?.catalogo_otica_id ? String(osSelecionada.catalogo_otica_id) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [osSelecionada?.id]);
+
+  // Padrão de calibração: sem pré-seleção obrigatória (a validade muda com
+  // o tempo), mas já sugere o primeiro padrão válido, editável.
+  useEffect(() => {
+    if (!calibracaoId && calibsValidas.length > 0) {
+      setCalibracaoId(String(calibsValidas[0].id));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calibsValidas.length]);
 
   // Prévia do veredito ISO (mostra conforme/não conforme enquanto o técnico digita).
   const previewIso = (() => {
@@ -628,12 +652,17 @@ export function BancadaVisao() {
       });
       if (erroInsert) throw erroInsert;
 
+      // Equipamento não-ótico: aprovado vai direto pra "Pronto para entrega",
+      // sem passar pelos ensaios ópticos/estanqueidade/autoclave (não fazem
+      // sentido pra esse tipo de equipamento).
       const novoStatus =
         resultado === 'Reprovado'
           ? STATUS_VOLTA_MANUTENCAO
-          : etapa === 'checkpoint_a'
-            ? (precisaSelagem ? STATUS_TESTE_ESTANQUEIDADE : STATUS_TESTE_QUALIDADE)
-            : STATUS_PRONTO_ENTREGA;
+          : osSelecionada.eh_otica === false
+            ? STATUS_PRONTO_ENTREGA
+            : etapa === 'checkpoint_a'
+              ? (precisaSelagem ? STATUS_TESTE_ESTANQUEIDADE : STATUS_TESTE_QUALIDADE)
+              : STATUS_PRONTO_ENTREGA;
       await supabase.from('ordens_servico').update({ status_os: novoStatus }).eq('id', osSelecionada.id);
 
       pararCamera();
@@ -689,109 +718,143 @@ export function BancadaVisao() {
           )}
         </div>
 
-        <div
-          style={{
-            maxWidth: 420,
-            border: '1px solid #cbd5e1',
-            borderRadius: 8,
-            padding: 12,
-            margin: '12px 0',
-          }}
-        >
-          <strong style={{ fontSize: 13 }}>Ensaio ISO 8600 (FOV + direção de visão)</strong>
-          <div className="campo-form">
-            <label>Modelo da ótica</label>
-            <select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
-              <option value="">Selecione o modelo...</option>
-              {(modelosQuery.data ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.fabricante} {m.modelo}
-                </option>
-              ))}
+        {naoOtica ? (
+          <div className="campo-form" style={{ maxWidth: 420 }}>
+            <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+              Equipamento não-ótico
+              {osSelecionada
+                ? ` (${[osSelecionada.optica_desc, osSelecionada.optica_fab].filter(Boolean).join(' - ')}${osSelecionada.optica_sn ? ' · Nº série ' + osSelecionada.optica_sn : ''})`
+                : ''}{' '}
+              - não passa pelos ensaios ópticos (ISO 8600).
+            </p>
+            <label>Resultado</label>
+            <select
+              value={resultadoManual}
+              onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
+            >
+              <option value="Aprovado">Aprovado</option>
+              <option value="Reprovado">Reprovado</option>
             </select>
           </div>
-          {spec && spec.fov_referencia_graus == null && (
-            <p className="erro-login">
-              Modelo sem golden sample. Cadastre o FOV de referência em "Amostras-padrão" antes do laudo.
-            </p>
-          )}
-          {spec && spec.fov_referencia_graus != null && (
-            <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
-              FOV ref.: {spec.fov_referencia_graus}° (±{spec.tolerancia_fov_pct ?? 15}%) • Direção nominal:{' '}
-              {spec.angulo_graus ?? '—'}° (±{spec.tolerancia_direcao_graus ?? 10}°)
-            </p>
-          )}
-          <div className="campo-form">
-            <label>Padrão de calibração (alvo)</label>
-            <select value={calibracaoId} onChange={(e) => setCalibracaoId(e.target.value)}>
-              <option value="">Selecione...</option>
-              {calibsValidas.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.identificacao}
-                </option>
-              ))}
-            </select>
-            {calibsQuery.data && calibsValidas.length === 0 && (
-              <p className="erro-login">
-                Nenhum padrão de calibração válido. Cadastre/renove em "Calibração de padrões".
-              </p>
-            )}
-          </div>
-          <div className="campo-form">
-            <label>FOV medido (°) — leia o anel que a borda do campo alcança</label>
-            <input type="number" value={fovMedido} onChange={(e) => setFovMedido(e.target.value)} />
-          </div>
-          <div className="campo-form">
-            <label>Leituras repetidas de FOV (opcional, p/ incerteza) — ex.: 89,5 90 90,5</label>
-            <input
-              type="text"
-              value={fovLeituras}
-              onChange={(e) => setFovLeituras(e.target.value)}
-              placeholder="informe 2+ leituras separadas por espaço/vírgula → usa a média ± incerteza (k=2)"
-            />
-          </div>
-          <div className="campo-form">
-            <label>Distância de medição (mm)</label>
-            <input type="number" value={distanciaMedicao} onChange={(e) => setDistanciaMedicao(e.target.value)} />
-          </div>
-          <div className="campo-form">
-            <label>Direção de visão medida (°) — inclinômetro</label>
-            <input type="number" value={direcaoMedida} onChange={(e) => setDirecaoMedida(e.target.value)} />
-          </div>
-          {previewIso && (
-            <p
+        ) : (
+          <>
+            <div
               style={{
-                fontWeight: 600,
-                color: previewIso.fovConf && previewIso.dvConf !== false ? '#16a34a' : '#dc2626',
+                maxWidth: 420,
+                border: '1px solid #cbd5e1',
+                borderRadius: 8,
+                padding: 12,
+                margin: '12px 0',
               }}
             >
-              FOV desvio {previewIso.desvio.toFixed(1)}% → {previewIso.fovConf ? 'conforme' : 'NÃO conforme'}
-              {previewIso.dvConf !== null && ` • Direção → ${previewIso.dvConf ? 'conforme' : 'NÃO conforme'}`}
-            </p>
-          )}
-        </div>
+              <strong style={{ fontSize: 13 }}>Ensaio ISO 8600 (FOV + direção de visão)</strong>
+              <div className="campo-form">
+                <label>Modelo da ótica</label>
+                <select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
+                  <option value="">Selecione o modelo...</option>
+                  {(modelosQuery.data ?? []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.fabricante} {m.modelo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {spec && spec.fov_referencia_graus == null && (
+                <p className="erro-login">
+                  Modelo sem golden sample. Cadastre o FOV de referência em "Amostras-padrão" antes do laudo.
+                </p>
+              )}
+              {spec && spec.fov_referencia_graus != null && (
+                <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                  FOV ref.: {spec.fov_referencia_graus}° (±{spec.tolerancia_fov_pct ?? 15}%) • Direção nominal:{' '}
+                  {spec.angulo_graus ?? '—'}° (±{spec.tolerancia_direcao_graus ?? 10}°)
+                </p>
+              )}
+              <div className="campo-form">
+                <label>Padrão de calibração (alvo)</label>
+                <select value={calibracaoId} onChange={(e) => setCalibracaoId(e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {calibsValidas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.identificacao}
+                    </option>
+                  ))}
+                </select>
+                {calibsQuery.data && calibsValidas.length === 0 && (
+                  <p className="erro-login">
+                    Nenhum padrão de calibração válido. Cadastre/renove em "Calibração de padrões".
+                  </p>
+                )}
+              </div>
+              <div className="campo-form">
+                <label>FOV medido (°) — leia o anel que a borda do campo alcança</label>
+                <input type="number" value={fovMedido} onChange={(e) => setFovMedido(e.target.value)} />
+              </div>
+              <div className="campo-form">
+                <label>Leituras repetidas de FOV (opcional, p/ incerteza) — ex.: 89,5 90 90,5</label>
+                <input
+                  type="text"
+                  value={fovLeituras}
+                  onChange={(e) => setFovLeituras(e.target.value)}
+                  placeholder="informe 2+ leituras separadas por espaço/vírgula → usa a média ± incerteza (k=2)"
+                />
+              </div>
+              <div className="campo-form">
+                <label>Distância de medição (mm)</label>
+                <input type="number" value={distanciaMedicao} onChange={(e) => setDistanciaMedicao(e.target.value)} />
+              </div>
+              <div className="campo-form">
+                <label>Direção de visão medida (°) — inclinômetro</label>
+                <input type="number" value={direcaoMedida} onChange={(e) => setDirecaoMedida(e.target.value)} />
+              </div>
+              {previewIso && (
+                <p
+                  style={{
+                    fontWeight: 600,
+                    color: previewIso.fovConf && previewIso.dvConf !== false ? '#16a34a' : '#dc2626',
+                  }}
+                >
+                  FOV desvio {previewIso.desvio.toFixed(1)}% → {previewIso.fovConf ? 'conforme' : 'NÃO conforme'}
+                  {previewIso.dvConf !== null && ` • Direção → ${previewIso.dvConf ? 'conforme' : 'NÃO conforme'}`}
+                </p>
+              )}
+            </div>
 
-        <div className="campo-form" style={{ maxWidth: 420 }}>
-          <label>Resultado da inspeção (usado só sem medição ISO)</label>
-          <select
-            value={resultadoManual}
-            onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
-          >
-            <option value="Aprovado">Aprovado</option>
-            <option value="Reprovado">Reprovado</option>
-          </select>
-        </div>
-        {etapa === 'checkpoint_a' && (
-          <div className="campo-form" style={{ maxWidth: 420 }}>
-            <label>Este equipamento precisa de selagem?</label>
-            <select
-              value={precisaSelagem ? 'sim' : 'nao'}
-              onChange={(e) => setPrecisaSelagem(e.target.value === 'sim')}
-            >
-              <option value="sim">Sim (ótica selável - vai para Teste de estanqueidade)</option>
-              <option value="nao">Não (ex: bomba de infusão - vai para Teste de Qualidade)</option>
-            </select>
-          </div>
+            <div className="campo-form" style={{ maxWidth: 420 }}>
+              <label>Resultado da inspeção</label>
+              {previewIso ? (
+                <p
+                  style={{
+                    fontWeight: 600,
+                    color: previewIso.fovConf && previewIso.dvConf !== false ? '#16a34a' : '#dc2626',
+                  }}
+                >
+                  {previewIso.fovConf && previewIso.dvConf !== false ? 'Aprovado' : 'Reprovado'} (calculado
+                  automaticamente pela medição ISO 8600)
+                </p>
+              ) : (
+                <select
+                  value={resultadoManual}
+                  onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
+                >
+                  <option value="Aprovado">Aprovado</option>
+                  <option value="Reprovado">Reprovado</option>
+                </select>
+              )}
+            </div>
+            {etapa === 'checkpoint_a' && (
+              <div className="campo-form" style={{ maxWidth: 420 }}>
+                <label>Este equipamento precisa de selagem?</label>
+                <select
+                  value={precisaSelagem ? 'sim' : 'nao'}
+                  onChange={(e) => setPrecisaSelagem(e.target.value === 'sim')}
+                >
+                  <option value="sim">Sim (ótica selável - vai para Teste de estanqueidade)</option>
+                  <option value="nao">Não (ex: bomba de infusão - vai para Teste de Qualidade)</option>
+                </select>
+              </div>
+            )}
+          </>
         )}
         <div className="campo-form" style={{ maxWidth: 420 }}>
           <label>Observações</label>
@@ -802,32 +865,56 @@ export function BancadaVisao() {
         {cvErro && <p className="erro-login">{cvErro}</p>}
         {erro && <p className="erro-login">{erro}</p>}
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 460 }}>
-          <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
-            Iniciar inspeção (medição automática ISO 8600)
-          </button>
-          <button className="botao-secundario botao-pequeno" onClick={() => gerarLaudo()} disabled={gerando || !osId}>
-            {gerando ? 'Gerando...' : 'Registrar sem câmera (manual)'}
-          </button>
-        </div>
-        <label
-          className="botao-secundario botao-pequeno"
-          style={{ display: 'inline-block', cursor: osId && !gerando ? 'pointer' : 'not-allowed', maxWidth: 460, marginTop: 8, opacity: osId && !gerando ? 1 : 0.6 }}
-        >
-          {gerando ? 'Analisando imagem...' : 'Analisar imagem ISO 8600 (arquivo, sem câmera)'}
-          <input
-            type="file"
-            accept="image/*"
-            onChange={analisarImagemArquivo}
-            disabled={gerando || !osId}
-            style={{ display: 'none' }}
-          />
-        </label>
-        <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 460, marginTop: 4 }}>
-          "Iniciar inspeção" abre a câmera e faz a medição automática ISO 8600 em segundo plano (não trava a tela).
-          "Analisar imagem" roda a mesma medição sobre uma foto (útil para testar ou sem câmera).
-          "Registrar sem câmera" gera um laudo só com o resultado que você marcar, sem câmera nem medição.
-        </p>
+        {naoOtica ? (
+          ehAdministrador ? (
+            <button
+              className="botao-primario botao-pequeno"
+              onClick={() =>
+                pedirConfirmacao(() => gerarLaudo(), {
+                  titulo: 'Finalizar equipamento não-ótico',
+                  mensagem: `Confirma ${resultadoManual === 'Aprovado' ? 'aprovar' : 'reprovar'} e finalizar o orçamento? Esse equipamento não passa pelos testes de laboratório${resultadoManual === 'Aprovado' ? ' - vai direto para "Pronto para entrega"' : ''}.`,
+                })
+              }
+              disabled={gerando || !osId}
+            >
+              {gerando ? 'Finalizando...' : 'Finalizar orçamento'}
+            </button>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 420 }}>
+              Só administradores podem finalizar equipamentos não-óticos.
+            </p>
+          )
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 460 }}>
+              <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
+                Iniciar inspeção (medição automática ISO 8600)
+              </button>
+              <button className="botao-secundario botao-pequeno" onClick={() => gerarLaudo()} disabled={gerando || !osId}>
+                {gerando ? 'Gerando...' : 'Registrar sem câmera (manual)'}
+              </button>
+            </div>
+            <label
+              className="botao-secundario botao-pequeno"
+              style={{ display: 'inline-block', cursor: osId && !gerando ? 'pointer' : 'not-allowed', maxWidth: 460, marginTop: 8, opacity: osId && !gerando ? 1 : 0.6 }}
+            >
+              {gerando ? 'Analisando imagem...' : 'Analisar imagem ISO 8600 (arquivo, sem câmera)'}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={analisarImagemArquivo}
+                disabled={gerando || !osId}
+                style={{ display: 'none' }}
+              />
+            </label>
+            <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 460, marginTop: 4 }}>
+              "Iniciar inspeção" abre a câmera e faz a medição automática ISO 8600 em segundo plano (não trava a tela).
+              "Analisar imagem" roda a mesma medição sobre uma foto (útil para testar ou sem câmera).
+              "Registrar sem câmera" gera um laudo só com o resultado que você marcar, sem câmera nem medição.
+            </p>
+          </>
+        )}
+        {ModalConfirmacao}
       </div>
     );
   }
@@ -851,16 +938,24 @@ export function BancadaVisao() {
         </p>
         <div className="campo-form">
           <label style={{ color: '#fff' }}>Resultado da inspeção</label>
-          <select
-            value={resultadoManual}
-            onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
-            disabled={!!metricas}
-          >
-            <option value="Aprovado">Aprovado</option>
-            <option value="Reprovado">Reprovado</option>
-          </select>
-          {metricas && (
-            <p style={{ color: '#94a3b8', fontSize: 11 }}>Definido pela medição automática (OpenCV).</p>
+          {previewIso ? (
+            <p style={{ color: previewIso.fovConf && previewIso.dvConf !== false ? '#4ade80' : '#f87171', fontWeight: 600, fontSize: 12 }}>
+              {previewIso.fovConf && previewIso.dvConf !== false ? 'Aprovado' : 'Reprovado'} (ISO 8600, automático)
+            </p>
+          ) : (
+            <>
+              <select
+                value={resultadoManual}
+                onChange={(e) => setResultadoManual(e.target.value as 'Aprovado' | 'Reprovado')}
+                disabled={!!metricas}
+              >
+                <option value="Aprovado">Aprovado</option>
+                <option value="Reprovado">Reprovado</option>
+              </select>
+              {metricas && (
+                <p style={{ color: '#94a3b8', fontSize: 11 }}>Definido pela medição automática (OpenCV).</p>
+              )}
+            </>
           )}
         </div>
         {!cvPronto && (
