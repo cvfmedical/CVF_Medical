@@ -64,6 +64,7 @@ interface Cliente {
   razao_social: string;
   telefone: string | null;
   email: string | null;
+  emails_adicionais: string | null;
 }
 
 interface PrecoFixoContrato {
@@ -206,8 +207,8 @@ export function OrcamentoFinanceiro() {
   const [prazoEntrega, setPrazoEntrega] = useState('');
   const [anexarOrientacao, setAnexarOrientacao] = useState(false);
   // E-mails extras (cópia) para o envio automático, além do e-mail cadastrado
-  // do cliente - ex.: outro contato do financeiro do cliente. Só desta sessão,
-  // não é salvo no cadastro.
+  // do cliente - pré-preenchido a partir do cadastro do cliente
+  // (clientes.emails_adicionais), mas ainda editável neste envio específico.
   const [emailsAdicionais, setEmailsAdicionais] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -276,13 +277,21 @@ export function OrcamentoFinanceiro() {
     queryFn: async (): Promise<Cliente> => {
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, razao_social, telefone, email')
+        .select('id, razao_social, telefone, email, emails_adicionais')
         .eq('id', orcamentoSelecionado!.ordens_servico!.cliente_id)
         .single();
       if (error) throw error;
       return data as Cliente;
     },
   });
+
+  // Pré-preenche os e-mails adicionais a partir do cadastro do cliente
+  // sempre que um novo orçamento é selecionado (ainda editável no envio).
+  useEffect(() => {
+    if (clienteQuery.data) {
+      setEmailsAdicionais(clienteQuery.data.emails_adicionais ?? '');
+    }
+  }, [clienteQuery.data, selecionadoId]);
 
   // Preços fixos negociados em contrato (Comercial > Contratos de
   // manutenção), diferentes por modelo de ótica - o financeiro escolhe
@@ -1136,7 +1145,7 @@ export function OrcamentoFinanceiro() {
                 placeholder="Ex.: financeiro@cliente.com.br, compras@cliente.com.br"
               />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Separe por vírgula. Vão junto com o e-mail cadastrado do cliente ({clienteQuery.data?.email ?? '-'}) no envio automático.
+                Separe por vírgula. Pré-preenchido do cadastro do cliente (editável só neste envio). Vão junto com o e-mail cadastrado ({clienteQuery.data?.email ?? '-'}) no envio automático.
               </p>
             </div>
 

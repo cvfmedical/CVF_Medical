@@ -17,6 +17,7 @@ interface Cliente {
   hospital_clinica: string | null;
   telefone: string | null;
   email: string | null;
+  emails_adicionais: string | null;
   logradouro: string | null;
   numero_endereco: string | null;
   complemento: string | null;
@@ -38,6 +39,7 @@ const formVazio = {
   hospital_clinica: '',
   telefone: '',
   email: '',
+  emails_adicionais: '',
   logradouro: '',
   numero_endereco: '',
   complemento: '',
@@ -113,6 +115,7 @@ export function Clientes() {
       hospital_clinica: c.hospital_clinica ?? '',
       telefone: c.telefone ?? '',
       email: c.email ?? '',
+      emails_adicionais: c.emails_adicionais ?? '',
       logradouro: c.logradouro ?? '',
       numero_endereco: c.numero_endereco ?? '',
       complemento: c.complemento ?? '',
@@ -320,6 +323,16 @@ export function Clientes() {
             <div className="campo-form">
               <label>E-mail</label>
               <input type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            </div>
+
+            <div className="campo-form">
+              <label>E-mails adicionais (cópia no envio do orçamento)</label>
+              <input
+                type="text"
+                placeholder="separe por vírgula, ex: financeiro@cliente.com, compras@cliente.com"
+                value={form.emails_adicionais}
+                onChange={(e) => setForm((f) => ({ ...f, emails_adicionais: e.target.value }))}
+              />
             </div>
 
             <h2 style={{ fontSize: 14, marginTop: 20 }}>Endereço</h2>
