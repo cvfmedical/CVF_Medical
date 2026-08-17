@@ -271,14 +271,23 @@ export function OrcamentoFinanceiro() {
   // Preços fixos negociados em contrato (Comercial > Contratos de
   // manutenção), diferentes por modelo de ótica - o financeiro escolhe
   // o modelo aqui em vez de digitar preço item a item.
+  //
+  // Quando o cliente da OS é um terceirizado, o "Cliente" continua sendo
+  // sempre o terceirizado (ex: Allmed) - mas cada unidade atendida por ele
+  // (ex: GF) pode ter negociado um valor de contrato diferente. Por isso a
+  // busca considera tanto contratos em nome do cliente da OS quanto em
+  // nome da unidade atendida (cliente_final_id), quando houver.
+  const clienteIdOS = orcamentoSelecionado?.ordens_servico?.cliente_id;
+  const clienteFinalIdOS = orcamentoSelecionado?.ordens_servico?.cliente_final_id;
   const precosFixosQuery = useQuery({
-    queryKey: ['precos-fixos-contrato', orcamentoSelecionado?.ordens_servico?.cliente_id],
-    enabled: !!orcamentoSelecionado?.ordens_servico?.cliente_id,
+    queryKey: ['precos-fixos-contrato', clienteIdOS, clienteFinalIdOS],
+    enabled: !!clienteIdOS,
     queryFn: async (): Promise<PrecoFixoContrato[]> => {
+      const idsCliente = [clienteIdOS!, ...(clienteFinalIdOS ? [clienteFinalIdOS] : [])];
       const { data, error } = await supabase
         .from('contrato_precos_fixos')
         .select('id, valor_fixo, catalogo_oticas(fabricante, modelo, tipo), contratos_manutencao!inner(cliente_id, status)')
-        .eq('contratos_manutencao.cliente_id', orcamentoSelecionado!.ordens_servico!.cliente_id)
+        .in('contratos_manutencao.cliente_id', idsCliente)
         .eq('contratos_manutencao.status', 'Ativo');
       if (error) throw error;
       return data as unknown as PrecoFixoContrato[];
