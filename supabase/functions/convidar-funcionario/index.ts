@@ -135,13 +135,20 @@ Deno.serve(async (req: Request) => {
       // em links pra escanear ameaças), o link de uso único é consumido antes
       // da pessoa abrir o e-mail - foi exatamente isso que aconteceu aqui (o
       // link foi gerado e "usado" 27 segundos depois, tempo impossível pra um
-      // humano). Devolve o link pro admin repassar manualmente (WhatsApp etc).
+      // humano). Devolve o link E o código de 6 dígitos (mesmo token, outra
+      // forma de usar) pro admin repassar manualmente. O código é o jeito
+      // realmente à prova de "consumo automático": WhatsApp (e outros apps de
+      // mensagem) buscam sozinhos a URL de qualquer link mandado, pra montar
+      // a prévia da mensagem - isso já gasta o link de uso único antes da
+      // pessoa clicar. Um código digitado não sofre disso, porque não é uma
+      // URL, ninguém "clica" nele sozinho.
       return new Response(
         JSON.stringify({
           ok: true,
           reenviado: true,
           auth_user_id: funcionario.auth_user_id,
           link: linkData.properties.action_link,
+          codigo: linkData.properties.email_otp,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );

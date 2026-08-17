@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
 import cvfMarca from '../assets/cvf-marca.png';
@@ -66,6 +66,10 @@ export function Login() {
         <button type="submit" className="botao-primario" disabled={enviando}>
           {enviando ? 'Entrando...' : 'Entrar'}
         </button>
+
+        <Link to="/codigo-acesso" style={{ fontSize: 12, textAlign: 'center', marginTop: 10 }}>
+          Recebeu um código de acesso em vez de um link?
+        </Link>
       </form>
     </div>
   );

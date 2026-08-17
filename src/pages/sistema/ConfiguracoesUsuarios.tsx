@@ -19,7 +19,7 @@ export function ConfiguracoesUsuarios() {
   const qc = useQueryClient();
   const [convidando, setConvidando] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [linkReenvio, setLinkReenvio] = useState<{ nome: string; link: string } | null>(null);
+  const [linkReenvio, setLinkReenvio] = useState<{ nome: string; link: string; codigo: string } | null>(null);
 
   const query = useQuery({
     queryKey: ['funcionarios-config'],
@@ -51,7 +51,7 @@ export function ConfiguracoesUsuarios() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.link) {
-        setLinkReenvio({ nome: f.nome, link: data.link });
+        setLinkReenvio({ nome: f.nome, link: data.link, codigo: data.codigo });
       }
       qc.invalidateQueries({ queryKey: ['funcionarios-config'] });
     } catch (e) {
@@ -69,8 +69,9 @@ export function ConfiguracoesUsuarios() {
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Só administradores podem convidar. O convite envia um e-mail com um link para o funcionário definir a
         própria senha - ninguém, nem o administrador, vê ou define a senha por ele. Se o link expirar antes de ser
-        usado, clique em "Reenviar convite" - nesse caso o link aparece na tela pra você repassar manualmente
-        (não é enviado por e-mail de novo).
+        usado, clique em "Reenviar convite" - nesse caso o link E um código de 6 dígitos aparecem na tela pra você
+        repassar manualmente (não é enviado por e-mail de novo). Prefira repassar o código: links enviados por
+        WhatsApp costumam expirar sozinhos porque o próprio app "clica" neles pra gerar a prévia da mensagem.
       </p>
 
       {erro && <p className="erro-login">{erro}</p>}
@@ -78,8 +79,36 @@ export function ConfiguracoesUsuarios() {
       {linkReenvio && (
         <div style={{ background: 'var(--surface-200)', border: '1px solid var(--ink-200)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
           <p style={{ fontSize: 13, marginBottom: 8 }}>
-            Novo link de acesso gerado para <strong>{linkReenvio.nome}</strong> (não é enviado por e-mail automaticamente
-            neste reenvio - copie e envie você mesmo, por WhatsApp por exemplo):
+            Novo acesso gerado para <strong>{linkReenvio.nome}</strong> (não é enviado por e-mail automaticamente neste
+            reenvio).
+          </p>
+
+          <p style={{ fontSize: 13, marginBottom: 4 }}>
+            <strong>Recomendado - repasse por WhatsApp este código de 6 dígitos</strong> (o link abaixo costuma expirar
+            sozinho quando mandado por WhatsApp, porque o próprio app busca a URL pra montar a prévia da mensagem, e
+            isso já consome o link antes da pessoa clicar; o código não tem esse problema). Peça pra pessoa abrir{' '}
+            <em>Recebeu um código de acesso em vez de um link?</em> na tela de login e digitar o e-mail + este código:
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              readOnly
+              value={linkReenvio.codigo}
+              style={{ flex: 1, fontSize: 18, fontWeight: 600, letterSpacing: 2, textAlign: 'center' }}
+              onFocus={(e) => e.target.select()}
+            />
+            <button
+              type="button"
+              className="botao-secundario"
+              onClick={() => {
+                navigator.clipboard.writeText(linkReenvio.codigo);
+              }}
+            >
+              Copiar código
+            </button>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 4 }}>
+            Alternativa (link direto - evite mandar por WhatsApp):
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <input readOnly value={linkReenvio.link} style={{ flex: 1, fontSize: 12 }} onFocus={(e) => e.target.select()} />
