@@ -130,35 +130,21 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const remetente = Deno.env.get('RESEND_FROM') ?? 'Q-CVF Medical <onboarding@resend.dev>';
-      if (!resendApiKey) {
-        return new Response(JSON.stringify({ error: 'RESEND_API_KEY não configurada.' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      const resp = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: remetente,
-          to: funcionario.email,
-          subject: 'Q-CVF Medical - Convite de acesso (reenvio)',
-          html: `<p>Olá, ${funcionario.nome}.</p><p>Segue um novo link para definir sua senha de acesso ao Q-CVF Medical (o anterior expirou):</p><p><a href="${linkData.properties.action_link}">Definir minha senha</a></p>`,
+      // Não manda por e-mail neste reenvio de propósito: se o endereço estiver
+      // atrás de um Grupo do Google (ou qualquer filtro que "clique" sozinho
+      // em links pra escanear ameaças), o link de uso único é consumido antes
+      // da pessoa abrir o e-mail - foi exatamente isso que aconteceu aqui (o
+      // link foi gerado e "usado" 27 segundos depois, tempo impossível pra um
+      // humano). Devolve o link pro admin repassar manualmente (WhatsApp etc).
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          reenviado: true,
+          auth_user_id: funcionario.auth_user_id,
+          link: linkData.properties.action_link,
         }),
-      });
-      if (!resp.ok) {
-        const detalhe = await resp.json().catch(() => ({}));
-        return new Response(JSON.stringify({ error: 'Falha ao reenviar e-mail via Resend.', detalhe }), {
-          status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(JSON.stringify({ ok: true, reenviado: true, auth_user_id: funcionario.auth_user_id }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
   }
 

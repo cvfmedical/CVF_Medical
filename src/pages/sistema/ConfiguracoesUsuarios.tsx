@@ -19,6 +19,7 @@ export function ConfiguracoesUsuarios() {
   const qc = useQueryClient();
   const [convidando, setConvidando] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [linkReenvio, setLinkReenvio] = useState<{ nome: string; link: string } | null>(null);
 
   const query = useQuery({
     queryKey: ['funcionarios-config'],
@@ -39,7 +40,7 @@ export function ConfiguracoesUsuarios() {
       return;
     }
     const mensagem = f.auth_user_id
-      ? `Reenviar convite de acesso web para ${f.nome} (${f.email})? Use isso se o link anterior expirou antes dele definir a senha.`
+      ? `Gerar um novo link de acesso para ${f.nome} (${f.email})? Use isso se o link anterior expirou antes dele definir a senha. O link não é enviado por e-mail - você copia e repassa manualmente.`
       : `Enviar convite de acesso web para ${f.nome} (${f.email})?`;
     if (!confirm(mensagem)) return;
     setConvidando(f.id);
@@ -49,6 +50,9 @@ export function ConfiguracoesUsuarios() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      if (data?.link) {
+        setLinkReenvio({ nome: f.nome, link: data.link });
+      }
       qc.invalidateQueries({ queryKey: ['funcionarios-config'] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -65,10 +69,35 @@ export function ConfiguracoesUsuarios() {
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Só administradores podem convidar. O convite envia um e-mail com um link para o funcionário definir a
         própria senha - ninguém, nem o administrador, vê ou define a senha por ele. Se o link expirar antes de ser
-        usado, clique em "Reenviar convite".
+        usado, clique em "Reenviar convite" - nesse caso o link aparece na tela pra você repassar manualmente
+        (não é enviado por e-mail de novo).
       </p>
 
       {erro && <p className="erro-login">{erro}</p>}
+
+      {linkReenvio && (
+        <div style={{ background: 'var(--surface-200)', border: '1px solid var(--ink-200)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, marginBottom: 8 }}>
+            Novo link de acesso gerado para <strong>{linkReenvio.nome}</strong> (não é enviado por e-mail automaticamente
+            neste reenvio - copie e envie você mesmo, por WhatsApp por exemplo):
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input readOnly value={linkReenvio.link} style={{ flex: 1, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+            <button
+              type="button"
+              className="botao-secundario"
+              onClick={() => {
+                navigator.clipboard.writeText(linkReenvio.link);
+              }}
+            >
+              Copiar link
+            </button>
+            <button type="button" className="botao-secundario" onClick={() => setLinkReenvio(null)}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
 
       <table className="tabela-crud">
         <thead>
