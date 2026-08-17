@@ -1,6 +1,7 @@
 import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
 import { AlertaOSAguardandoOrcamento } from './AlertaOSAguardandoOrcamento';
 import { AlertaOrcamentosAprovados } from './AlertaOrcamentosAprovados';
+import { AlertaFaturamentoLiberado } from './AlertaFaturamentoLiberado';
 
 // Alertas flutuantes (cartões ~5cm x 5cm) em linha horizontal no rodapé
 // - assim ocupam só uma faixa embaixo e não atrapalham a visão do
@@ -26,6 +27,7 @@ export function AlertasFlutuantes() {
         <AlertaOrcamentosPendentes />
         <AlertaOSAguardandoOrcamento />
         <AlertaOrcamentosAprovados />
+        <AlertaFaturamentoLiberado />
       </div>
     </div>
   );
