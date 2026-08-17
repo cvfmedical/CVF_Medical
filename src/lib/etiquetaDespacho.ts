@@ -1,4 +1,5 @@
 import { EMPRESA } from './formato';
+import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 
 // Etiqueta de despacho pra colar na caixa enviada ao cliente - formato de
 // impressora térmica (100x150mm, padrão de etiqueta de envio 4x6").
@@ -61,15 +62,21 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
           height: 150mm;
           margin: 12px auto;
           background: #fff;
-          padding: 4mm;
+          padding: 0 0 4mm;
           display: flex;
           flex-direction: column;
           border: 1px solid #999;
+          overflow: hidden;
         }
+        .cab-logo-wrap { text-align: center; padding: 4mm 4mm 3mm; }
+        .cab-logo { height: 20mm; width: auto; }
+        .cab-barra { height: 1.6mm; background: linear-gradient(90deg, #344d95, #5b78bd); }
+        .miolo { padding: 3mm 4mm 0; display: flex; flex-direction: column; flex: 1; }
         .remetente {
           font-size: 9px;
           line-height: 1.4;
-          border-bottom: 1px dashed #000;
+          color: #344d95;
+          border-bottom: 1px dashed #344d95;
           padding-bottom: 6px;
           margin-bottom: 10px;
         }
@@ -77,13 +84,13 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
         .destinatario { flex: 1; }
         .destinatario .rot {
           font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-          margin-bottom: 4px;
+          margin-bottom: 4px; color: #344d95;
         }
         .destinatario .nome { font-size: 18px; font-weight: 700; line-height: 1.25; margin-bottom: 8px; }
         .destinatario .unidade { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
         .destinatario .endereco { font-size: 13px; line-height: 1.5; }
         .rodape {
-          border-top: 2px solid #000;
+          border-top: 2px solid #344d95;
           padding-top: 8px;
           margin-top: 10px;
         }
@@ -91,7 +98,8 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
           font-family: 'Courier New', monospace;
           font-size: 22px;
           font-weight: 700;
-          border: 2px solid #000;
+          border: 2px solid #344d95;
+          color: #000;
           text-align: center;
           padding: 6px;
           letter-spacing: 0.05em;
@@ -110,20 +118,26 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
         <button onclick="window.print()">Imprimir etiqueta</button>
       </div>
       <div class="etiqueta">
-        <div class="remetente">
-          <span class="rot">REMETENTE:</span> ${EMPRESA.razaoSocial}<br>
-          ${EMPRESA.endereco}<br>
-          Tel.: ${EMPRESA.telefone}
+        <div class="cab-logo-wrap">
+          <img class="cab-logo" src="${cvfLogoCompleto}" alt="CVF Medical" />
         </div>
-        <div class="destinatario">
-          <div class="rot">Destinatário</div>
-          <div class="nome">${d.clienteNome}</div>
-          ${d.clienteFinalNome ? `<div class="unidade">A/C: ${d.clienteFinalNome}</div>` : ''}
-          <div class="endereco">${enderecoHtml || '<em>Endereço não cadastrado</em>'}</div>
-        </div>
-        <div class="rodape">
-          <div class="os">OS ${d.numeroOS}</div>
-          ${d.equipamento ? `<div class="equip">${d.equipamento}</div>` : ''}
+        <div class="cab-barra"></div>
+        <div class="miolo">
+          <div class="remetente">
+            <span class="rot">REMETENTE:</span> ${EMPRESA.razaoSocial}<br>
+            ${EMPRESA.endereco}<br>
+            Tel.: ${EMPRESA.telefone}
+          </div>
+          <div class="destinatario">
+            <div class="rot">Destinatário</div>
+            <div class="nome">${d.clienteNome}</div>
+            ${d.clienteFinalNome ? `<div class="unidade">A/C: ${d.clienteFinalNome}</div>` : ''}
+            <div class="endereco">${enderecoHtml || '<em>Endereço não cadastrado</em>'}</div>
+          </div>
+          <div class="rodape">
+            <div class="os">OS ${d.numeroOS}</div>
+            ${d.equipamento ? `<div class="equip">${d.equipamento}</div>` : ''}
+          </div>
         </div>
       </div>
     </body>
