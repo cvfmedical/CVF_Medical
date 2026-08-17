@@ -14,7 +14,7 @@ import { Badge } from '../../components/Badge';
 interface Cliente {
   id: number;
   razao_social: string;
-  cnpj: string;
+  cnpj: string | null;
   nome_fantasia: string | null;
   hospital_clinica: string | null;
   eh_terceirizado: boolean;
@@ -100,7 +100,7 @@ export function Clientes() {
     const termo = filtro.trim().toLowerCase();
     return (
       c.razao_social.toLowerCase().includes(termo) ||
-      c.cnpj.includes(termo) ||
+      (c.cnpj ?? '').includes(termo) ||
       (c.hospital_clinica ?? '').toLowerCase().includes(termo)
     );
   });
@@ -116,7 +116,7 @@ export function Clientes() {
     setEditando(c);
     setForm({
       razao_social: c.razao_social,
-      cnpj: c.cnpj,
+      cnpj: c.cnpj ?? '',
       nome_fantasia: c.nome_fantasia ?? '',
       hospital_clinica: c.hospital_clinica ?? '',
       eh_terceirizado: c.eh_terceirizado,
@@ -211,15 +211,19 @@ export function Clientes() {
       setErro('Informe a razão social.');
       return;
     }
-    if (!form.cnpj || !validarCnpj(form.cnpj)) {
+    if (form.cnpj && !validarCnpj(form.cnpj)) {
       setErro('CNPJ inválido.');
+      return;
+    }
+    if (!form.cnpj && !form.representante_id) {
+      setErro('CNPJ é obrigatório (só é opcional para clientes que são unidade atendida de um terceirizado).');
       return;
     }
     setSalvando(true);
     try {
       const dados = {
         ...form,
-        cnpj: formatarCnpj(form.cnpj),
+        cnpj: form.cnpj ? formatarCnpj(form.cnpj) : null,
         data_abertura: form.data_abertura || null,
         representante_id: form.representante_id ? Number(form.representante_id) : null,
       };
@@ -271,7 +275,7 @@ export function Clientes() {
               <td>{c.razao_social}</td>
               <td>{c.eh_terceirizado && <Badge tono="copper">Terceirizado</Badge>}</td>
               <td>{c.nome_fantasia}</td>
-              <td className="mono">{c.cnpj}</td>
+              <td className="mono">{c.cnpj ?? '-'}</td>
               <td>{c.cidade ? `${c.cidade}/${c.uf}` : '-'}</td>
               <td>{c.telefone}</td>
               <td>{c.email}</td>
@@ -301,7 +305,7 @@ export function Clientes() {
           larguraMax={640}
         >
             <div className="campo-form">
-              <label>CNPJ *</label>
+              <label>CNPJ {form.representante_id ? '' : '*'}</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   type="text"

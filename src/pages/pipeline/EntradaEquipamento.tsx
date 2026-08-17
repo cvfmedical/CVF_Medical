@@ -250,6 +250,23 @@ export function EntradaEquipamento() {
     return clientesQuery.data?.find((c) => c.id === id);
   }
 
+  // Cadastro rápido do cliente final (unidade atendida) direto da Entrada -
+  // só o nome, sem passar pelo formulário completo de cliente (CNPJ é
+  // opcional aqui: quem recebe a NF é o terceirizado, não a unidade).
+  async function criarClienteFinal(nome: string) {
+    const { data, error } = await supabase
+      .from('clientes')
+      .insert({ razao_social: nome, representante_id: Number(form.cliente_id) })
+      .select('id')
+      .single();
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    await qc.invalidateQueries({ queryKey: ['clientes-opcoes-completo'] });
+    setClienteFinalId(String(data.id));
+  }
+
   function abrirNova() {
     setEditando(null);
     setForm(formVazio);
@@ -611,6 +628,8 @@ export function EntradaEquipamento() {
                     .map((c) => ({ value: String(c.id), label: c.razao_social }))}
                   valor={clienteFinalId}
                   onChange={setClienteFinalId}
+                  aoCriarNovo={criarClienteFinal}
+                  textoCriarNovo="Cadastrar unidade"
                 />
                 <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                   Cliente é um terceirizado - identifique qual unidade está sendo atendida (informativo; orçamento e

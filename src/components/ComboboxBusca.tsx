@@ -11,13 +11,25 @@ export interface ComboboxBuscaProps {
   onChange: (valor: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Quando a busca não acha nada, mostra um item pra criar na hora (ex:
+  // cadastro rápido de cliente final) em vez de só "Nenhum resultado".
+  aoCriarNovo?: (texto: string) => void;
+  textoCriarNovo?: string;
 }
 
 // Select nativo troca por isto quando a lista referencia um cadastro que
 // pode crescer (cliente, produto, catálogo etc.) - digitar filtra em vez
 // de rolar uma lista inteira. Enums pequenos e fixos (status, tipo) não
 // precisam disso e continuam <select> nativo.
-export function ComboboxBusca({ opcoes, valor, onChange, placeholder = 'Buscar...', disabled }: ComboboxBuscaProps) {
+export function ComboboxBusca({
+  opcoes,
+  valor,
+  onChange,
+  placeholder = 'Buscar...',
+  disabled,
+  aoCriarNovo,
+  textoCriarNovo = 'Cadastrar',
+}: ComboboxBuscaProps) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const [indiceAtivo, setIndiceAtivo] = useState(0);
@@ -65,6 +77,14 @@ export function ComboboxBusca({ opcoes, valor, onChange, placeholder = 'Buscar..
     setAberto(false);
   }
 
+  function criarNovo() {
+    const texto = busca.trim();
+    if (!texto || !aoCriarNovo) return;
+    aoCriarNovo(texto);
+    setAberto(false);
+    setBusca('');
+  }
+
   function aoTeclar(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!aberto) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -83,6 +103,7 @@ export function ComboboxBusca({ opcoes, valor, onChange, placeholder = 'Buscar..
       e.preventDefault();
       const op = filtradas[indiceAtivo];
       if (op) selecionar(op);
+      else if (filtradas.length === 0) criarNovo();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setAberto(false);
@@ -122,7 +143,20 @@ export function ComboboxBusca({ opcoes, valor, onChange, placeholder = 'Buscar..
       )}
       {aberto && (
         <ul className="combobox-lista" id="combobox-lista" role="listbox">
-          {filtradas.length === 0 && <li className="combobox-item combobox-vazio">Nenhum resultado</li>}
+          {filtradas.length === 0 && aoCriarNovo && busca.trim() && (
+            <li
+              className={`combobox-item combobox-criar${indiceAtivo === 0 ? ' ativo' : ''}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                criarNovo();
+              }}
+            >
+              + {textoCriarNovo} "{busca.trim()}"
+            </li>
+          )}
+          {filtradas.length === 0 && (!aoCriarNovo || !busca.trim()) && (
+            <li className="combobox-item combobox-vazio">Nenhum resultado</li>
+          )}
           {filtradas.map((op, i) => (
             <li
               key={op.value}

@@ -654,6 +654,15 @@ button {
   cursor: default;
 }
 
+.combobox-criar {
+  color: var(--copper-800);
+  font-weight: 500;
+}
+
+.combobox-criar.ativo {
+  background: var(--copper-500-12);
+}
+
 .modal-acoes {
   display: flex;
   justify-content: flex-end;
