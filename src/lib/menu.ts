@@ -44,7 +44,7 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Funcionários / técnicos', path: '/funcionarios', categoria: 'funcionarios', implementado: false },
       { label: 'Fornecedores', path: '/fornecedores', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Transportadoras', path: '/transportadoras', categoria: 'cadastros_gerais', implementado: false },
-      { label: 'Produtos e serviços', path: '/produtos-servicos', categoria: 'catalogo_precos', implementado: false },
+      { label: 'Cadastro de itens', path: '/produtos-servicos', categoria: 'catalogo_precos', implementado: false },
       { label: 'Catálogo de óticas (modelos)', path: '/catalogo-oticas', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Equipamentos do cliente', path: '/equipamentos', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Observações de defeito', path: '/observacoes-defeito', categoria: 'cadastros_gerais', implementado: false },

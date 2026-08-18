@@ -278,7 +278,7 @@ export function ProdutosServicos() {
   return (
     <div>
       <div className="crud-cabecalho">
-        <h1>Produtos e serviços</h1>
+        <h1>Cadastro de itens</h1>
         <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
           <IconPlus size={16} /> Novo
         </button>
