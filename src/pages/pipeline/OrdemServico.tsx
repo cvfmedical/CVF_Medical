@@ -6,6 +6,27 @@ import { mensagemErro } from '../../lib/erros';
 import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { formatarModeloOtica } from '../../lib/formato';
+
+interface CatalogoOtica {
+  id: number;
+  fabricante: string;
+  modelo: string;
+  tipo: string | null;
+  diametro_mm: number | null;
+  angulo_graus: number | null;
+  grupo: string | null;
+  subgrupo: string | null;
+}
+
+interface ProdutoCatalogo {
+  id: number;
+  nome: string;
+  marca_fabricante: string | null;
+  tipo: string | null;
+  categoria: string | null;
+  subgrupo: string | null;
+}
 
 async function gerarNumeroOS(): Promise<string> {
   return gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
@@ -25,6 +46,15 @@ export function OrdemServico() {
     prazo_entrega: '7 dias',
     status_os: STATUS_OS_ORDENADOS[0] as string,
   });
+  // Mesmo combobox único da Entrada (Recebimento/Triagem) - junta catálogo
+  // de óticas e Produtos e serviços, preenchendo descrição/fabricante/
+  // eh_otica/grupo sozinho. Necessário aqui também porque esta tela cria a
+  // OS direto, sem passar pela Entrada.
+  const [ehOtica, setEhOtica] = useState<boolean | null>(null);
+  const [catalogoOticaId, setCatalogoOticaId] = useState('');
+  const [tipoEquipamentoSelecionado, setTipoEquipamentoSelecionado] = useState('');
+  const [grupoEquipamento, setGrupoEquipamento] = useState('');
+  const [subgrupoEquipamento, setSubgrupoEquipamento] = useState('');
 
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes'],
@@ -34,6 +64,62 @@ export function OrdemServico() {
       return data as { id: number; razao_social: string }[];
     },
   });
+
+  const catalogoQuery = useQuery({
+    queryKey: ['catalogo-oticas-opcoes'],
+    queryFn: async (): Promise<CatalogoOtica[]> => {
+      const { data, error } = await supabase
+        .from('catalogo_oticas')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus, grupo, subgrupo')
+        .order('fabricante');
+      if (error) throw error;
+      return data as CatalogoOtica[];
+    },
+  });
+
+  const produtosCatalogoQuery = useQuery({
+    queryKey: ['produtos-servicos-catalogo-entrada'],
+    queryFn: async (): Promise<ProdutoCatalogo[]> => {
+      const { data, error } = await supabase
+        .from('produtos_servicos')
+        .select('id, nome, marca_fabricante, tipo, categoria, subgrupo')
+        .eq('status_ativo', true)
+        .in('tipo', ['Produto', 'Serviço'])
+        .order('nome');
+      if (error) throw error;
+      return data as ProdutoCatalogo[];
+    },
+  });
+
+  const opcoesTipoEquipamento = [
+    ...(catalogoQuery.data ?? []).map((c) => ({ value: `otica:${c.id}`, label: `Ótica — ${formatarModeloOtica(c)}` })),
+    ...(produtosCatalogoQuery.data ?? []).map((p) => ({
+      value: `produto:${p.id}`,
+      label: `${p.tipo} — ${p.nome}${p.marca_fabricante ? ` (${p.marca_fabricante})` : ''}`,
+    })),
+  ];
+
+  function selecionarTipoEquipamento(valor: string) {
+    setTipoEquipamentoSelecionado(valor);
+    const [tipo, id] = valor.split(':');
+    if (tipo === 'otica') {
+      const item = catalogoQuery.data?.find((c) => String(c.id) === id);
+      if (!item) return;
+      setForm((f) => ({ ...f, optica_fab: item.fabricante, optica_desc: formatarModeloOtica({ ...item, fabricante: '' }) }));
+      setEhOtica(true);
+      setCatalogoOticaId(id);
+      setGrupoEquipamento(item.grupo ?? '');
+      setSubgrupoEquipamento(item.subgrupo ?? '');
+    } else if (tipo === 'produto') {
+      const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === id);
+      if (!item) return;
+      setForm((f) => ({ ...f, optica_fab: item.marca_fabricante ?? '', optica_desc: item.nome }));
+      setEhOtica(false);
+      setCatalogoOticaId('');
+      setGrupoEquipamento(item.categoria ?? '');
+      setSubgrupoEquipamento(item.subgrupo ?? '');
+    }
+  }
 
   async function salvar() {
     setErro(null);
@@ -56,6 +142,10 @@ export function OrdemServico() {
         defeito_relatado: form.defeito_relatado || null,
         prazo_entrega: form.prazo_entrega || null,
         status_os: form.status_os,
+        eh_otica: ehOtica,
+        catalogo_otica_id: catalogoOticaId ? Number(catalogoOticaId) : null,
+        grupo: grupoEquipamento || null,
+        subgrupo: subgrupoEquipamento || null,
       });
       if (error) throw error;
       setSucesso(`OS ${numeroOS} criada com sucesso.`);
@@ -83,6 +173,19 @@ export function OrdemServico() {
           valor={String(form.cliente_id ?? '')}
           onChange={(valor) => setForm((f) => ({ ...f, cliente_id: valor }))}
         />
+      </div>
+      <div className="campo-form">
+        <label>Selecionar tipo de equipamento</label>
+        <ComboboxBusca
+          opcoes={opcoesTipoEquipamento}
+          valor={tipoEquipamentoSelecionado}
+          onChange={selecionarTipoEquipamento}
+        />
+        <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+          Junta o catálogo de óticas e os equipamentos cadastrados em "Produtos e serviços" - preenche descrição,
+          fabricante e o grupo do equipamento sozinho (usado depois pra filtrar as peças disponíveis no
+          orçamento). Se preferir, também dá pra digitar os campos abaixo manualmente.
+        </p>
       </div>
       <div className="campo-form">
         <label>Descrição do equipamento</label>
