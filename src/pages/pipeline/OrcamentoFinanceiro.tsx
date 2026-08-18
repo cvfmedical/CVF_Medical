@@ -1078,8 +1078,13 @@ export function OrcamentoFinanceiro() {
 
   if (orcamentosQuery.isLoading) return <CarregandoTela />;
 
+  // Sem busca, só mostra o que ainda está em aberto pra precificar/enviar -
+  // uma vez enviado/respondido, o orçamento sai da lista padrão (fica só
+  // achável pela busca), pra não acumular anos de registros já resolvidos.
   const linhasLista = (orcamentosQuery.data ?? []).filter((o) => {
-    if (!filtroLista.trim()) return true;
+    if (!filtroLista.trim()) {
+      return o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente';
+    }
     const termo = filtroLista.trim().toLowerCase();
     return (
       o.numero_orcamento.toLowerCase().includes(termo) ||
@@ -1094,12 +1099,16 @@ export function OrcamentoFinanceiro() {
 
       <input
         className="campo-filtro"
-        placeholder="Buscar por nº orçamento, OS ou cliente..."
+        placeholder="Buscar por nº orçamento, OS ou cliente... (a busca acha também os já enviados/respondidos)"
         value={filtroLista}
         onChange={(e) => setFiltroLista(e.target.value)}
       />
 
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+        Mostrando só o que está aguardando precificação/envio. Orçamentos já enviados, aprovados ou recusados saem
+        desta lista - use a busca acima pra encontrá-los.
+      </p>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -4, marginBottom: 8 }}>
         Marque a caixa nas linhas "Aguardando Envio ao Cliente" para enviar vários orçamentos do mesmo cliente num só
         e-mail (ex.: filtre pelo nome do cliente, precifique cada um e selecione todos antes de enviar).
       </p>
