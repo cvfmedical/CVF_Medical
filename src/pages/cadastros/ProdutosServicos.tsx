@@ -18,6 +18,7 @@ interface ProdutoServico {
   tipo: string | null;
   descricao: string | null;
   categoria: string | null;
+  subgrupo: string | null;
   ncm: string | null;
   marca_fabricante: string | null;
   fornecedor_id: number | null;
@@ -50,6 +51,7 @@ const formVazio = {
   tipo: 'Peça',
   descricao: '',
   categoria: '',
+  subgrupo: '',
   marca_fabricante: '',
   fornecedor_id: '',
   ncm: '',
@@ -123,6 +125,19 @@ export function ProdutosServicos() {
     },
   });
 
+  const subgruposQuery = useQuery({
+    queryKey: ['subgrupos-produtos-servicos-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subgrupos')
+        .select('id, grupo, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { id: number; grupo: string; descricao: string }[];
+    },
+  });
+
   function nomeFornecedor(id: number | null) {
     return id ? fornecedoresQuery.data?.find((f) => f.id === id)?.razao_social ?? `#${id}` : '-';
   }
@@ -163,6 +178,7 @@ export function ProdutosServicos() {
       tipo: p.tipo ?? 'Peça',
       descricao: p.descricao ?? '',
       categoria: p.categoria ?? '',
+      subgrupo: p.subgrupo ?? '',
       marca_fabricante: p.marca_fabricante ?? '',
       fornecedor_id: p.fornecedor_id ? String(p.fornecedor_id) : '',
       ncm: p.ncm ?? '',
@@ -238,6 +254,7 @@ export function ProdutosServicos() {
         tipo: form.tipo,
         descricao: form.descricao || null,
         categoria: form.categoria || null,
+        subgrupo: form.subgrupo || null,
         marca_fabricante: form.marca_fabricante || null,
         fornecedor_id: form.fornecedor_id ? Number(form.fornecedor_id) : null,
         ncm: form.ncm || null,
@@ -292,7 +309,8 @@ export function ProdutosServicos() {
             <th>Código</th>
             <th>Nome</th>
             <th>Tipo</th>
-            <th>Categoria</th>
+            <th>Grupo</th>
+            <th>Subgrupo</th>
             <th>Marca/fabricante</th>
             <th>Preço de custo</th>
             <th>Preço de venda</th>
@@ -309,6 +327,7 @@ export function ProdutosServicos() {
               <td>{p.nome}</td>
               <td>{p.tipo}</td>
               <td>{p.categoria}</td>
+              <td>{p.subgrupo}</td>
               <td>{p.marca_fabricante}</td>
               <td>{p.preco_custo != null ? `R$ ${Number(p.preco_custo).toFixed(2)}` : '-'}</td>
               <td>{p.preco_unitario != null ? `R$ ${Number(p.preco_unitario).toFixed(2)}` : '-'}</td>
@@ -329,7 +348,7 @@ export function ProdutosServicos() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={11}>Nenhum registro encontrado.</td>
+              <td colSpan={12}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>
@@ -364,16 +383,32 @@ export function ProdutosServicos() {
               <textarea value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} />
             </div>
             <div className="campo-form">
-              <label>Categoria</label>
+              <label>Grupo</label>
               <ComboboxBusca
                 opcoes={(categoriasQuery.data ?? []).map((c) => ({ value: c.descricao, label: c.descricao }))}
                 valor={form.categoria}
-                onChange={(valor) => setForm((f) => ({ ...f, categoria: valor }))}
+                onChange={(valor) => setForm((f) => ({ ...f, categoria: valor, subgrupo: '' }))}
               />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Não achou a categoria certa? Cadastre em "Categorias de produtos/serviços" (Cadastros Gerais).
+                Não achou o grupo certo? Cadastre em "Grupos de produtos/serviços" (Cadastros Gerais).
               </p>
             </div>
+            {form.categoria && (
+              <div className="campo-form">
+                <label>Subgrupo</label>
+                <ComboboxBusca
+                  opcoes={(subgruposQuery.data ?? [])
+                    .filter((s) => s.grupo === form.categoria)
+                    .map((s) => ({ value: s.descricao, label: s.descricao }))}
+                  valor={form.subgrupo}
+                  onChange={(valor) => setForm((f) => ({ ...f, subgrupo: valor }))}
+                />
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                  Só mostra os subgrupos cadastrados para o grupo "{form.categoria}". Usado para filtrar as
+                  observações de defeito disponíveis ao montar o orçamento.
+                </p>
+              </div>
+            )}
             <div className="campo-form">
               <label>Marca/fabricante</label>
               <input

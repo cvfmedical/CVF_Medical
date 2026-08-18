@@ -23,6 +23,7 @@ import { TesteLuz } from './pages/pipeline/TesteLuz';
 import { MedicaoDimensional } from './pages/pipeline/MedicaoDimensional';
 import { ObservacoesDefeito } from './pages/cadastros/ObservacoesDefeito';
 import { CategoriasProdutosServicos } from './pages/cadastros/CategoriasProdutosServicos';
+import { SubgruposProdutosServicos } from './pages/cadastros/SubgruposProdutosServicos';
 import { TiposOtica } from './pages/cadastros/TiposOtica';
 import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
@@ -68,6 +69,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/medicao-dimensional': MedicaoDimensional,
   '/observacoes-defeito': ObservacoesDefeito,
   '/categorias-produtos-servicos': CategoriasProdutosServicos,
+  '/subgrupos-produtos-servicos': SubgruposProdutosServicos,
   '/tipos-otica': TiposOtica,
   '/condicoes-chegada': CondicoesChegada,
   '/entrada-equipamento': EntradaEquipamento,

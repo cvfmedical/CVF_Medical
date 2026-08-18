@@ -153,11 +153,11 @@ export function OrcamentoTecnico() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('produtos_servicos')
-        .select('id, nome')
+        .select('id, nome, categoria, subgrupo')
         .eq('status_ativo', true)
         .order('nome');
       if (error) throw error;
-      return data as { id: number; nome: string }[];
+      return data as { id: number; nome: string; categoria: string | null; subgrupo: string | null }[];
     },
   });
 
@@ -166,12 +166,23 @@ export function OrcamentoTecnico() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('observacoes_defeito')
-        .select('id, descricao')
+        .select('id, descricao, grupo, subgrupo')
         .eq('status_ativo', true)
         .order('descricao');
       if (error) throw error;
-      return data as { id: number; descricao: string }[];
+      return data as { id: number; descricao: string; grupo: string | null; subgrupo: string | null }[];
     },
+  });
+
+  // Filtra a lista de observações de defeito pelo grupo/subgrupo do produto
+  // selecionado no item - observações sem grupo marcado continuam aparecendo
+  // sempre (compatibilidade com o que já estava cadastrado sem essa marcação).
+  const produtoDoItem = produtosQuery.data?.find((p) => String(p.id) === novoItem.produto_servico_id);
+  const observacoesFiltradas = (observacoesQuery.data ?? []).filter((o) => {
+    if (!produtoDoItem?.categoria) return true;
+    if (o.grupo && o.grupo !== produtoDoItem.categoria) return false;
+    if (produtoDoItem.subgrupo && o.subgrupo && o.subgrupo !== produtoDoItem.subgrupo) return false;
+    return true;
   });
 
   const itensQuery = useQuery({
@@ -513,7 +524,7 @@ export function OrcamentoTecnico() {
                   onChange={(e) => setObservacaoParaAdicionar(e.target.value)}
                 >
                   <option value="">Selecione...</option>
-                  {(observacoesQuery.data ?? [])
+                  {observacoesFiltradas
                     .filter((o) => !observacoesSelecionadas.includes(o.descricao))
                     .map((o) => (
                       <option key={o.id} value={o.descricao}>
@@ -555,6 +566,9 @@ export function OrcamentoTecnico() {
                 </div>
               )}
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                {produtoDoItem?.categoria
+                  ? `Mostrando observações do grupo "${produtoDoItem.categoria}"${produtoDoItem.subgrupo ? ` / subgrupo "${produtoDoItem.subgrupo}"` : ''} + as sem grupo definido. `
+                  : ''}
                 Não achou a observação certa? Cadastre em "Observações de defeito" (Cadastros Gerais).
               </p>
             </div>

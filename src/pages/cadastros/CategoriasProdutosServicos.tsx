@@ -10,7 +10,7 @@ interface Categoria {
 export function CategoriasProdutosServicos() {
   return (
     <CrudPage<Categoria>
-      titulo="Categorias de produtos e serviços"
+      titulo="Grupos de produtos e serviços"
       tabela="categorias_produtos_servicos"
       ordenarPor="descricao"
       camposFiltro={['descricao']}

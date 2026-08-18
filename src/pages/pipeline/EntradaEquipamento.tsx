@@ -67,6 +67,8 @@ interface ProdutoCatalogo {
   nome: string;
   marca_fabricante: string | null;
   tipo: string | null;
+  categoria: string | null;
+  subgrupo: string | null;
 }
 
 interface Cliente {
@@ -118,6 +120,9 @@ export function EntradaEquipamento() {
   // cobrir entrada digitada na mão.
   const [ehOtica, setEhOtica] = useState<boolean | null>(null);
   const [catalogoOticaId, setCatalogoOticaId] = useState('');
+  // Produto (não-ótica) escolhido no combobox "outro tipo de produto" - só
+  // usado pra filtrar o checklist de avarias pelo grupo/subgrupo dele.
+  const [produtoEntradaId, setProdutoEntradaId] = useState('');
   // Preenchido só quando o Cliente selecionado é um terceirizado - identifica
   // qual cliente final (unidade atendida) está sendo atendido nesta entrada.
   const [clienteFinalId, setClienteFinalId] = useState('');
@@ -215,6 +220,7 @@ export function EntradaEquipamento() {
     setForm((f) => ({ ...f, equipamento_fab: item.fabricante, equipamento_desc: descricao || item.modelo }));
     setEhOtica(true);
     setCatalogoOticaId(catalogoId);
+    setProdutoEntradaId('');
   }
 
   // Catálogo de produtos/serviços usado como fonte de OUTROS equipamentos
@@ -224,7 +230,7 @@ export function EntradaEquipamento() {
     queryFn: async (): Promise<ProdutoCatalogo[]> => {
       const { data, error } = await supabase
         .from('produtos_servicos')
-        .select('id, nome, marca_fabricante, tipo')
+        .select('id, nome, marca_fabricante, tipo, categoria, subgrupo')
         .eq('status_ativo', true)
         .order('nome');
       if (error) throw error;
@@ -239,7 +245,20 @@ export function EntradaEquipamento() {
     setForm((f) => ({ ...f, equipamento_fab: item.marca_fabricante ?? '', equipamento_desc: descricao }));
     setEhOtica(false);
     setCatalogoOticaId('');
+    setProdutoEntradaId(produtoId);
   }
+
+  // Produto escolhido acima (não-ótica) - usado só para filtrar o checklist
+  // de avarias pelo grupo/subgrupo dele, quando esses itens tiverem essa
+  // marcação (ver checklistAvarias.ts).
+  const produtoEntradaSelecionado = produtosCatalogoQuery.data?.find((p) => String(p.id) === produtoEntradaId);
+  const checklistFiltrado = CHECKLIST_AVARIAS.filter((item) => {
+    if (!item.grupo) return true;
+    if (!produtoEntradaSelecionado?.categoria) return true;
+    if (item.grupo !== produtoEntradaSelecionado.categoria) return false;
+    if (item.subgrupo && produtoEntradaSelecionado.subgrupo && item.subgrupo !== produtoEntradaSelecionado.subgrupo) return false;
+    return true;
+  });
 
   const entradasQuery = useQuery({
     queryKey: ['entradas_equipamento'],
@@ -300,6 +319,7 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(null);
     setCatalogoOticaId('');
+    setProdutoEntradaId('');
     setClienteFinalId('');
     setErro(null);
     setModalAberto(true);
@@ -343,6 +363,7 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(e.eh_otica ?? null);
     setCatalogoOticaId(e.catalogo_otica_id ? String(e.catalogo_otica_id) : '');
+    setProdutoEntradaId('');
     setClienteFinalId(e.cliente_final_id ? String(e.cliente_final_id) : '');
     setErro(null);
     setModalAberto(true);
@@ -949,7 +970,7 @@ export function EntradaEquipamento() {
 
             <div className="campo-form">
               <label>Checklist de avarias identificadas na triagem</label>
-              {CHECKLIST_AVARIAS.map((item) => (
+              {checklistFiltrado.map((item) => (
                 <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                   <input
                     type="checkbox"
