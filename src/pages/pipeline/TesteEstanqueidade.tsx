@@ -130,10 +130,9 @@ export function TesteEstanqueidade() {
           { name: 'imersao_total', label: 'Endoscópio totalmente imerso (obrigatório)', type: 'checkbox' },
           {
             name: 'calibracao_id',
-            label: 'Padrão de calibração (manômetro) - obrigatório',
+            label: 'Padrão de calibração (manômetro) - se ainda não tiver, explique em Observações (ex.: manômetro novo aguardando calibração)',
             type: 'combobox',
             opcoes: (padroesQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.identificacao })),
-            obrigatorio: true,
           },
           {
             name: 'resultado',
@@ -160,7 +159,8 @@ export function TesteEstanqueidade() {
           if (d.temperatura_celsius === '' || d.temperatura_celsius == null || t < 10 || t > 40)
             return 'A temperatura da água deve estar entre 10 e 40 °C (ISO 8600-7 §4).';
           if (!d.imersao_total) return 'O ensaio exige imersão total do endoscópio (ISO 8600-7). Marque a imersão total.';
-          if (!d.calibracao_id) return 'Selecione o padrão de calibração do manômetro (rastreabilidade ISO/IEC 17025).';
+          if (!d.calibracao_id && !String(d.observacoes ?? '').trim())
+            return 'Sem padrão de calibração selecionado, explique o motivo em Observações (ex.: manômetro novo, ainda aguardando calibração) - a leitura de pressão fica sem rastreabilidade ISO/IEC 17025 até isso ser resolvido.';
           if (!d.resultado) return 'Selecione o resultado do teste.';
           if (d.metodo_observacao === METODO_CAMARA && d.resultado === 'Aprovado'
             && !String(d.observacoes ?? '').trim())
