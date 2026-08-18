@@ -1,7 +1,8 @@
 import { abrirImpressao } from './imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from './compartilhar';
-import { CHECKLIST_AVARIAS, type ChecklistAvarias } from './checklistAvarias';
+import { type ChecklistAvarias } from './checklistAvarias';
 import { formatarMoeda } from './formato';
+import type { AvariaTriagem } from './useAvariasTriagem';
 
 // Extraído de EntradaEquipamento.tsx::imprimirRelatorio - usado tanto
 // pela tela de Entrada quanto pela tela de Registro de Entrada
@@ -33,10 +34,11 @@ export function montarCorpoRegistroEntrada(
   entrada: DadosEntradaParaRelatorio,
   fotosUrls: string[],
   clienteFinal?: { razao_social: string } | null,
+  avariasDisponiveis: AvariaTriagem[] = [],
 ): string {
-  const avariasMarcadas = CHECKLIST_AVARIAS.filter((item) => entrada.triagem_avarias?.[item.key]).map(
-    (item) => item.label,
-  );
+  const avariasMarcadas = avariasDisponiveis
+    .filter((item) => entrada.triagem_avarias?.[String(item.id)])
+    .map((item) => item.descricao);
   const fotosHtml = fotosUrls.length
     ? `<div class="secao">Fotos</div><div class="fotos">${fotosUrls.map((u) => `<img src="${u}" />`).join('')}</div>`
     : '';
@@ -71,8 +73,9 @@ export function imprimirRegistroEntrada(
   cliente: { razao_social: string; telefone?: string | null; email?: string | null } | undefined,
   entrada: DadosEntradaParaRelatorio,
   fotosUrls: string[],
+  avariasDisponiveis: AvariaTriagem[] = [],
 ) {
-  const corpo = montarCorpoRegistroEntrada(cliente, entrada, fotosUrls);
+  const corpo = montarCorpoRegistroEntrada(cliente, entrada, fotosUrls, undefined, avariasDisponiveis);
   const mensagem = `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`;
   abrirImpressao(
     `Registro de Entrada ${entrada.codigo_entrada}`,

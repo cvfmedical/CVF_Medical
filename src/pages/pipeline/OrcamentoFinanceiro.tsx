@@ -23,7 +23,7 @@ import {
   CHECKLIST_OTICA,
   AVISO_MANUTENCAO,
 } from '../../lib/formato';
-import { CHECKLIST_AVARIAS } from '../../lib/checklistAvarias';
+import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import {
   gerarAnexosOrcamento,
   type AnexoBase64,
@@ -225,6 +225,7 @@ export function OrcamentoFinanceiro() {
     orcamentoSelecionado?.status === 'Enviado ao Cliente' ||
     orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
+  const avariasTriagemQuery = useAvariasTriagem();
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -453,7 +454,13 @@ export function OrcamentoFinanceiro() {
       equipamento_sn: orcamentoSelecionado.ordens_servico?.optica_sn ?? null,
       defeito_relatado: null,
     };
-    return montarCorpoRegistroEntrada(clienteQuery.data ? { razao_social: clienteQuery.data.razao_social } : undefined, dados, urls);
+    return montarCorpoRegistroEntrada(
+      clienteQuery.data ? { razao_social: clienteQuery.data.razao_social } : undefined,
+      dados,
+      urls,
+      undefined,
+      avariasTriagemQuery.data ?? [],
+    );
   }
 
   // Relatório da Ordem de Serviço (peças danificadas identificadas pelo
@@ -711,7 +718,7 @@ export function OrcamentoFinanceiro() {
       data: entrada.data_entrada ? new Date(entrada.data_entrada).toLocaleDateString('pt-BR') : '',
       nfNumero: entrada.nf_remessa_numero ?? '',
       nfSerie: entrada.nf_remessa_serie ?? '',
-      avarias: CHECKLIST_AVARIAS.filter((it) => triagem[it.key]).map((it) => it.label),
+      avarias: (avariasTriagemQuery.data ?? []).filter((it) => triagem[String(it.id)]).map((it) => it.descricao),
       fotos: fotosDataUri,
     };
   }

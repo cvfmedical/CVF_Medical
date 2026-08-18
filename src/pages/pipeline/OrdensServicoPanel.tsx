@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
@@ -51,6 +52,7 @@ export function OrdensServicoPanel() {
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
   const [filtro, setFiltro] = useState('');
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
+  const avariasTriagemQuery = useAvariasTriagem();
   const [excluindo, setExcluindo] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -198,14 +200,16 @@ export function OrdensServicoPanel() {
             </div>
             <div className="campo-form">
               <label>Avarias identificadas na triagem</label>
-              {CHECKLIST_AVARIAS.filter((item) => detalhe.triagem_avarias?.[item.key]).length === 0 && (
+              {(avariasTriagemQuery.data ?? []).filter((item) => detalhe.triagem_avarias?.[String(item.id)]).length === 0 && (
                 <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma avaria marcada</p>
               )}
-              {CHECKLIST_AVARIAS.filter((item) => detalhe.triagem_avarias?.[item.key]).map((item) => (
-                <Badge key={item.key} tono="copper">
-                  {item.label}
-                </Badge>
-              ))}
+              {(avariasTriagemQuery.data ?? [])
+                .filter((item) => detalhe.triagem_avarias?.[String(item.id)])
+                .map((item) => (
+                  <Badge key={item.id} tono="copper">
+                    {item.descricao}
+                  </Badge>
+                ))}
             </div>
             <div className="modal-acoes">
               <button className="botao-secundario" onClick={() => setDetalhe(null)}>

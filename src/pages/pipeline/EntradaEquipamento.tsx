@@ -10,7 +10,8 @@ import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconEye, IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
 import { imprimirEtiquetaRastreio } from '../../lib/etiquetaRastreio';
-import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { imprimirRegistroEntrada } from '../../lib/relatorioEntrada';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 import { CapturaFoto } from '../../components/CapturaFoto';
@@ -253,11 +254,13 @@ export function EntradaEquipamento() {
     setProdutoEntradaId(produtoId);
   }
 
+  const avariasTriagemQuery = useAvariasTriagem();
+
   // Produto escolhido acima (não-ótica) - usado só para filtrar o checklist
   // de avarias pelo grupo/subgrupo dele, quando esses itens tiverem essa
-  // marcação (ver checklistAvarias.ts).
+  // marcação (cadastro "Avarias de triagem").
   const produtoEntradaSelecionado = produtosCatalogoQuery.data?.find((p) => String(p.id) === produtoEntradaId);
-  const checklistFiltrado = CHECKLIST_AVARIAS.filter((item) => {
+  const checklistFiltrado = (avariasTriagemQuery.data ?? []).filter((item) => {
     if (!item.grupo) return true;
     if (!produtoEntradaSelecionado?.categoria) return true;
     if (item.grupo !== produtoEntradaSelecionado.categoria) return false;
@@ -550,7 +553,7 @@ export function EntradaEquipamento() {
       urls = urlsBrutas.filter((u): u is string => !!u);
     }
 
-    imprimirRegistroEntrada(c, entrada, urls);
+    imprimirRegistroEntrada(c, entrada, urls, avariasTriagemQuery.data ?? []);
   }
 
   // E-mail automático (via Resend, servidor) avisando o cliente que o
@@ -976,15 +979,18 @@ export function EntradaEquipamento() {
             <div className="campo-form">
               <label>Checklist de avarias identificadas na triagem</label>
               {checklistFiltrado.map((item) => (
-                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                   <input
                     type="checkbox"
-                    checked={Boolean(avarias[item.key])}
-                    onChange={(e) => setAvarias((a) => ({ ...a, [item.key]: e.target.checked }))}
+                    checked={Boolean(avarias[String(item.id)])}
+                    onChange={(e) => setAvarias((a) => ({ ...a, [String(item.id)]: e.target.checked }))}
                   />
-                  <span style={{ fontSize: 13 }}>{item.label}</span>
+                  <span style={{ fontSize: 13 }}>{item.descricao}</span>
                 </div>
               ))}
+              {checklistFiltrado.length === 0 && (
+                <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Nenhuma avaria cadastrada para este grupo/subgrupo ainda.</p>
+              )}
             </div>
 
             {fotosExistentes.length > 0 && (
@@ -1086,14 +1092,16 @@ export function EntradaEquipamento() {
             </div>
             <div className="campo-form">
               <label>Avarias identificadas na triagem</label>
-              {CHECKLIST_AVARIAS.filter((item) => detalhe.triagem_avarias?.[item.key]).length === 0 && (
+              {(avariasTriagemQuery.data ?? []).filter((item) => detalhe.triagem_avarias?.[String(item.id)]).length === 0 && (
                 <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma avaria marcada</p>
               )}
-              {CHECKLIST_AVARIAS.filter((item) => detalhe.triagem_avarias?.[item.key]).map((item) => (
-                <Badge key={item.key} tono="copper">
-                  {item.label}
-                </Badge>
-              ))}
+              {(avariasTriagemQuery.data ?? [])
+                .filter((item) => detalhe.triagem_avarias?.[String(item.id)])
+                .map((item) => (
+                  <Badge key={item.id} tono="copper">
+                    {item.descricao}
+                  </Badge>
+                ))}
             </div>
             {fotosDetalhe.length > 0 && (
               <div className="campo-form">

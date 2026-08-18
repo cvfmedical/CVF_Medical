@@ -7,7 +7,8 @@ import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '..
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { CapturaFoto } from '../../components/CapturaFoto';
 import { IconX } from '@tabler/icons-react';
-import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { type ChecklistAvarias } from '../../lib/checklistAvarias';
+import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { imprimirRegistroEntrada, type DadosEntradaParaRelatorio } from '../../lib/relatorioEntrada';
 
 interface OSResumo {
@@ -55,6 +56,7 @@ export function RegistroEntrada() {
   const osId = searchParams.get('os');
 
   const [avarias, setAvarias] = useState<ChecklistAvarias>({});
+  const avariasTriagemQuery = useAvariasTriagem();
   const [prazoEntrega, setPrazoEntrega] = useState('');
   const [fotosExistentes, setFotosExistentes] = useState<FotoExistente[]>([]);
   const [fotosNovas, setFotosNovas] = useState<File[]>([]);
@@ -145,8 +147,8 @@ export function RegistroEntrada() {
     carregarFotos(entradaQuery.data.id).then(setFotosExistentes);
   }, [entradaQuery.data]);
 
-  function alternarAvaria(key: string) {
-    setAvarias((a) => ({ ...a, [key]: !a[key] }));
+  function alternarAvaria(chave: string) {
+    setAvarias((a) => ({ ...a, [chave]: !a[chave] }));
   }
 
   async function excluirFotoExistente(foto: FotoExistente) {
@@ -218,7 +220,7 @@ export function RegistroEntrada() {
         };
     const fotosFrescas = entradaQuery.data ? await carregarFotos(entradaQuery.data.id) : [];
     const urls = fotosFrescas.map((f) => f.url).filter((u): u is string => !!u);
-    imprimirRegistroEntrada(clienteQuery.data, dados, urls);
+    imprimirRegistroEntrada(clienteQuery.data, dados, urls, avariasTriagemQuery.data ?? []);
   }
 
   function continuarParaOrcamento() {
@@ -286,15 +288,15 @@ export function RegistroEntrada() {
 
       <div className="campo-form">
         <label>Avarias identificadas (marque tudo que se aplica)</label>
-        {CHECKLIST_AVARIAS.map((item) => (
-          <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+        {(avariasTriagemQuery.data ?? []).map((item) => (
+          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
             <input
               type="checkbox"
-              checked={Boolean(avarias[item.key])}
-              onChange={() => alternarAvaria(item.key)}
+              checked={Boolean(avarias[String(item.id)])}
+              onChange={() => alternarAvaria(String(item.id))}
               disabled={travado}
             />
-            <span style={{ fontSize: 13 }}>{item.label}</span>
+            <span style={{ fontSize: 13 }}>{item.descricao}</span>
           </div>
         ))}
       </div>
