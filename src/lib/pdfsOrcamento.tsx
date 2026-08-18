@@ -527,6 +527,7 @@ export async function gerarAnexosOrcamento(
   entrada: DadosEntradaPdf | null,
   os: DadosOSPdf,
   incluirOrientacao = false,
+  incluirManual = true,
 ): Promise<AnexoBase64[]> {
   const anexos: AnexoBase64[] = [];
   if (entrada) {
@@ -541,7 +542,9 @@ export async function gerarAnexosOrcamento(
     const blobOri = await pdf(<DocOrientacao />).toBlob();
     anexos.push({ filename: 'Orientacao-de-Esterilizacao.pdf', content: await blobParaBase64(blobOri) });
   }
-  const blobManual = await pdf(<DocManualPortal />).toBlob();
-  anexos.push({ filename: 'Portal-do-Cliente-Guia-de-Uso.pdf', content: await blobParaBase64(blobManual) });
+  if (incluirManual) {
+    const blobManual = await pdf(<DocManualPortal />).toBlob();
+    anexos.push({ filename: 'Portal-do-Cliente-Guia-de-Uso.pdf', content: await blobParaBase64(blobManual) });
+  }
   return anexos;
 }

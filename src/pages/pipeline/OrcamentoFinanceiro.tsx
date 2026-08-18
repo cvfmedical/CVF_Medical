@@ -26,6 +26,7 @@ import {
 import { CHECKLIST_AVARIAS } from '../../lib/checklistAvarias';
 import {
   gerarAnexosOrcamento,
+  type AnexoBase64,
   type DadosOrcamentoPdf,
   type DadosEntradaPdf,
   type DadosOSPdf,
@@ -172,6 +173,12 @@ export function OrcamentoFinanceiro() {
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Envio em lote (Trilha "vários orçamentos num só e-mail"): seleção de
+  // orçamentos "Aguardando Envio ao Cliente" na lista principal - só permite
+  // combinar orçamentos do mesmo cliente por vez.
+  const [selecionadosEnvio, setSelecionadosEnvio] = useState<Set<number>>(new Set());
+  const [enviandoLote, setEnviandoLote] = useState(false);
+  const [erroLote, setErroLote] = useState<string | null>(null);
   // Preços editados localmente (controlado) - persistidos em lote ao
   // salvar/enviar, em vez de depender só do onBlur de cada input (mais
   // robusto: funciona mesmo se o usuário for direto no botão).
@@ -674,15 +681,16 @@ export function OrcamentoFinanceiro() {
   }
 
   // Busca os dados da entrada (para o PDF do Registro de Entrada), com fotos.
-  async function buscarEntradaDados(): Promise<DadosEntradaPdf | null> {
-    if (!orcamentoSelecionado) return null;
+  // Parametrizada por orçamento para poder ser reaproveitada tanto no envio
+  // de um único orçamento (modal aberto) quanto no envio em lote.
+  async function buscarEntradaDadosPara(o: Orcamento): Promise<DadosEntradaPdf | null> {
     const { data: entrada } = await supabase
       .from('entradas_equipamento')
       .select('id, codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, triagem_avarias')
-      .eq('ordem_servico_id', orcamentoSelecionado.ordem_servico_id)
+      .eq('ordem_servico_id', o.ordem_servico_id)
       .maybeSingle();
     if (!entrada) return null;
-    const os = orcamentoSelecionado.ordens_servico;
+    const os = o.ordens_servico;
     const triagem = (entrada.triagem_avarias ?? {}) as Record<string, boolean>;
 
     const { data: fotos } = await supabase
@@ -706,6 +714,188 @@ export function OrcamentoFinanceiro() {
       avarias: CHECKLIST_AVARIAS.filter((it) => triagem[it.key]).map((it) => it.label),
       fotos: fotosDataUri,
     };
+  }
+
+  async function buscarEntradaDados(): Promise<DadosEntradaPdf | null> {
+    if (!orcamentoSelecionado) return null;
+    return buscarEntradaDadosPara(orcamentoSelecionado);
+  }
+
+  // Marca/desmarca um orçamento para o envio em lote - só permite combinar
+  // orçamentos do mesmo cliente numa mesma seleção.
+  function alternarSelecaoEnvio(o: Orcamento) {
+    setSelecionadosEnvio((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(o.id)) {
+        novo.delete(o.id);
+        return novo;
+      }
+      const primeiroId = [...novo][0];
+      if (primeiroId != null) {
+        const primeiro = orcamentosQuery.data?.find((x) => x.id === primeiroId);
+        if (primeiro?.ordens_servico?.cliente_id !== o.ordens_servico?.cliente_id) {
+          alert('Só é possível enviar em lote orçamentos do mesmo cliente - desmarque a seleção atual primeiro.');
+          return atual;
+        }
+      }
+      novo.add(o.id);
+      return novo;
+    });
+  }
+
+  // Envio em lote: gera os PDFs de cada orçamento selecionado (Entrada + OS +
+  // Orçamento, sem repetir a orientação/manual), anexa o manual do portal só
+  // uma vez ao final, e manda tudo num único e-mail. Ao terminar, marca todos
+  // como enviados e avança a OS de cada um.
+  async function enviarSelecionadosPorEmail() {
+    const lista = (orcamentosQuery.data ?? []).filter((o) => selecionadosEnvio.has(o.id));
+    if (lista.length === 0) return;
+    const clienteId = lista[0].ordens_servico?.cliente_id;
+    if (!clienteId) return;
+    setErroLote(null);
+    setEnviandoLote(true);
+    try {
+      const { data: cliente, error: errCliente } = await supabase
+        .from('clientes')
+        .select('id, razao_social, email, emails_adicionais')
+        .eq('id', clienteId)
+        .single();
+      if (errCliente) throw errCliente;
+      if (!cliente?.email) throw new Error('Este cliente não tem e-mail cadastrado.');
+
+      const cacheClienteFinal = new Map<number, string>();
+      async function nomeClienteFinal(id: number | null): Promise<string | null> {
+        if (!id) return null;
+        if (cacheClienteFinal.has(id)) return cacheClienteFinal.get(id)!;
+        const { data } = await supabase.from('clientes').select('razao_social').eq('id', id).maybeSingle();
+        const nome = data?.razao_social ?? null;
+        if (nome) cacheClienteFinal.set(id, nome);
+        return nome;
+      }
+
+      let anexos: AnexoBase64[] = [];
+      const resumo: { numero: string; numeroOS: string; total: number }[] = [];
+
+      for (let i = 0; i < lista.length; i++) {
+        const o = lista[i];
+        const os = o.ordens_servico;
+        const { data: itensData, error: errItens } = await supabase
+          .from('orcamento_itens')
+          .select(
+            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario)',
+          )
+          .eq('orcamento_id', o.id);
+        if (errItens) throw errItens;
+        const itens = (itensData ?? []) as unknown as ItemOrcamento[];
+
+        const subtotalCalc =
+          o.valor_fixo_contrato ?? itens.reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
+        const descontoCalc = o.bonificacao ? subtotalCalc : o.desconto ?? 0;
+        const totalCalc = o.bonificacao ? 0 : Math.max(subtotalCalc - descontoCalc, 0);
+        const clienteFinalNome = await nomeClienteFinal(os?.cliente_final_id ?? null);
+
+        const dadosOrc: DadosOrcamentoPdf = {
+          numeroOrcamento: o.numero_orcamento,
+          numeroOS: os?.numero_os ?? '-',
+          clienteNome: os?.cliente_nome ?? cliente.razao_social,
+          clienteFinalNome,
+          equipamento: os?.optica_desc ?? '-',
+          numeroSerie: os?.optica_sn ?? '',
+          itens: itens.map((it) => ({
+            nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
+            quantidade: it.quantidade,
+            precoUnit: it.preco_unitario ?? 0,
+          })),
+          subtotal: subtotalCalc,
+          desconto: descontoCalc,
+          bonificacao: !!o.bonificacao,
+          total: totalCalc,
+          validade: o.validade_proposta ?? '',
+          pagamento: o.condicoes_pagamento ?? '',
+          observacoes: o.observacoes_financeiro ?? '',
+          ehOtica: os?.eh_otica ?? false,
+          garantiaResumo: GARANTIA_CVF.resumo,
+          garantiaIntro: GARANTIA_CVF.intro,
+          garantiaItens: GARANTIA_CVF.itens,
+          clausulas: CLAUSULAS_GERAIS,
+        };
+        const dadosOS: DadosOSPdf = {
+          numeroOS: os?.numero_os ?? '-',
+          clienteNome: os?.cliente_nome ?? '',
+          clienteFinalNome,
+          equipamento: os?.optica_desc ?? '-',
+          itens: await Promise.all(
+            itens.map(async (it) => ({
+              nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
+              quantidade: it.quantidade,
+              observacao: it.observacao ?? '',
+              fotoDataUri: (await fotoParaDataUri(it.foto_peca_danificada_path)) ?? undefined,
+            })),
+          ),
+          observacoesTecnico: o.observacoes_tecnico,
+          prazoEntrega: os?.prazo_entrega ?? null,
+        };
+        const dadosEntrada = await buscarEntradaDadosPara(o);
+        const anexosItem = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, false, i === lista.length - 1);
+        anexos = anexos.concat(anexosItem);
+        resumo.push({ numero: o.numero_orcamento, numeroOS: os?.numero_os ?? '-', total: totalCalc });
+      }
+
+      const listaHtml = resumo
+        .map((r) => `<li>Orçamento <strong>${r.numero}</strong> (OS ${r.numeroOS}) &mdash; ${formatarMoeda(r.total)}</li>`)
+        .join('');
+
+      const html = `<p>Prezado(a) cliente,</p>
+        <p>A CVF Medical agradece a confiança em nossos serviços. Segue, em anexo, a documentação referente aos orçamentos abaixo:</p>
+        <ul>${listaHtml}</ul>
+        <p>Para cada orçamento, seguem em anexo o Registro de Entrada, a Ordem de Serviço (identificação de peças/avarias) e o Orçamento de manutenção.</p>
+        <p><strong>Sobre o Portal do Cliente:</strong> criamos um espaço exclusivo e seguro onde você acompanha, em tempo real e a qualquer hora, tudo o que acontece com seus equipamentos &mdash; e principalmente <strong>aprova ou recusa cada orçamento diretamente online</strong>, sem precisar responder e-mail ou ligar. O acesso é feito com o mesmo e-mail que você já usa com a CVF Medical &mdash; o passo a passo completo está no guia em anexo. Para acessar agora:<br/>
+        <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
+        <p>Atenciosamente,<br/><strong>${EMPRESA.razaoSocial}</strong></p>`;
+
+      const extras = (cliente.emails_adicionais ?? '')
+        .split(',')
+        .map((e: string) => e.trim())
+        .filter(Boolean);
+      const destinatarios = [cliente.email, ...extras];
+
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: {
+          to: destinatarios,
+          subject: `Q-CVF Medical - Orçamentos ${resumo.map((r) => r.numero).join(', ')}`,
+          html,
+          anexos,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+
+      for (const o of lista) {
+        await supabase
+          .from('orcamentos')
+          .update({
+            status: 'Enviado ao Cliente',
+            precificado_por: funcionario?.id ?? null,
+            data_envio: new Date().toISOString(),
+          })
+          .eq('id', o.id);
+        await supabase
+          .from('ordens_servico')
+          .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
+          .eq('id', o.ordem_servico_id);
+      }
+
+      alert(
+        `E-mail enviado para ${destinatarios.join(', ')} com ${resumo.length} orçamentos (${anexos.length} anexos no total).`,
+      );
+      setSelecionadosEnvio(new Set());
+      qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
+    } catch (e) {
+      setErroLote(mensagemErro(e));
+    } finally {
+      setEnviandoLote(false);
+    }
   }
 
   // Envio AUTOMÁTICO: gera os 3 PDFs e manda o e-mail pelo servidor (Resend,
@@ -909,9 +1099,39 @@ export function OrcamentoFinanceiro() {
         onChange={(e) => setFiltroLista(e.target.value)}
       />
 
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+        Marque a caixa nas linhas "Aguardando Envio ao Cliente" para enviar vários orçamentos do mesmo cliente num só
+        e-mail (ex.: filtre pelo nome do cliente, precifique cada um e selecione todos antes de enviar).
+      </p>
+
+      {selecionadosEnvio.size > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: 'var(--paper-50)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 10,
+            marginBottom: 12,
+          }}
+        >
+          <span style={{ fontSize: 13 }}>{selecionadosEnvio.size} orçamento(s) selecionado(s)</span>
+          <button className="botao-primario botao-pequeno" onClick={enviarSelecionadosPorEmail} disabled={enviandoLote}>
+            {enviandoLote ? 'Enviando...' : `Enviar por e-mail (${selecionadosEnvio.size})`}
+          </button>
+          <button className="botao-secundario botao-pequeno" onClick={() => setSelecionadosEnvio(new Set())} disabled={enviandoLote}>
+            Limpar seleção
+          </button>
+          {erroLote && <span className="erro-login">{erroLote}</span>}
+        </div>
+      )}
+
       <table className="tabela-crud">
         <thead>
           <tr>
+            <th></th>
             <th>Nº orçamento</th>
             <th>OS</th>
             <th>Cliente</th>
@@ -922,6 +1142,15 @@ export function OrcamentoFinanceiro() {
         <tbody>
           {linhasLista.map((o) => (
             <tr key={o.id}>
+              <td>
+                {o.status === 'Aguardando Envio ao Cliente' && (
+                  <input
+                    type="checkbox"
+                    checked={selecionadosEnvio.has(o.id)}
+                    onChange={() => alternarSelecaoEnvio(o)}
+                  />
+                )}
+              </td>
               <td className="mono">{o.numero_orcamento}</td>
               <td className="mono">{o.ordens_servico?.numero_os}</td>
               <td>{o.ordens_servico?.cliente_nome}</td>
@@ -939,7 +1168,7 @@ export function OrcamentoFinanceiro() {
           ))}
           {linhasLista.length === 0 && (
             <tr>
-              <td colSpan={5}>Nenhum orçamento encontrado.</td>
+              <td colSpan={6}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>
