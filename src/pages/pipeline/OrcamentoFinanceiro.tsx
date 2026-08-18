@@ -769,8 +769,10 @@ export function OrcamentoFinanceiro() {
           <li>Registro de Entrada do equipamento</li>
           <li>Ordem de Serviço &mdash; identificação das peças e avarias</li>
           <li>Orçamento de manutenção</li>
+          <li>Guia de uso do Portal do Cliente</li>
         </ul>
-        <p>Para sua comodidade, você também pode consultar os documentos, acompanhar o andamento e registrar a aprovação diretamente pelo portal do cliente:<br/>
+        <p><strong>Sobre o Portal do Cliente:</strong> criamos um espaço exclusivo e seguro onde você acompanha, em tempo real e a qualquer hora, tudo o que acontece com o seu equipamento &mdash; desde o registro de entrada até a entrega final. Por lá você consulta o laudo de peças com fotos, os laudos técnicos, e principalmente <strong>aprova ou recusa o orçamento diretamente online</strong>, sem precisar responder e-mail ou ligar. Quando o equipamento estiver pronto, você também confirma o recebimento pelo próprio portal, com data e hora registradas.</p>
+        <p>O acesso é feito com o mesmo e-mail que você já usa com a CVF Medical &mdash; o passo a passo completo (como criar seu cadastro, aprovar orçamentos e confirmar entregas) está no guia em anexo. Para acessar agora:<br/>
         <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
         <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
         <p>Atenciosamente,<br/><strong>${EMPRESA.razaoSocial}</strong></p>`;
@@ -801,7 +803,7 @@ export function OrcamentoFinanceiro() {
         .update({ status_os: '3. AGUARDANDO APROVAÇÃO DO CLIENTE' })
         .eq('id', orcamentoSelecionado.ordem_servico_id);
 
-      alert(`E-mail enviado para ${destinatarios.join(', ')} com os 3 anexos.`);
+      alert(`E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexos.`);
       setSelecionadoId(null);
       setObservacoesFinanceiro('');
       qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
@@ -1222,7 +1224,7 @@ export function OrcamentoFinanceiro() {
                     className="botao-primario"
                     onClick={enviarPorEmailAutomatico}
                     disabled={enviando}
-                    title="Envia o e-mail ao cliente com os 3 PDFs anexados, automaticamente"
+                    title="Envia o e-mail ao cliente com os PDFs (Entrada, OS, Orçamento e Guia do Portal) anexados, automaticamente"
                   >
                     {enviando ? 'Enviando...' : 'Enviar ao cliente (e-mail automático)'}
                   </button>

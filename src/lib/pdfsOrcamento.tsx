@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { Document, Page, Text, View, Image, StyleSheet, pdf } from '@react-pdf/renderer';
 import { EMPRESA, formatarMoeda, CHECKLIST_OTICA, AVISO_MANUTENCAO } from './formato';
+import { PORTAL_CLIENTE_URL } from './compartilhar';
 
 // PDFs REAIS (arquivos) dos 3 relatórios enviados ao cliente - usados no envio
 // automático por e-mail (anexos). São documentos limpos, em texto/tabela; as
@@ -35,6 +37,15 @@ const s = StyleSheet.create({
   metTh: { flexDirection: 'row', backgroundColor: '#1b1d20', color: '#fff', paddingVertical: 3, paddingHorizontal: 5, fontSize: 8.5 },
   metTd: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: borda, paddingVertical: 3, paddingHorizontal: 5, fontSize: 8.5 },
   obs: { borderWidth: 1.5, borderColor: '#1b1d20', borderRadius: 6, padding: 8, marginTop: 12, fontSize: 8.5, lineHeight: 1.4 },
+  // --- Manual do portal do cliente ---
+  parteTitulo: { backgroundColor: azul, color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 4, paddingVertical: 5, paddingHorizontal: 8, marginTop: 14, marginBottom: 8 },
+  passo: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 9 },
+  passoNum: { width: 18, height: 18, borderRadius: 9, backgroundColor: azul, color: '#fff', fontSize: 9, fontWeight: 700, textAlign: 'center', paddingTop: 4, marginRight: 8 },
+  passoTexto: { flex: 1, fontSize: 9.5, lineHeight: 1.4, paddingTop: 2 },
+  dica: { backgroundColor: '#f5f3ee', borderWidth: 1, borderColor: borda, borderLeftWidth: 3, borderLeftColor: azul, borderRadius: 4, padding: 9, marginVertical: 8, fontSize: 9, lineHeight: 1.4, color: azulEscuro },
+  bulletLinha: { flexDirection: 'row', marginBottom: 5 },
+  bulletMarca: { width: 10, fontSize: 9.5 },
+  bulletTexto: { flex: 1, fontSize: 9.5, lineHeight: 1.4 },
 });
 
 function Cabecalho({ titulo, subtitulo }: { titulo: string; subtitulo?: string }) {
@@ -349,6 +360,149 @@ function DocOrientacao() {
   );
 }
 
+function Passo({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <View style={s.passo}>
+      <Text style={s.passoNum}>{n}</Text>
+      <Text style={s.passoTexto}>{children}</Text>
+    </View>
+  );
+}
+
+function Bullet({ children }: { children: ReactNode }) {
+  return (
+    <View style={s.bulletLinha}>
+      <Text style={s.bulletMarca}>•</Text>
+      <Text style={s.bulletTexto}>{children}</Text>
+    </View>
+  );
+}
+
+function Negrito({ children }: { children: ReactNode }) {
+  return <Text style={{ fontWeight: 700, color: azulEscuro }}>{children}</Text>;
+}
+
+// Versão em PDF do guia de uso do portal (portal/manual.html) - anexada
+// junto com o orçamento por e-mail, pra chegar pronta mesmo sem o cliente
+// clicar em nenhum link. Manter o conteúdo alinhado com manual.html quando
+// um mudar (são 2 versões do mesmo guia, HTML pro portal e PDF pro e-mail).
+export function DocManualPortal() {
+  return (
+    <Document>
+      <Page size="A4" style={s.page}>
+        <Cabecalho
+          titulo="Portal do Cliente — Guia de Uso"
+          subtitulo="Como fazer seu primeiro acesso e acompanhar seus equipamentos, orçamentos e documentos."
+        />
+
+        <Text style={s.item}>
+          O <Negrito>Portal do Cliente da CVF Medical</Negrito> é onde você acompanha, de forma segura e a qualquer
+          hora, tudo o que acontece com seus equipamentos em manutenção: registro de entrada, laudo de peças,
+          orçamentos (com aprovação online), laudos técnicos e o termo de entrega.
+        </Text>
+        <Text style={[s.item, { marginTop: 4 }]}>
+          <Negrito>Endereço: </Negrito>
+          {PORTAL_CLIENTE_URL}
+        </Text>
+
+        <Text style={s.parteTitulo}>Parte 1 — Primeiro acesso (criar seu cadastro)</Text>
+        <Passo n={1}>
+          Acesse <Negrito>{PORTAL_CLIENTE_URL}</Negrito> pelo navegador (celular ou computador).
+        </Passo>
+        <Passo n={2}>
+          Na tela de login, clique em <Negrito>"Primeiro acesso? Criar cadastro"</Negrito>.
+        </Passo>
+        <Passo n={3}>
+          Informe <Negrito>o mesmo e-mail</Negrito> que você forneceu à CVF Medical (é por ele que o sistema
+          reconhece seus equipamentos).
+        </Passo>
+        <Passo n={4}>
+          Crie uma <Negrito>senha</Negrito> (mínimo 6 caracteres) e confirme.
+        </Passo>
+        <Passo n={5}>
+          Clique em <Negrito>"Criar cadastro"</Negrito>. Pronto — seu acesso está criado.
+        </Passo>
+        <Text style={s.dica}>
+          <Negrito>Importante: </Negrito>
+          se o e-mail digitado não for o mesmo que está no cadastro da CVF, o portal não encontrará seus
+          equipamentos. Em caso de dúvida, fale com a CVF pelo WhatsApp {EMPRESA.telefone}.
+        </Text>
+
+        <Text style={s.parteTitulo}>Parte 2 — Entrar no portal</Text>
+        <Passo n={1}>
+          Na tela de login, digite seu <Negrito>e-mail</Negrito> e sua <Negrito>senha</Negrito>.
+        </Passo>
+        <Passo n={2}>
+          Clique em <Negrito>"Entrar"</Negrito>.
+        </Passo>
+
+        <Text style={s.parteTitulo}>Parte 3 — O que você encontra no portal</Text>
+        <Bullet>
+          <Negrito>Documentos e orientações</Negrito> — materiais de apoio (ex.: orientação de esterilização).
+        </Bullet>
+        <Bullet>
+          <Negrito>Orçamentos</Negrito> — cada orçamento com itens, condições e total; aqui você aprova ou recusa.
+        </Bullet>
+        <Bullet>
+          <Negrito>Entradas de equipamento</Negrito> — o registro de quando o equipamento chegou à CVF, com fotos.
+        </Bullet>
+        <Bullet>
+          <Negrito>Laudo de peças danificadas</Negrito> — as peças e avarias identificadas pela equipe técnica, com
+          imagens.
+        </Bullet>
+        <Bullet>
+          <Negrito>Laudos</Negrito> — laudos técnicos em PDF para download.
+        </Bullet>
+        <Bullet>
+          <Negrito>Termo de entrega</Negrito> — o comprovante da devolução do equipamento, para você confirmar o
+          recebimento.
+        </Bullet>
+
+        <Text style={s.parteTitulo}>Parte 4 — Aprovar (ou recusar) um orçamento</Text>
+        <Passo n={1}>
+          Abra a seção <Negrito>"Orçamentos aguardando sua aprovação"</Negrito>.
+        </Passo>
+        <Passo n={2}>
+          Confira os itens, o total e as condições. Use <Negrito>"Imprimir orçamento"</Negrito> se quiser salvar em
+          PDF.
+        </Passo>
+        <Passo n={3}>
+          Clique em <Negrito>"Aprovar orçamento"</Negrito> para autorizar o serviço, ou{' '}
+          <Negrito>"Recusar orçamento"</Negrito>.
+        </Passo>
+        <Passo n={4}>
+          A CVF recebe sua resposta <Negrito>na hora</Negrito> e dá andamento ao serviço.
+        </Passo>
+
+        <Text style={s.parteTitulo}>Parte 5 — Confirmar o recebimento (termo de entrega)</Text>
+        <Passo n={1}>
+          Quando o equipamento for devolvido, o <Negrito>"Termo de entrega"</Negrito> aparece no portal.
+        </Passo>
+        <Passo n={2}>
+          Leia o documento e clique em <Negrito>"Li o documento e confirmo o recebimento"</Negrito>.
+        </Passo>
+        <Passo n={3}>
+          A confirmação fica registrada com <Negrito>data e hora</Negrito>, e a CVF é avisada automaticamente.
+        </Passo>
+
+        <Text style={s.parteTitulo}>Resumo do fluxo</Text>
+        <Text style={s.item}>
+          Você recebe o e-mail com o orçamento → acessa o portal (primeiro acesso: cria cadastro com o mesmo e-mail)
+          → analisa o orçamento → aprova ou recusa → acompanha o serviço (entradas, laudo de peças e laudos técnicos)
+          → recebe o equipamento → confirma o recebimento no portal.
+        </Text>
+
+        <Text style={s.dica}>
+          <Negrito>Precisa de ajuda? </Negrito>
+          Fale com a CVF Medical pelo WhatsApp {EMPRESA.telefone} ou pelo e-mail {EMPRESA.email}.
+        </Text>
+
+        <Rodape />
+      </Page>
+    </Document>
+  );
+}
+
 async function blobParaBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
@@ -384,5 +538,7 @@ export async function gerarAnexosOrcamento(
     const blobOri = await pdf(<DocOrientacao />).toBlob();
     anexos.push({ filename: 'Orientacao-de-Esterilizacao.pdf', content: await blobParaBase64(blobOri) });
   }
+  const blobManual = await pdf(<DocManualPortal />).toBlob();
+  anexos.push({ filename: 'Portal-do-Cliente-Guia-de-Uso.pdf', content: await blobParaBase64(blobManual) });
   return anexos;
 }
