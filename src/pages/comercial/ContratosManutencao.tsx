@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { IconTrash } from '@tabler/icons-react';
+import { formatarModeloOtica } from '../../lib/formato';
 
 interface ContratoManutencao {
   id: number;
@@ -40,6 +41,8 @@ interface CatalogoOtica {
   fabricante: string;
   modelo: string;
   tipo: string | null;
+  diametro_mm: number | null;
+  angulo_graus: number | null;
 }
 
 interface PrecoFixo {
@@ -72,7 +75,10 @@ export function ContratosManutencao() {
   const catalogoOticasQuery = useQuery({
     queryKey: ['catalogo-oticas-opcoes-contratos'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('catalogo_oticas').select('id, fabricante, modelo, tipo').order('fabricante');
+      const { data, error } = await supabase
+        .from('catalogo_oticas')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus')
+        .order('fabricante');
       if (error) throw error;
       return data as CatalogoOtica[];
     },
@@ -97,7 +103,7 @@ export function ContratosManutencao() {
 
   function nomeOtica(catalogoOticaId: number) {
     const o = catalogoOticasQuery.data?.find((c) => c.id === catalogoOticaId);
-    return o ? `${o.fabricante} - ${o.modelo}${o.tipo ? ` (${o.tipo})` : ''}` : `#${catalogoOticaId}`;
+    return o ? formatarModeloOtica(o) : `#${catalogoOticaId}`;
   }
 
   function abrirPrecosFixos(c: ContratoManutencao) {
@@ -267,8 +273,7 @@ export function ContratosManutencao() {
                 <option value="">Selecione...</option>
                 {(catalogoOticasQuery.data ?? []).map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.fabricante} - {o.modelo}
-                    {o.tipo ? ` (${o.tipo})` : ''}
+                    {formatarModeloOtica(o)}
                   </option>
                 ))}
               </select>

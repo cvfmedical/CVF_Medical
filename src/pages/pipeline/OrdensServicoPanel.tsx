@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
@@ -7,6 +7,21 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { tonoDoStatusOS } from '../../lib/statusOS';
+import { useAuth } from '../../contexts/AuthContext';
+import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
+import { mensagemErro } from '../../lib/erros';
+import { IconTrash } from '@tabler/icons-react';
+
+// OS ainda não iniciou manutenção física - único momento em que dá pra
+// excluir por completo (espelha a checagem feita em excluir_os_completa,
+// no banco - a função é quem realmente garante isso, isso aqui é só pra
+// decidir se mostra o botão).
+const STATUS_EXCLUIVEIS = [
+  '1. TRIAGEM / RECEBIMENTO',
+  '2. AGUARDANDO ORÇAMENTO',
+  '2B. AGUARDANDO PRECIFICAÇÃO',
+  '3. AGUARDANDO APROVAÇÃO DO CLIENTE',
+];
 
 interface OrdemServico {
   id: number;
@@ -31,8 +46,13 @@ interface OrdemServico {
 
 export function OrdensServicoPanel() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { funcionario } = useAuth();
+  const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
   const [filtro, setFiltro] = useState('');
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
+  const [excluindo, setExcluindo] = useState<number | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ['ordens-servico-painel'],
@@ -45,6 +65,30 @@ export function OrdensServicoPanel() {
       return data as OrdemServico[];
     },
   });
+
+  function excluirOS(os: OrdemServico) {
+    setErro(null);
+    pedirConfirmacao(
+      async () => {
+        setExcluindo(os.id);
+        try {
+          const { error } = await supabase.rpc('excluir_os_completa', { p_os_id: os.id });
+          if (error) throw error;
+          if (detalhe?.id === os.id) setDetalhe(null);
+          qc.invalidateQueries({ queryKey: ['ordens-servico-painel'] });
+          qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
+        } catch (e) {
+          setErro(mensagemErro(e));
+        } finally {
+          setExcluindo(null);
+        }
+      },
+      {
+        titulo: `Excluir ${os.numero_os} por completo?`,
+        mensagem: `A OS, o orçamento (se houver) e o vínculo com a entrada de origem serão apagados. A entrada volta para "Aguardando Triagem" - suas fotos e checklist continuam salvos, mas ela precisa ser convertida em OS de novo. Essa ação não pode ser desfeita.`,
+      },
+    );
+  }
 
   const linhas = useMemo(() => {
     const todas = query.data ?? [];
@@ -70,6 +114,8 @@ export function OrdensServicoPanel() {
         value={filtro}
         onChange={(e) => setFiltro(e.target.value)}
       />
+
+      {erro && <p className="erro-login">{erro}</p>}
 
       <table className="tabela-crud">
         <thead>
@@ -112,6 +158,17 @@ export function OrdensServicoPanel() {
                 >
                   Ver orçamento
                 </button>
+                {funcionario?.nivel_acesso === 'Administrador' && STATUS_EXCLUIVEIS.includes(os.status_os ?? '') && (
+                  <button
+                    className="botao-icone perigo"
+                    title="Excluir OS por completo"
+                    style={{ marginLeft: 6 }}
+                    disabled={excluindo === os.id}
+                    onClick={() => excluirOS(os)}
+                  >
+                    <IconTrash size={16} />
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -157,6 +214,8 @@ export function OrdensServicoPanel() {
             </div>
         </ModalJanela>
       )}
+
+      {ModalConfirmacao}
     </div>
   );
 }

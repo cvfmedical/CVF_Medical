@@ -16,6 +16,7 @@ import { CapturaFoto } from '../../components/CapturaFoto';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { formatarModeloOtica } from '../../lib/formato';
 
 interface Entrada {
   id: number;
@@ -642,7 +643,7 @@ export function EntradaEquipamento() {
               <ComboboxBusca
                 opcoes={(catalogoQuery.data ?? []).map((c) => ({
                   value: String(c.id),
-                  label: `${c.fabricante} - ${c.modelo} ${c.tipo ? `(${c.tipo})` : ''}`,
+                  label: formatarModeloOtica(c),
                 }))}
                 valor=""
                 onChange={(valor) => preencherDoCatalogo(valor)}

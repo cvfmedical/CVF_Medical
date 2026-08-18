@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent 
 import { useQuery } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
+import { formatarModeloOtica } from '../../lib/formato';
 import { useAuth } from '../../contexts/AuthContext';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
@@ -30,6 +31,9 @@ interface ModeloRes {
   id: number;
   fabricante: string;
   modelo: string;
+  tipo: string | null;
+  diametro_mm: number | null;
+  angulo_graus: number | null;
   mtf50_referencia_ciclos_px: number | null;
   resolucao_tolerancia_pct: number | null;
 }
@@ -69,7 +73,7 @@ export function TesteResolucao() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('catalogo_oticas')
-        .select('id, fabricante, modelo, mtf50_referencia_ciclos_px, resolucao_tolerancia_pct')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus, mtf50_referencia_ciclos_px, resolucao_tolerancia_pct')
         .order('fabricante');
       if (error) throw error;
       return data as ModeloRes[];
@@ -259,7 +263,7 @@ export function TesteResolucao() {
             tecnicoResponsavel: funcionario?.nome ?? '',
             observacoes: '',
             resolucao: {
-              modeloNome: `${modelo.fabricante} ${modelo.modelo}`,
+              modeloNome: formatarModeloOtica(modelo),
               mtf50: mtfM,
               mtf50Referencia: modelo.mtf50_referencia_ciclos_px,
               tolerancia: tol,
@@ -332,7 +336,7 @@ export function TesteResolucao() {
           <option value="">Selecione...</option>
           {(modelosQuery.data ?? []).map((m) => (
             <option key={m.id} value={m.id}>
-              {m.fabricante} {m.modelo}
+              {formatarModeloOtica(m)}
             </option>
           ))}
         </select>

@@ -15,6 +15,7 @@ import { montarCorpoRelatorioOS, type ItemRelatorioOS } from '../../lib/relatori
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import {
   formatarMoeda,
+  formatarModeloOtica,
   EMPRESA,
   CONDICOES_COMERCIAIS_PADRAO,
   GARANTIA_CVF,
@@ -81,7 +82,7 @@ interface Cliente {
 interface PrecoFixoContrato {
   id: number;
   valor_fixo: number;
-  catalogo_oticas: { fabricante: string; modelo: string; tipo: string | null } | null;
+  catalogo_oticas: { fabricante: string; modelo: string; tipo: string | null; diametro_mm: number | null; angulo_graus: number | null } | null;
 }
 
 const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
@@ -286,7 +287,9 @@ export function OrcamentoFinanceiro() {
       const idsCliente = [clienteIdOS!, ...(clienteFinalIdOS ? [clienteFinalIdOS] : [])];
       const { data, error } = await supabase
         .from('contrato_precos_fixos')
-        .select('id, valor_fixo, catalogo_oticas(fabricante, modelo, tipo), contratos_manutencao!inner(cliente_id, status)')
+        .select(
+          'id, valor_fixo, catalogo_oticas(fabricante, modelo, tipo, diametro_mm, angulo_graus), contratos_manutencao!inner(cliente_id, status)',
+        )
         .in('contratos_manutencao.cliente_id', idsCliente)
         .eq('contratos_manutencao.status', 'Ativo');
       if (error) throw error;
@@ -978,8 +981,7 @@ export function OrcamentoFinanceiro() {
                     <option value="">Selecione o modelo...</option>
                     {(precosFixosQuery.data ?? []).map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.catalogo_oticas?.fabricante} - {p.catalogo_oticas?.modelo}
-                        {p.catalogo_oticas?.tipo ? ` (${p.catalogo_oticas.tipo})` : ''} - {formatarMoeda(p.valor_fixo)}
+                        {p.catalogo_oticas ? formatarModeloOtica(p.catalogo_oticas) : '-'} - {formatarMoeda(p.valor_fixo)}
                       </option>
                     ))}
                   </select>

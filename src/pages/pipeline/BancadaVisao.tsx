@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
+import { formatarModeloOtica } from '../../lib/formato';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
@@ -43,6 +44,8 @@ interface CatalogoOticaSpec {
   id: number;
   fabricante: string;
   modelo: string;
+  tipo: string | null;
+  diametro_mm: number | null;
   angulo_graus: number | null; // direção de visão nominal (ISO 8600-1 §4.6)
   fov_referencia_graus: number | null; // golden sample (ISO 8600-1 §4.5)
   tolerancia_fov_pct: number | null;
@@ -202,7 +205,7 @@ export function BancadaVisao() {
       const { data, error } = await supabase
         .from('catalogo_oticas')
         .select(
-          'id, fabricante, modelo, angulo_graus, fov_referencia_graus, tolerancia_fov_pct, tolerancia_direcao_graus, distancia_medicao_mm, metodo_iso',
+          'id, fabricante, modelo, tipo, diametro_mm, angulo_graus, fov_referencia_graus, tolerancia_fov_pct, tolerancia_direcao_graus, distancia_medicao_mm, metodo_iso',
         )
         .order('fabricante');
       if (error) throw error;
@@ -584,7 +587,7 @@ export function BancadaVisao() {
           calibracao_id: calibracaoId ? Number(calibracaoId) : null,
         };
         isoProp = {
-          modeloNome: `${spec.fabricante} ${spec.modelo}`,
+          modeloNome: formatarModeloOtica(spec),
           metodo: spec.metodo_iso ?? 'A',
           distanciaMm: distanciaMedicao !== '' ? Number(distanciaMedicao) : null,
           fovMedido: fovM,
@@ -754,7 +757,7 @@ export function BancadaVisao() {
                   <option value="">Selecione o modelo...</option>
                   {(modelosQuery.data ?? []).map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.fabricante} {m.modelo}
+                      {formatarModeloOtica(m)}
                     </option>
                   ))}
                 </select>
@@ -999,7 +1002,7 @@ export function BancadaVisao() {
         {spec && spec.fov_referencia_graus != null && (
           <div style={{ borderTop: '1px solid #334155', paddingTop: 8 }}>
             <p style={{ color: '#fff', fontSize: 12, margin: '0 0 6px' }}>
-              ISO 8600 — {spec.fabricante} {spec.modelo} (FOV ref. {spec.fov_referencia_graus}°)
+              ISO 8600 — {formatarModeloOtica(spec)} (FOV ref. {spec.fov_referencia_graus}°)
             </p>
             <div className="campo-form">
               <label style={{ color: '#fff' }}>FOV medido (°)</label>

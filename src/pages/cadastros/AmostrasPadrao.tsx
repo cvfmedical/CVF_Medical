@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { formatarModeloOtica, type ModeloOticaResumo } from '../../lib/formato';
 
 // Amostra-padrão (golden sample): medição de uma unidade comprovadamente boa
 // de um modelo, cujo FOV vira a REFERÊNCIA da CVF (o fabricante não publica
@@ -31,10 +32,10 @@ export function AmostrasPadrao() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('catalogo_oticas')
-        .select('id, fabricante, modelo')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus')
         .order('fabricante');
       if (error) throw error;
-      return data as { id: number; fabricante: string; modelo: string }[];
+      return data as (ModeloOticaResumo & { id: number })[];
     },
   });
 
@@ -53,7 +54,7 @@ export function AmostrasPadrao() {
 
   const mapaModelo = useMemo(() => {
     const m = new Map<number, string>();
-    (modelosQuery.data ?? []).forEach((o) => m.set(o.id, `${o.fabricante} ${o.modelo}`));
+    (modelosQuery.data ?? []).forEach((o) => m.set(o.id, formatarModeloOtica(o)));
     return m;
   }, [modelosQuery.data]);
 
@@ -91,7 +92,7 @@ export function AmostrasPadrao() {
           obrigatorio: true,
           opcoes: (modelosQuery.data ?? []).map((o) => ({
             value: String(o.id),
-            label: `${o.fabricante} ${o.modelo}`,
+            label: formatarModeloOtica(o),
           })),
         },
         { name: 'numero_serie_padrao', label: 'Nº de série da unidade padrão', type: 'text' },

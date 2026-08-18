@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Document, Page, Text, View, Image, StyleSheet, pdf } from '@react-pdf/renderer';
 import { EMPRESA, formatarMoeda, CHECKLIST_OTICA, AVISO_MANUTENCAO } from './formato';
 import { PORTAL_CLIENTE_URL } from './compartilhar';
+import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 
 // PDFs REAIS (arquivos) dos 3 relatórios enviados ao cliente - usados no envio
 // automático por e-mail (anexos). São documentos limpos, em texto/tabela; as
@@ -16,6 +17,7 @@ const borda = '#e4e1d8';
 const s = StyleSheet.create({
   page: { paddingTop: 36, paddingBottom: 64, paddingHorizontal: 40, fontSize: 10, fontFamily: 'Helvetica', color: tinta },
   cab: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', borderBottomWidth: 3, borderBottomColor: azul, paddingBottom: 8, marginBottom: 16 },
+  cabLogo: { height: 32, width: 'auto' },
   marca: { fontSize: 18, fontWeight: 700, color: azul },
   slogan: { fontSize: 9, fontStyle: 'italic', color: azul },
   titulo: { fontSize: 15, color: azulEscuro, marginBottom: 2 },
@@ -52,7 +54,7 @@ function Cabecalho({ titulo, subtitulo }: { titulo: string; subtitulo?: string }
   return (
     <>
       <View style={s.cab}>
-        <Text style={s.marca}>CVF MEDICAL</Text>
+        <Image src={cvfLogoCompleto} style={s.cabLogo} />
         <Text style={s.slogan}>Sua imagem, nossa visão.</Text>
       </View>
       <Text style={s.titulo}>{titulo}</Text>
@@ -424,7 +426,8 @@ export function DocManualPortal() {
         </Passo>
         <Text style={s.dica}>
           <Negrito>Importante: </Negrito>
-          se o e-mail digitado não for o mesmo que está no cadastro da CVF, o portal não encontrará seus
+          use o mesmo e-mail em que você recebeu este e-mail (é o e-mail cadastrado no sistema da CVF, para onde
+          enviamos toda a documentação) - se digitar um e-mail diferente, o portal não encontrará seus
           equipamentos. Em caso de dúvida, fale com a CVF pelo WhatsApp {EMPRESA.telefone}.
         </Text>
 

@@ -102,3 +102,23 @@ export function formatarMoeda(valor: number | null | undefined): string {
 export function formatarNumero(valor: number | null | undefined): string {
   return fmtNumero.format(Number(valor) || 0);
 }
+
+export interface ModeloOticaResumo {
+  fabricante: string;
+  modelo: string;
+  tipo?: string | null;
+  diametro_mm?: number | null;
+  angulo_graus?: number | null;
+}
+
+// "175mm x 4mm x 30° - Artroscopia de joelho/ombro - Karl Storz" - label
+// padrão de um modelo do catálogo de óticas, usado em todo combobox/select
+// que referencia catalogo_oticas (antes cada tela montava essa string do
+// seu próprio jeito, com formatos diferentes entre si).
+export function formatarModeloOtica(c: ModeloOticaResumo): string {
+  const dimensoes = [c.modelo, c.diametro_mm != null ? `${c.diametro_mm}mm` : null, c.angulo_graus != null ? `${c.angulo_graus}°` : null]
+    .filter(Boolean)
+    .join(' x ');
+  const extra = [c.tipo, c.fabricante].filter(Boolean).join(' - ');
+  return extra ? `${dimensoes} - ${extra}` : dimensoes;
+}

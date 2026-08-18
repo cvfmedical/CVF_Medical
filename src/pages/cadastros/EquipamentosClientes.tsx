@@ -3,6 +3,7 @@ import { CrudPage } from '../../components/CrudPage';
 import { supabase } from '../../lib/supabaseClient';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { formatarModeloOtica } from '../../lib/formato';
 
 interface EquipamentoCliente {
   id: number;
@@ -19,9 +20,11 @@ interface EquipamentoCliente {
 
 interface ModeloCatalogo {
   id: number;
-  fabricante: string | null;
-  modelo: string | null;
+  fabricante: string;
+  modelo: string;
   tipo: string | null;
+  diametro_mm: number | null;
+  angulo_graus: number | null;
 }
 
 export function EquipamentosClientes() {
@@ -41,7 +44,7 @@ export function EquipamentosClientes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('catalogo_oticas')
-        .select('id, fabricante, modelo, tipo')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus')
         .order('fabricante');
       if (error) throw error;
       return data as ModeloCatalogo[];
@@ -53,9 +56,7 @@ export function EquipamentosClientes() {
   const nomeClientePorId = (id: number) => clientes.find((c) => c.id === id)?.razao_social ?? `#${id}`;
 
   const catalogo = catalogoQuery.data ?? [];
-  const descricaoModelo = (c: ModeloCatalogo) =>
-    [c.fabricante, c.modelo, c.tipo].filter(Boolean).join(' ') || `Modelo #${c.id}`;
-  const opcoesCatalogo = catalogo.map((c) => ({ value: String(c.id), label: descricaoModelo(c) }));
+  const opcoesCatalogo = catalogo.map((c) => ({ value: String(c.id), label: formatarModeloOtica(c) }));
 
   if (clientesQuery.isLoading) return <CarregandoTela />;
 
@@ -89,7 +90,7 @@ export function EquipamentosClientes() {
             const c = catalogo.find((x) => String(x.id) === id);
             if (!c) return;
             return {
-              descricao: descricaoModelo(c),
+              descricao: formatarModeloOtica(c),
               fabricante: c.fabricante ?? '',
               modelo: c.modelo ?? '',
               tipo_equipamento: c.tipo ?? '',
