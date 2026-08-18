@@ -201,8 +201,8 @@ export function Manutencao() {
     }
   }
 
-  if (isLoading || manutencoesQuery.isLoading) return <CarregandoTela />;
-
+  // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
+  // pode ser chamado condicionalmente.
   function valorColuna(m: ManutencaoRow, chave: string): unknown {
     if (chave === 'numero_os') return porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`;
     if (chave === 'data_inicio') return m.data_inicio;
@@ -223,6 +223,8 @@ export function Manutencao() {
     );
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
+
+  if (isLoading || manutencoesQuery.isLoading) return <CarregandoTela />;
 
   return (
     <div>

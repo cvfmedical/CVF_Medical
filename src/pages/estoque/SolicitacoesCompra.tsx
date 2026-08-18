@@ -174,8 +174,8 @@ export function SolicitacoesCompra() {
     qc.invalidateQueries({ queryKey: ['solicitacoes-compra'] });
   }
 
-  if (query.isLoading || produtosQuery.isLoading || fornecedoresQuery.isLoading) return <CarregandoTela />;
-
+  // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
+  // pode ser chamado condicionalmente.
   function valorColuna(s: SolicitacaoCompra, chave: string): unknown {
     if (chave === 'item') return nomeItem(s);
     if (chave === 'fornecedor') return nomeFornecedor(s.fornecedor_id);
@@ -190,6 +190,8 @@ export function SolicitacoesCompra() {
     );
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
+
+  if (query.isLoading || produtosQuery.isLoading || fornecedoresQuery.isLoading) return <CarregandoTela />;
 
   return (
     <div>

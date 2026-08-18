@@ -1161,13 +1161,12 @@ export function OrcamentoFinanceiro() {
     }
   }
 
-  if (orcamentosQuery.isLoading) return <CarregandoTela />;
-
   // Sem filtro em nenhuma coluna, só mostra o que ainda está em aberto pra
   // precificar/enviar - uma vez enviado/respondido, o orçamento sai da
   // lista padrão (fica só achável filtrando), pra não acumular anos de
   // registros já resolvidos. Assim que alguma coluna é filtrada, passa a
-  // buscar em todos os status.
+  // buscar em todos os status. Fica ANTES do "if isLoading" porque
+  // useLinhasOrdenadas é um hook - não pode ser chamado condicionalmente.
   function valorColunaLista(o: Orcamento, chave: string): unknown {
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
     if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
@@ -1190,6 +1189,8 @@ export function OrcamentoFinanceiro() {
     direcao: direcaoLista,
     ordenarPor: ordenarListaPor,
   } = useLinhasOrdenadas(linhasListaFiltradas, null, valorColunaLista);
+
+  if (orcamentosQuery.isLoading) return <CarregandoTela />;
 
   return (
     <div>

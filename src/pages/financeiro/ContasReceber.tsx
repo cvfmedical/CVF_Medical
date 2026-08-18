@@ -160,12 +160,8 @@ export function ContasReceber() {
     qc.invalidateQueries({ queryKey: ['contas-receber'] });
   }
 
-  if (query.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
-
-  const totalEmAberto = (query.data ?? [])
-    .filter((c) => c.status === 'Em aberto')
-    .reduce((soma, c) => soma + Number(c.valor), 0);
-
+  // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
+  // pode ser chamado condicionalmente.
   function valorColuna(c: ContaReceber, chave: string): unknown {
     if (chave === 'cliente') return nomeCliente(c.cliente_id);
     if (chave === 'data_vencimento') return c.data_vencimento;
@@ -180,6 +176,12 @@ export function ContasReceber() {
     );
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
+
+  if (query.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
+
+  const totalEmAberto = (query.data ?? [])
+    .filter((c) => c.status === 'Em aberto')
+    .reduce((soma, c) => soma + Number(c.valor), 0);
 
   return (
     <div>

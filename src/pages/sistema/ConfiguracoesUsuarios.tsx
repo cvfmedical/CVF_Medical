@@ -65,8 +65,8 @@ export function ConfiguracoesUsuarios() {
     }
   }
 
-  if (query.isLoading) return <CarregandoTela />;
-
+  // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
+  // pode ser chamado condicionalmente.
   function valorColuna(f: Funcionario, chave: string): unknown {
     if (chave === 'status_ativo') return f.status_ativo ? 'Ativo' : 'Inativo';
     if (chave === 'auth_user_id') return f.auth_user_id ? 'Vinculado' : 'Sem acesso';
@@ -80,6 +80,8 @@ export function ConfiguracoesUsuarios() {
     );
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
+
+  if (query.isLoading) return <CarregandoTela />;
 
   return (
     <div>

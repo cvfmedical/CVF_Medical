@@ -26,8 +26,8 @@ export function OrcamentosAprovados() {
     navigate(`/manutencao?os=${osId}`);
   }
 
-  if (query.isLoading) return <CarregandoTela />;
-
+  // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
+  // pode ser chamado condicionalmente.
   function valorColuna(o: OrcamentoAprovado, chave: string): unknown {
     if (chave === 'data_resposta_cliente') return o.data_resposta_cliente;
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
@@ -47,6 +47,8 @@ export function OrcamentosAprovados() {
     );
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
+
+  if (query.isLoading) return <CarregandoTela />;
 
   return (
     <div>
