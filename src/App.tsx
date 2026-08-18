@@ -27,6 +27,7 @@ import { TiposOtica } from './pages/cadastros/TiposOtica';
 import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
 import { RegistroEntrada } from './pages/pipeline/RegistroEntrada';
+import { RastreioEquipamento } from './pages/pipeline/RastreioEquipamento';
 import { OrdemServico } from './pages/pipeline/OrdemServico';
 import { OrdensServicoPanel } from './pages/pipeline/OrdensServicoPanel';
 import { OrcamentoTecnico } from './pages/pipeline/OrcamentoTecnico';
@@ -71,6 +72,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/condicoes-chegada': CondicoesChegada,
   '/entrada-equipamento': EntradaEquipamento,
   '/registro-entrada': RegistroEntrada,
+  '/rastreio/:codigo': RastreioEquipamento,
   '/ordens-servico/nova': OrdemServico,
   '/ordens-servico': OrdensServicoPanel,
   '/orcamento-tecnico': OrcamentoTecnico,

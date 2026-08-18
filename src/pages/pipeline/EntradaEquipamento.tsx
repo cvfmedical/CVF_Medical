@@ -8,7 +8,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconEye, IconMail, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash, IconX } from '@tabler/icons-react';
+import { IconEye, IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
+import { imprimirEtiquetaRastreio } from '../../lib/etiquetaRastreio';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { imprimirRegistroEntrada } from '../../lib/relatorioEntrada';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
@@ -628,6 +629,19 @@ export function EntradaEquipamento() {
                 </button>
                 <button className="botao-icone" title="Imprimir relatório" onClick={() => imprimirRelatorio(e)}>
                   <IconPrinter size={16} />
+                </button>
+                <button
+                  className="botao-icone"
+                  title="Imprimir etiqueta de rastreio (QR Code)"
+                  onClick={() =>
+                    imprimirEtiquetaRastreio({
+                      codigoEntrada: e.codigo_entrada,
+                      clienteNome: cliente(e.cliente_id)?.razao_social ?? '-',
+                      equipamento: e.equipamento_desc,
+                    })
+                  }
+                >
+                  <IconQrcode size={16} />
                 </button>
                 <button className="botao-icone" title="Enviar link ao cliente" onClick={() => compartilharLink(e)}>
                   <IconShare size={16} />

@@ -62,6 +62,9 @@ export const MENU: CategoriaMenu[] = [
       // de serviço), mas escondida do menu: aberta em branco não faz nada,
       // pois precisa de uma OS específica (?os=...).
       { label: 'Registro de entrada (revisão)', path: '/registro-entrada', categoria: 'recepcao_os', implementado: false, oculto: true },
+      // Aberta ao escanear o QR Code da etiqueta de rastreio impressa no
+      // Recebimento/Triagem - não faz sentido no menu (precisa do código).
+      { label: 'Rastreio do equipamento', path: '/rastreio/:codigo', categoria: 'recepcao_os', implementado: false, oculto: true },
       { label: 'Abrir nova OS', path: '/ordens-servico/nova', categoria: 'recepcao_os', implementado: false },
       { label: 'Ordem de serviço / identificação de peças danificadas', path: '/ordens-servico', categoria: 'recepcao_os', implementado: false },
       { label: 'Entrega ao cliente', path: '/entrega', categoria: 'recepcao_os', implementado: false },
