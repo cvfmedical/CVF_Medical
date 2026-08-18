@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -48,7 +50,7 @@ export function Manutencao() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('manutencao', {
     titulo: 'Nova manutenção',
@@ -201,16 +203,26 @@ export function Manutencao() {
 
   if (isLoading || manutencoesQuery.isLoading) return <CarregandoTela />;
 
-  const linhas = (manutencoesQuery.data ?? []).filter((m) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    const os = porId(m.ordem_servico_id);
-    return (
-normalizarBusca(      (os?.numero_os ?? '')).includes(termo) ||
-normalizarBusca(      (os?.cliente_nome ?? '')).includes(termo) ||
-normalizarBusca(      (m.observacoes ?? '')).includes(termo)
+  function valorColuna(m: ManutencaoRow, chave: string): unknown {
+    if (chave === 'numero_os') return porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`;
+    if (chave === 'data_inicio') return m.data_inicio;
+    if (chave === 'data_fim') return m.data_fim;
+    if (chave === 'itens_substituidos')
+      return (m.checklist ?? [])
+        .filter((i) => i.substituido)
+        .map((i) => i.produto_nome)
+        .join(', ');
+    if (chave === 'observacoes') return m.observacoes ?? '';
+    return (m as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (manutencoesQuery.data ?? []).filter((m) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(m, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   return (
     <div>
@@ -221,21 +233,33 @@ normalizarBusca(      (m.observacoes ?? '')).includes(termo)
         </button>
       </div>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por OS, cliente ou observações..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>OS</th>
-            <th>Início</th>
-            <th>Fim</th>
-            <th>Itens substituídos</th>
-            <th>Observações</th>
+            {[
+              ['numero_os', 'OS'],
+              ['data_inicio', 'Início'],
+              ['data_fim', 'Fim'],
+              ['itens_substituidos', 'Itens substituídos'],
+              ['observacoes', 'Observações'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+          </tr>
+          <tr>
+            {['numero_os', 'data_inicio', 'data_fim', 'itens_substituidos', 'observacoes'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -253,7 +277,7 @@ normalizarBusca(      (m.observacoes ?? '')).includes(termo)
               <td>{m.observacoes}</td>
             </tr>
           ))}
-          {(manutencoesQuery.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
               <td colSpan={5}>Nenhum registro encontrado.</td>
             </tr>

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
@@ -53,7 +55,7 @@ export function SolicitacoesCompra() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('solicitacoes-compra', {
     titulo: 'Nova solicitação de compra',
@@ -174,15 +176,20 @@ export function SolicitacoesCompra() {
 
   if (query.isLoading || produtosQuery.isLoading || fornecedoresQuery.isLoading) return <CarregandoTela />;
 
-  const linhas = (query.data ?? []).filter((s) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return (
-normalizarBusca(      s.numero_solicitacao).includes(termo) ||
-normalizarBusca(      nomeItem(s)).includes(termo) ||
-normalizarBusca(      nomeFornecedor(s.fornecedor_id)).includes(termo)
+  function valorColuna(s: SolicitacaoCompra, chave: string): unknown {
+    if (chave === 'item') return nomeItem(s);
+    if (chave === 'fornecedor') return nomeFornecedor(s.fornecedor_id);
+    if (chave === 'data_solicitacao') return s.data_solicitacao;
+    return (s as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((s) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(s, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   return (
     <div>
@@ -193,22 +200,35 @@ normalizarBusca(      nomeFornecedor(s.fornecedor_id)).includes(termo)
         </button>
       </div>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº, item ou fornecedor..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Nº solicitação</th>
-            <th>Item</th>
-            <th>Quantidade</th>
-            <th>Fornecedor</th>
-            <th>Status</th>
-            <th>Data</th>
+            {[
+              ['numero_solicitacao', 'Nº solicitação'],
+              ['item', 'Item'],
+              ['quantidade', 'Quantidade'],
+              ['fornecedor', 'Fornecedor'],
+              ['status', 'Status'],
+              ['data_solicitacao', 'Data'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['numero_solicitacao', 'item', 'quantidade', 'fornecedor', 'status', 'data_solicitacao'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>
@@ -237,7 +257,7 @@ normalizarBusca(      nomeFornecedor(s.fornecedor_id)).includes(termo)
               </td>
             </tr>
           ))}
-          {(query.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
               <td colSpan={7}>Nenhuma solicitação encontrada.</td>
             </tr>

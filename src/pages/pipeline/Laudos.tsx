@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
@@ -36,7 +38,7 @@ export function Laudos() {
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [form, setForm] = useState({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('laudos', {
     titulo: 'Nova nota técnica interna',
@@ -65,21 +67,19 @@ export function Laudos() {
     },
   });
 
-  const linhas = useMemo(() => {
-    const todas = laudosQuery.data ?? [];
-    if (!filtro.trim()) return todas;
-    const termo = normalizarBusca(filtro.trim());
-    return todas.filter((l) => {
-      const os = porId(l.ordem_servico_id);
-      return (
-normalizarBusca(        l.numero_laudo).includes(termo) ||
-normalizarBusca(        (os?.numero_os ?? '')).includes(termo) ||
-normalizarBusca(        (os?.cliente_nome ?? '')).includes(termo) ||
-normalizarBusca(        (l.tecnico_responsavel ?? '')).includes(termo)
-      );
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [laudosQuery.data, filtro]);
+  function valorColuna(l: Laudo, chave: string): unknown {
+    if (chave === 'numero_os') return porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`;
+    if (chave === 'data_emissao') return l.data_emissao;
+    return (l as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (laudosQuery.data ?? []).filter((l) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(l, chave) ?? '')).includes(normalizarBusca(termo.trim())),
+    );
+  });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   async function baixarPdf(caminho: string | null) {
     if (!caminho) return;
@@ -158,21 +158,34 @@ normalizarBusca(        (l.tecnico_responsavel ?? '')).includes(termo)
         <strong> nota interna simplificada</strong> (sem medições) e todos os documentos aparecem na lista abaixo.
       </p>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº laudo, OS, cliente ou técnico..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Nº laudo</th>
-            <th>OS</th>
-            <th>Técnico</th>
-            <th>Resultado</th>
-            <th>Emitido em</th>
+            {[
+              ['numero_laudo', 'Nº laudo'],
+              ['numero_os', 'OS'],
+              ['tecnico_responsavel', 'Técnico'],
+              ['resultado', 'Resultado'],
+              ['data_emissao', 'Emitido em'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['numero_laudo', 'numero_os', 'tecnico_responsavel', 'resultado', 'data_emissao'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>

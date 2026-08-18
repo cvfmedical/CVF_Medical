@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -51,7 +53,7 @@ export function OrdensServicoPanel() {
   const qc = useQueryClient();
   const { funcionario } = useAuth();
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
   const avariasTriagemQuery = useAvariasTriagem();
   const [excluindo, setExcluindo] = useState<number | null>(null);
@@ -93,42 +95,57 @@ export function OrdensServicoPanel() {
     );
   }
 
-  const linhas = useMemo(() => {
-    const todas = query.data ?? [];
-    if (!filtro.trim()) return todas;
-    const termo = normalizarBusca(filtro.trim());
-    return todas.filter(
-      (os) =>
-normalizarBusca(        os.numero_os).includes(termo) ||
-normalizarBusca(        os.cliente_nome).includes(termo) ||
-normalizarBusca(        (os.optica_sn ?? '')).includes(termo) ||
-normalizarBusca(        (os.optica_desc ?? '')).includes(termo),
+  function valorColuna(os: OrdemServico, chave: string): unknown {
+    if (chave === 'status_os') return os.status_os ?? '';
+    if (chave === 'data_abertura') return os.data_abertura;
+    return (os as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((os) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(os, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
-  }, [query.data, filtro]);
+  });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   if (query.isLoading) return <CarregandoTela />;
 
   return (
     <div>
       <h1>Ordem de serviço / identificação de peças danificadas</h1>
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº OS, cliente, equipamento ou nº de série..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
 
       {erro && <p className="erro-login">{erro}</p>}
 
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Nº OS</th>
-            <th>Cliente</th>
-            <th>Equipamento</th>
-            <th>Nº de série</th>
-            <th>Status</th>
-            <th>Aberta em</th>
+            {[
+              ['numero_os', 'Nº OS'],
+              ['cliente_nome', 'Cliente'],
+              ['optica_desc', 'Equipamento'],
+              ['optica_sn', 'Nº de série'],
+              ['status_os', 'Status'],
+              ['data_abertura', 'Aberta em'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['numero_os', 'cliente_nome', 'optica_desc', 'optica_sn', 'status_os', 'data_abertura'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>

@@ -4,6 +4,7 @@ import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
 import { AlertaOSAguardandoOrcamento } from './AlertaOSAguardandoOrcamento';
 import { AlertaOrcamentosAprovados } from './AlertaOrcamentosAprovados';
 import { AlertaFaturamentoLiberado } from './AlertaFaturamentoLiberado';
+import { AlertaEmailFalhou } from './AlertaEmailFalhou';
 
 const CHAVE_POSICAO = 'alertas-flutuantes-posicao';
 
@@ -105,6 +106,7 @@ export function AlertasFlutuantes() {
           <AlertaOSAguardandoOrcamento />
           <AlertaOrcamentosAprovados />
           <AlertaFaturamentoLiberado />
+          <AlertaEmailFalhou />
         </div>
       </div>
     </div>

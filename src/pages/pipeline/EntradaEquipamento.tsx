@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -20,6 +22,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { formatarModeloOtica } from '../../lib/formato';
+import { registrarEmailEnviado } from '../../lib/emailsEnviados';
 
 interface Entrada {
   id: number;
@@ -145,7 +148,7 @@ export function EntradaEquipamento() {
   const [condicaoParaAdicionar, setCondicaoParaAdicionar] = useState('');
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
 
   // Minimizar/restaurar preservando dados entre telas. Os File das fotos ficam
@@ -316,21 +319,21 @@ export function EntradaEquipamento() {
     return clientesQuery.data?.find((c) => c.id === id);
   }
 
-  const linhas = useMemo(() => {
-    const todas = entradasQuery.data ?? [];
-    if (!filtro.trim()) return todas;
-    const termo = normalizarBusca(filtro.trim());
-    return todas.filter(
-      (e) =>
-normalizarBusca(        e.codigo_entrada).includes(termo) ||
-normalizarBusca(        (cliente(e.cliente_id)?.razao_social ?? '')).includes(termo) ||
-normalizarBusca(        (e.equipamento_desc ?? '')).includes(termo) ||
-normalizarBusca(        (e.equipamento_sn ?? '')).includes(termo) ||
-normalizarBusca(        (e.nf_remessa_numero ?? '')).includes(termo) ||
-normalizarBusca(        (e.numero_controle_cliente ?? '')).includes(termo),
+  function valorColuna(e: Entrada, chave: string): unknown {
+    if (chave === 'cliente') return cliente(e.cliente_id)?.razao_social ?? '';
+    if (chave === 'nf_remessa') return e.nf_remessa_numero || e.numero_controle_cliente || '';
+    if (chave === 'status') return e.ordem_servico_id ? 'Convertida em OS' : e.status;
+    if (chave === 'data_entrada') return e.data_entrada;
+    return (e as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (entradasQuery.data ?? []).filter((e) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(e, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entradasQuery.data, filtro, clientesQuery.data]);
+  });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   // Cadastro rápido do cliente final (unidade atendida) direto da Entrada -
   // só o nome, sem passar pelo formulário completo de cliente (CNPJ é
@@ -629,6 +632,13 @@ normalizarBusca(        (e.numero_controle_cliente ?? '')).includes(termo),
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+      await registrarEmailEnviado({
+        resendId: data?.id,
+        destinatarios: [c.email],
+        assunto: `Q-CVF Medical - Equipamento recebido (${entrada.codigo_entrada})`,
+        entradaId: entrada.id,
+        enviadoPor: funcionario?.id ?? null,
+      });
       alert(`E-mail enviado para ${c.email}.`);
     } catch (e) {
       alert(mensagemErro(e));
@@ -659,23 +669,38 @@ normalizarBusca(        (e.numero_controle_cliente ?? '')).includes(termo),
         </button>
       </div>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por código, cliente, equipamento, série ou NF..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Código</th>
-            <th>Cliente</th>
-            <th>Equipamento</th>
-            <th>Nº de série</th>
-            <th>NF remessa</th>
-            <th>Status</th>
-            <th>Data</th>
+            {[
+              ['codigo_entrada', 'Código'],
+              ['cliente', 'Cliente'],
+              ['equipamento_desc', 'Equipamento'],
+              ['equipamento_sn', 'Nº de série'],
+              ['nf_remessa', 'NF remessa'],
+              ['status', 'Status'],
+              ['data_entrada', 'Data'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['codigo_entrada', 'cliente', 'equipamento_desc', 'equipamento_sn', 'nf_remessa', 'status', 'data_entrada'].map(
+              (chave) => (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <input
+                    type="text"
+                    className="campo-filtro-coluna"
+                    placeholder="Filtrar..."
+                    value={filtrosColuna[chave] ?? ''}
+                    onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                  />
+                </th>
+              ),
+            )}
             <th></th>
           </tr>
         </thead>
@@ -748,7 +773,7 @@ normalizarBusca(        (e.numero_controle_cliente ?? '')).includes(termo),
               </td>
             </tr>
           ))}
-          {(entradasQuery.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
               <td colSpan={8}>Nenhum registro encontrado.</td>
             </tr>

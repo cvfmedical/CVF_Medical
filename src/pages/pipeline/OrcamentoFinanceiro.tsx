@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -33,6 +35,8 @@ import {
   type DadosOSPdf,
 } from '../../lib/pdfsOrcamento';
 import { montarCorpoOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
+import { registrarEmailEnviado } from '../../lib/emailsEnviados';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { IconPhoto, IconTrash } from '@tabler/icons-react';
 
 interface Orcamento {
@@ -59,6 +63,8 @@ interface Orcamento {
     prazo_entrega: string | null;
     eh_otica: boolean | null;
     cliente_final_id: number | null;
+    grupo: string | null;
+    subgrupo: string | null;
   } | null;
 }
 
@@ -162,7 +168,7 @@ export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
-  const [filtroLista, setFiltroLista] = useState('');
+  const [filtrosColunaLista, setFiltrosColunaLista] = useState<Record<string, string>>({});
   const [observacoesFinanceiro, setObservacoesFinanceiro] = useState('');
   const [validadeProposta, setValidadeProposta] = useState('');
   const [condicoesPagamento, setCondicoesPagamento] = useState('');
@@ -203,7 +209,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica, cliente_final_id)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -242,6 +248,61 @@ export function OrcamentoFinanceiro() {
       return data as unknown as ItemOrcamento[];
     },
   });
+
+  // Permite ao financeiro incluir um item que não veio do técnico (ex.: hora
+  // técnica, taxa de urgência) - mesmo catálogo e mesma lógica de filtro por
+  // Grupo/Subgrupo do Orçamento Técnico, mas sem foto/etiquetas de defeito
+  // (aqui é só item + quantidade, o preço é digitado na própria tabela como
+  // qualquer outro item).
+  const [novoItemFinanceiro, setNovoItemFinanceiro] = useState({ produto_servico_id: '', descricao_servico: '', quantidade: '1' });
+  const [adicionandoItem, setAdicionandoItem] = useState(false);
+
+  const produtosQuery = useQuery({
+    queryKey: ['produtos-servicos-opcoes-financeiro'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('produtos_servicos')
+        .select('id, nome, tipo, categoria, subgrupo')
+        .eq('status_ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return data as { id: number; nome: string; tipo: string | null; categoria: string | null; subgrupo: string | null }[];
+    },
+  });
+
+  const produtosFiltradosFinanceiro = (produtosQuery.data ?? []).filter((p) => {
+    if (p.tipo === 'Produto') return false;
+    const os = orcamentoSelecionado?.ordens_servico;
+    if (!os?.grupo || !p.categoria) return true;
+    if (p.categoria !== os.grupo) return false;
+    if (p.subgrupo && os.subgrupo && p.subgrupo !== os.subgrupo) return false;
+    return true;
+  });
+
+  async function adicionarItemFinanceiro() {
+    if (!selecionadoId) return;
+    if (!novoItemFinanceiro.produto_servico_id && !novoItemFinanceiro.descricao_servico.trim()) {
+      setErro('Selecione um item do catálogo ou descreva o item (ex.: hora técnica).');
+      return;
+    }
+    setErro(null);
+    setAdicionandoItem(true);
+    try {
+      const { error } = await supabase.from('orcamento_itens').insert({
+        orcamento_id: selecionadoId,
+        produto_servico_id: novoItemFinanceiro.produto_servico_id ? Number(novoItemFinanceiro.produto_servico_id) : null,
+        quantidade: Number(novoItemFinanceiro.quantidade) || 1,
+        descricao_servico: novoItemFinanceiro.descricao_servico.trim() || null,
+      });
+      if (error) throw error;
+      setNovoItemFinanceiro({ produto_servico_id: '', descricao_servico: '', quantidade: '1' });
+      qc.invalidateQueries({ queryKey: ['itens-orcamento-financeiro', selecionadoId] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setAdicionandoItem(false);
+    }
+  }
 
   const clienteQuery = useQuery({
     queryKey: ['cliente-do-orcamento', orcamentoSelecionado?.ordens_servico?.cliente_id],
@@ -879,6 +940,14 @@ export function OrcamentoFinanceiro() {
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
 
+      await registrarEmailEnviado({
+        resendId: data?.id,
+        destinatarios,
+        assunto: `Q-CVF Medical - Orçamentos ${resumo.map((r) => r.numero).join(', ')}`,
+        orcamentoIds: lista.map((o) => o.id),
+        enviadoPor: funcionario?.id ?? null,
+      });
+
       for (const o of lista) {
         await supabase
           .from('orcamentos')
@@ -996,6 +1065,14 @@ export function OrcamentoFinanceiro() {
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
 
+      await registrarEmailEnviado({
+        resendId: data?.id,
+        destinatarios,
+        assunto: `Q-CVF Medical - Orçamento ${orcamentoSelecionado.numero_orcamento}`,
+        orcamentoIds: [orcamentoSelecionado.id],
+        enviadoPor: funcionario?.id ?? null,
+      });
+
       await supabase
         .from('orcamentos')
         .update({ status: 'Enviado ao Cliente', precificado_por: funcionario?.id ?? null, data_envio: new Date().toISOString() })
@@ -1086,35 +1163,41 @@ export function OrcamentoFinanceiro() {
 
   if (orcamentosQuery.isLoading) return <CarregandoTela />;
 
-  // Sem busca, só mostra o que ainda está em aberto pra precificar/enviar -
-  // uma vez enviado/respondido, o orçamento sai da lista padrão (fica só
-  // achável pela busca), pra não acumular anos de registros já resolvidos.
-  const linhasLista = (orcamentosQuery.data ?? []).filter((o) => {
-    if (!filtroLista.trim()) {
+  // Sem filtro em nenhuma coluna, só mostra o que ainda está em aberto pra
+  // precificar/enviar - uma vez enviado/respondido, o orçamento sai da
+  // lista padrão (fica só achável filtrando), pra não acumular anos de
+  // registros já resolvidos. Assim que alguma coluna é filtrada, passa a
+  // buscar em todos os status.
+  function valorColunaLista(o: Orcamento, chave: string): unknown {
+    if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
+    if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
+    return (o as unknown as Record<string, unknown>)[chave];
+  }
+  const algumFiltroListaAtivo = Object.values(filtrosColunaLista).some((v) => v.trim());
+  const linhasListaFiltradas = (orcamentosQuery.data ?? []).filter((o) => {
+    if (!algumFiltroListaAtivo) {
       return o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente';
     }
-    const termo = normalizarBusca(filtroLista.trim());
-    return (
-normalizarBusca(      o.numero_orcamento).includes(termo) ||
-normalizarBusca(      (o.ordens_servico?.numero_os ?? '')).includes(termo) ||
-normalizarBusca(      (o.ordens_servico?.cliente_nome ?? '')).includes(termo)
-    );
+    return Object.entries(filtrosColunaLista)
+      .filter(([, v]) => v.trim())
+      .every(([chave, termo]) =>
+        normalizarBusca(String(valorColunaLista(o, chave) ?? '')).includes(normalizarBusca(termo.trim())),
+      );
   });
+  const {
+    linhasOrdenadas: linhasLista,
+    coluna: colunaLista,
+    direcao: direcaoLista,
+    ordenarPor: ordenarListaPor,
+  } = useLinhasOrdenadas(linhasListaFiltradas, null, valorColunaLista);
 
   return (
     <div>
       <h1>Precificar orçamentos</h1>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº orçamento, OS ou cliente... (a busca acha também os já enviados/respondidos)"
-        value={filtroLista}
-        onChange={(e) => setFiltroLista(e.target.value)}
-      />
-
-      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 8 }}>
         Mostrando só o que está aguardando precificação/envio. Orçamentos já enviados, aprovados ou recusados saem
-        desta lista - use a busca acima pra encontrá-los.
+        desta lista - use os filtros das colunas abaixo pra encontrá-los.
       </p>
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -4, marginBottom: 8 }}>
         Marque a caixa nas linhas "Aguardando Envio ao Cliente" para enviar vários orçamentos do mesmo cliente num só
@@ -1149,10 +1232,31 @@ normalizarBusca(      (o.ordens_servico?.cliente_nome ?? '')).includes(termo)
         <thead>
           <tr>
             <th></th>
-            <th>Nº orçamento</th>
-            <th>OS</th>
-            <th>Cliente</th>
-            <th>Status</th>
+            {[
+              ['numero_orcamento', 'Nº orçamento'],
+              ['numero_os', 'OS'],
+              ['cliente_nome', 'Cliente'],
+              ['status', 'Status'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={colunaLista} direcao={direcaoLista} onClick={ordenarListaPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            <th></th>
+            {['numero_orcamento', 'numero_os', 'cliente_nome', 'status'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColunaLista[chave] ?? ''}
+                  onChange={(e) => setFiltrosColunaLista((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>
@@ -1312,9 +1416,53 @@ normalizarBusca(      (o.ordens_servico?.cliente_nome ?? '')).includes(termo)
               </tbody>
             </table>
 
+            {!travado && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'flex-end',
+                  flexWrap: 'wrap',
+                  marginTop: 8,
+                  padding: 8,
+                  background: 'var(--paper-50)',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ flex: '1 1 220px' }}>
+                  <label style={{ fontSize: 12 }}>Item do catálogo (opcional)</label>
+                  <ComboboxBusca
+                    opcoes={produtosFiltradosFinanceiro.map((p) => ({ value: String(p.id), label: p.nome }))}
+                    valor={novoItemFinanceiro.produto_servico_id}
+                    onChange={(valor) => setNovoItemFinanceiro((f) => ({ ...f, produto_servico_id: valor }))}
+                  />
+                </div>
+                <div style={{ flex: '1 1 220px' }}>
+                  <label style={{ fontSize: 12 }}>Ou descreva o item (ex.: hora técnica)</label>
+                  <input
+                    type="text"
+                    value={novoItemFinanceiro.descricao_servico}
+                    onChange={(e) => setNovoItemFinanceiro((f) => ({ ...f, descricao_servico: e.target.value }))}
+                  />
+                </div>
+                <div style={{ width: 90 }}>
+                  <label style={{ fontSize: 12 }}>Qtd.</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={novoItemFinanceiro.quantidade}
+                    onChange={(e) => setNovoItemFinanceiro((f) => ({ ...f, quantidade: e.target.value }))}
+                  />
+                </div>
+                <button className="botao-secundario botao-pequeno" onClick={adicionarItemFinanceiro} disabled={adicionandoItem}>
+                  {adicionandoItem ? 'Adicionando...' : 'Adicionar item'}
+                </button>
+              </div>
+            )}
             <p style={{ fontSize: 11, color: 'var(--ink-400)', margin: '2px 0 0' }}>
               O preço unitário já vem sugerido do catálogo (valor de venda) quando o item está cadastrado — ajuste
-              livremente antes de salvar/enviar.
+              livremente antes de salvar/enviar. Itens que não estão na OS (ex.: hora técnica) podem ser incluídos
+              acima.
             </p>
             <div style={{ marginTop: 8, marginLeft: 'auto', maxWidth: 320 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--ink-600)' }}>

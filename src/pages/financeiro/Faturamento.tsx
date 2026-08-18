@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -82,7 +84,7 @@ export function Faturamento() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   const contasQuery = useQuery({
     queryKey: ['faturamento-contas-receber'],
@@ -179,16 +181,33 @@ export function Faturamento() {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}` : '-';
   }
 
+  // Mesma lógica usada pro badge da coluna "Nota fiscal" - reaproveitada
+  // aqui pra poder ordenar/filtrar por esse status derivado.
+  function labelNotaFiscal(l: LinhaFaturamento): string {
+    if (l.nf_numero) return `Faturado ${l.nf_tipo ?? ''} ${l.nf_numero}${l.nf_serie ? '/' + l.nf_serie : ''}`.trim();
+    if (l.contaId == null && liberada(l.statusOS)) return 'Liberado';
+    if (l.contaId == null) return 'Aguardando entrega';
+    return 'Não faturado';
+  }
+
+  function valorColuna(l: LinhaFaturamento, chave: string): unknown {
+    if (chave === 'cliente') return nomeCliente(l.clienteId);
+    if (chave === 'nota_fiscal') return labelNotaFiscal(l);
+    return (l as unknown as Record<string, unknown>)[chave];
+  }
+
   const linhasFiltradas = linhas.filter((l) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return (
-normalizarBusca(      l.numero).includes(termo) ||
-normalizarBusca(      l.descricao).includes(termo) ||
-normalizarBusca(      nomeCliente(l.clienteId)).includes(termo) ||
-normalizarBusca(      (l.nf_numero ?? '')).includes(termo)
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(l, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const {
+    linhasOrdenadas: linhasOrdenadasFiltradas,
+    coluna,
+    direcao,
+    ordenarPor,
+  } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   function abrirLancarNota(l: LinhaFaturamento) {
     setLinhaSelecionada(l);
@@ -317,26 +336,39 @@ normalizarBusca(      (l.nf_numero ?? '')).includes(termo)
         </div>
       )}
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº, descrição, cliente ou nº da NF..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Nº</th>
-            <th>Cliente</th>
-            <th>Descrição</th>
-            <th>Valor</th>
-            <th>Nota fiscal</th>
+            {[
+              ['numero', 'Nº'],
+              ['cliente', 'Cliente'],
+              ['descricao', 'Descrição'],
+              ['valor', 'Valor'],
+              ['nota_fiscal', 'Nota fiscal'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['numero', 'cliente', 'descricao', 'valor', 'nota_fiscal'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {linhasFiltradas.map((l) => (
+          {linhasOrdenadasFiltradas.map((l) => (
             <tr key={l.chave}>
               <td className="mono">{l.numero}</td>
               <td>{nomeCliente(l.clienteId)}</td>
@@ -381,7 +413,7 @@ normalizarBusca(      (l.nf_numero ?? '')).includes(termo)
               </td>
             </tr>
           ))}
-          {linhas.length === 0 && (
+          {linhasOrdenadasFiltradas.length === 0 && (
             <tr>
               <td colSpan={6}>Nenhuma conta a receber ou orçamento aprovado encontrado.</td>
             </tr>

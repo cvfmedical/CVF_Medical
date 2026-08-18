@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -29,7 +31,7 @@ interface Movimentacao {
 export function InventarioEstoque() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoEstoque | null>(null);
   const [modalMovimento, setModalMovimento] = useState(false);
   const [modalHistorico, setModalHistorico] = useState(false);
@@ -68,11 +70,19 @@ export function InventarioEstoque() {
     },
   });
 
-  const linhas = (query.data ?? []).filter((p) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return normalizarBusca(p.nome).includes(termo) || normalizarBusca(p.codigo ?? '').includes(termo);
+  function valorColuna(p: ProdutoEstoque, chave: string): unknown {
+    if (chave === 'status')
+      return p.estoque_minimo > 0 && p.quantidade_estoque <= p.estoque_minimo ? 'Baixo estoque' : 'OK';
+    return (p as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((p) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(p, chave) ?? '')).includes(normalizarBusca(termo.trim())),
+    );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   function abrirMovimento(p: ProdutoEstoque) {
     setProdutoSelecionado(p);
@@ -146,17 +156,36 @@ export function InventarioEstoque() {
   return (
     <div>
       <h1>Inventário de peças</h1>
-      <input className="campo-filtro" placeholder="Buscar..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
 
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Código</th>
-            <th>Nome</th>
-            <th>Categoria</th>
-            <th>Estoque atual</th>
-            <th>Estoque mínimo</th>
-            <th>Status</th>
+            {[
+              ['codigo', 'Código'],
+              ['nome', 'Nome'],
+              ['categoria', 'Categoria'],
+              ['quantidade_estoque', 'Estoque atual'],
+              ['estoque_minimo', 'Estoque mínimo'],
+              ['status', 'Status'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['codigo', 'nome', 'categoria', 'quantidade_estoque', 'estoque_minimo', 'status'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>

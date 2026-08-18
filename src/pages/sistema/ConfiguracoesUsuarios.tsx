@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -21,7 +23,7 @@ export function ConfiguracoesUsuarios() {
   const [convidando, setConvidando] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [linkReenvio, setLinkReenvio] = useState<{ nome: string; link: string; codigo: string } | null>(null);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   const query = useQuery({
     queryKey: ['funcionarios-config'],
@@ -65,15 +67,19 @@ export function ConfiguracoesUsuarios() {
 
   if (query.isLoading) return <CarregandoTela />;
 
-  const linhas = (query.data ?? []).filter((f) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return (
-normalizarBusca(      f.nome).includes(termo) ||
-normalizarBusca(      (f.cargo ?? '')).includes(termo) ||
-normalizarBusca(      (f.email ?? '')).includes(termo)
+  function valorColuna(f: Funcionario, chave: string): unknown {
+    if (chave === 'status_ativo') return f.status_ativo ? 'Ativo' : 'Inativo';
+    if (chave === 'auth_user_id') return f.auth_user_id ? 'Vinculado' : 'Sem acesso';
+    return (f as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((f) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(f, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   return (
     <div>
@@ -140,22 +146,35 @@ normalizarBusca(      (f.email ?? '')).includes(termo)
         </div>
       )}
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nome, cargo ou e-mail..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Nome</th>
-            <th>Cargo</th>
-            <th>Nível de acesso</th>
-            <th>E-mail</th>
-            <th>Ativo</th>
-            <th>Acesso web</th>
+            {[
+              ['nome', 'Nome'],
+              ['cargo', 'Cargo'],
+              ['nivel_acesso', 'Nível de acesso'],
+              ['email', 'E-mail'],
+              ['status_ativo', 'Ativo'],
+              ['auth_user_id', 'Acesso web'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['nome', 'cargo', 'nivel_acesso', 'email', 'status_ativo', 'auth_user_id'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>

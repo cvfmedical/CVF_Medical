@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -66,7 +68,7 @@ export function Clientes() {
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Cliente | null>(null);
   const [form, setForm] = useState(formVazio);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [consultando, setConsultando] = useState(false);
@@ -96,15 +98,19 @@ export function Clientes() {
     },
   });
 
-  const linhas = (query.data ?? []).filter((c) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return (
-normalizarBusca(      c.razao_social).includes(termo) ||
-      (c.cnpj ?? '').includes(termo) ||
-normalizarBusca(      (c.hospital_clinica ?? '')).includes(termo)
+  function valorColuna(c: Cliente, chave: string): unknown {
+    if (chave === 'eh_terceirizado') return c.eh_terceirizado ? 'Terceirizado' : '';
+    if (chave === 'cidade') return c.cidade ? `${c.cidade}/${c.uf ?? ''}` : '';
+    return (c as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((c) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(c, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   function abrirNovo() {
     setEditando(null);
@@ -255,18 +261,36 @@ normalizarBusca(      (c.hospital_clinica ?? '')).includes(termo)
         </button>
       </div>
 
-      <input className="campo-filtro" placeholder="Buscar..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Razão social</th>
+            {[
+              ['razao_social', 'Razão social'],
+              ['eh_terceirizado', 'Terceirizado'],
+              ['nome_fantasia', 'Nome fantasia'],
+              ['cnpj', 'CNPJ'],
+              ['cidade', 'Cidade/UF'],
+              ['telefone', 'Telefone'],
+              ['email', 'E-mail'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
             <th></th>
-            <th>Nome fantasia</th>
-            <th>CNPJ</th>
-            <th>Cidade/UF</th>
-            <th>Telefone</th>
-            <th>E-mail</th>
+          </tr>
+          <tr>
+            {['razao_social', 'eh_terceirizado', 'nome_fantasia', 'cnpj', 'cidade', 'telefone', 'email'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>

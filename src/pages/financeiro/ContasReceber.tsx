@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
@@ -45,7 +47,7 @@ export function ContasReceber() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('contas-receber', {
     titulo: 'Novo lançamento (conta a receber)',
@@ -164,15 +166,20 @@ export function ContasReceber() {
     .filter((c) => c.status === 'Em aberto')
     .reduce((soma, c) => soma + Number(c.valor), 0);
 
-  const linhas = (query.data ?? []).filter((c) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return (
-normalizarBusca(      c.numero_conta).includes(termo) ||
-normalizarBusca(      nomeCliente(c.cliente_id)).includes(termo) ||
-normalizarBusca(      (c.descricao ?? '')).includes(termo)
+  function valorColuna(c: ContaReceber, chave: string): unknown {
+    if (chave === 'cliente') return nomeCliente(c.cliente_id);
+    if (chave === 'data_vencimento') return c.data_vencimento;
+    if (chave === 'status') return statusExibicao(c).texto;
+    return (c as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((c) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(c, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   return (
     <div>
@@ -186,22 +193,35 @@ normalizarBusca(      (c.descricao ?? '')).includes(termo)
         Contas de orçamentos aprovados são lançadas automaticamente aqui. Total em aberto: R$ {totalEmAberto.toFixed(2)}
       </p>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº conta, cliente ou descrição..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Nº conta</th>
-            <th>Cliente</th>
-            <th>Descrição</th>
-            <th>Valor</th>
-            <th>Vencimento</th>
-            <th>Status</th>
+            {[
+              ['numero_conta', 'Nº conta'],
+              ['cliente', 'Cliente'],
+              ['descricao', 'Descrição'],
+              ['valor', 'Valor'],
+              ['data_vencimento', 'Vencimento'],
+              ['status', 'Status'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['numero_conta', 'cliente', 'descricao', 'valor', 'data_vencimento', 'status'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>
@@ -233,7 +253,7 @@ normalizarBusca(      (c.descricao ?? '')).includes(termo)
               </tr>
             );
           })}
-          {(query.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
               <td colSpan={7}>Nenhuma conta encontrada.</td>
             </tr>

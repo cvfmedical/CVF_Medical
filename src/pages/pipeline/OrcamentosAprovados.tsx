@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useNavigate } from 'react-router-dom';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
@@ -13,7 +15,7 @@ import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrc
 export function OrcamentosAprovados() {
   const navigate = useNavigate();
   const query = useOrcamentosAprovados();
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
   function total(o: OrcamentoAprovado) {
     if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
@@ -26,16 +28,25 @@ export function OrcamentosAprovados() {
 
   if (query.isLoading) return <CarregandoTela />;
 
-  const linhas = (query.data ?? []).filter((o) => {
-    if (!filtro.trim()) return true;
-    const termo = normalizarBusca(filtro.trim());
-    return (
-normalizarBusca(      o.numero_orcamento).includes(termo) ||
-normalizarBusca(      (o.ordens_servico?.numero_os ?? '')).includes(termo) ||
-normalizarBusca(      (o.ordens_servico?.cliente_nome ?? '')).includes(termo) ||
-normalizarBusca(      (o.ordens_servico?.optica_desc ?? '')).includes(termo)
+  function valorColuna(o: OrcamentoAprovado, chave: string): unknown {
+    if (chave === 'data_resposta_cliente') return o.data_resposta_cliente;
+    if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
+    if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
+    if (chave === 'equipamento')
+      return [o.ordens_servico?.optica_desc, o.ordens_servico?.optica_fab, o.ordens_servico?.optica_sn]
+        .filter(Boolean)
+        .join(' ');
+    if (chave === 'valor') return total(o);
+    return (o as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((o) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      normalizarBusca(String(valorColuna(o, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   return (
     <div>
@@ -45,22 +56,35 @@ normalizarBusca(      (o.ordens_servico?.optica_desc ?? '')).includes(termo)
         novas aprovações chegam.
       </p>
 
-      <input
-        className="campo-filtro"
-        placeholder="Buscar por nº orçamento, OS, cliente ou equipamento..."
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-      />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Aprovado em</th>
-            <th>Nº orçamento</th>
-            <th>OS</th>
-            <th>Cliente</th>
-            <th>Equipamento</th>
-            <th>Valor</th>
+            {[
+              ['data_resposta_cliente', 'Aprovado em'],
+              ['numero_orcamento', 'Nº orçamento'],
+              ['numero_os', 'OS'],
+              ['cliente_nome', 'Cliente'],
+              ['equipamento', 'Equipamento'],
+              ['valor', 'Valor'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['data_resposta_cliente', 'numero_orcamento', 'numero_os', 'cliente_nome', 'equipamento', 'valor'].map((chave) => (
+              <th key={chave} style={{ padding: '2px 6px' }}>
+                <input
+                  type="text"
+                  className="campo-filtro-coluna"
+                  placeholder="Filtrar..."
+                  value={filtrosColuna[chave] ?? ''}
+                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                />
+              </th>
+            ))}
             <th></th>
           </tr>
         </thead>
