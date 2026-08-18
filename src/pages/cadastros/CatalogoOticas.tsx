@@ -16,6 +16,7 @@ interface CatalogoOtica {
   metodo_iso: string | null;
   mtf50_referencia_ciclos_px: number | null; // golden sample de resolução (ISO 8600-5)
   resolucao_tolerancia_pct: number | null;
+  pressao_maxima_kpa: number | null; // trava de sobrepressão no Teste de estanqueidade (ISO 8600-7)
   grupo: string | null;
   subgrupo: string | null;
 }
@@ -89,6 +90,11 @@ export function CatalogoOticas() {
           render: (r) =>
             r.fov_referencia_graus != null ? `${r.fov_referencia_graus}°` : '— (sem golden sample)',
         },
+        {
+          chave: 'pressao_maxima_kpa',
+          label: 'Pressão máx. (kPa)',
+          render: (r) => (r.pressao_maxima_kpa != null ? `${r.pressao_maxima_kpa} kPa` : '—'),
+        },
       ]}
       campos={[
         { name: 'fabricante', label: 'Fabricante', type: 'text', obrigatorio: true },
@@ -148,6 +154,11 @@ export function CatalogoOticas() {
           label: 'Tolerância de resolução (%) — mínimo aceitável vs referência',
           type: 'number',
         },
+        {
+          name: 'pressao_maxima_kpa',
+          label: 'Pressão máxima segura (kPa) — conforme manual do fabricante (trava de sobrepressão no Teste de estanqueidade)',
+          type: 'number',
+        },
       ]}
       validar={(d) => {
         if (!d.fabricante) return 'Informe o fabricante.';
@@ -183,6 +194,8 @@ export function CatalogoOticas() {
           d.resolucao_tolerancia_pct !== '' && d.resolucao_tolerancia_pct != null
             ? Number(d.resolucao_tolerancia_pct)
             : 20,
+        pressao_maxima_kpa:
+          d.pressao_maxima_kpa !== '' && d.pressao_maxima_kpa != null ? Number(d.pressao_maxima_kpa) : null,
       })}
     />
   );

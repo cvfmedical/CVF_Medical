@@ -28,6 +28,18 @@ const METODO_CAMARA = 'Câmara pré-pressurizada (desvio da norma)';
 
 export function TesteEstanqueidade() {
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_ESTANQUEIDADE]);
+  // Pressão máxima segura do fabricante, por modelo - cadastrada em
+  // "Catálogo de óticas". Usada só pra pré-preencher/sugerir a trava de
+  // sobrepressão quando a OS já tem o modelo identificado (catalogo_otica_id);
+  // continua editável, o técnico pode ajustar se tiver info mais específica.
+  const catalogoQuery = useQuery({
+    queryKey: ['catalogo-oticas-pressao-maxima'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('catalogo_oticas').select('id, pressao_maxima_kpa');
+      if (error) throw error;
+      return data as { id: number; pressao_maxima_kpa: number | null }[];
+    },
+  });
   const padroesQuery = useQuery({
     queryKey: ['padroes-calibracao-ativos-est'],
     queryFn: async () => {
@@ -85,7 +97,21 @@ export function TesteEstanqueidade() {
           },
         ]}
         campos={[
-          { name: 'ordem_servico_id', label: 'Ordem de serviço', type: 'combobox', opcoes, obrigatorio: true },
+          {
+            name: 'ordem_servico_id',
+            label: 'Ordem de serviço',
+            type: 'combobox',
+            opcoes,
+            obrigatorio: true,
+            aoMudar: (id) => {
+              const os = porId(Number(id));
+              const pMax = os?.catalogo_otica_id
+                ? catalogoQuery.data?.find((c) => c.id === os.catalogo_otica_id)?.pressao_maxima_kpa
+                : null;
+              if (pMax == null) return;
+              return { pressao_maxima_fabricante_kpa: pMax };
+            },
+          },
           {
             name: 'metodo_observacao',
             label: 'Método de observação das bolhas',
