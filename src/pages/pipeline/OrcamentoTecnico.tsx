@@ -166,16 +166,19 @@ export function OrcamentoTecnico() {
 
   // "Produto" é o equipamento em si (não vendemos equipamento no orçamento,
   // só incluímos peças/serviços pra informar o que foi trocado/feito) - só
-  // Peça/Serviço aparecem aqui.
-  //
-  // O filtro por Grupo/Subgrupo (comparado com o que ficou salvo na OS) foi
-  // desligado por enquanto: a classificação de Grupo/Subgrupo das peças
-  // ainda está sendo ajustada manualmente (ex.: "ÓTICA RIGIDA"/"MINI ÓTICA
-  // RIGIDA" não batem com o "ÓTICA" salvo na OS) e, com o filtro estrito,
-  // uma peça fora do padrão esperado simplesmente sumia da lista - pior
-  // que mostrar peças a mais. Assim que a classificação estiver consistente
-  // dá pra reativar.
-  const produtosFiltrados = (produtosQuery.data ?? []).filter((p) => p.tipo !== 'Produto');
+  // Peça/Serviço aparecem aqui. Filtra também pelo Grupo/Subgrupo salvo na
+  // OS - agora vindo da MESMA taxonomia usada nas peças (Cadastro de itens)
+  // e no Catálogo de óticas (cada modelo pode ser marcado com Grupo/
+  // Subgrupo lá). Sem marcação de nenhum dos lados, mostra tudo (estado
+  // seguro enquanto a classificação ainda não foi feita).
+  const produtosFiltrados = (produtosQuery.data ?? []).filter((p) => {
+    if (p.tipo === 'Produto') return false;
+    const os = osDetalheQuery.data;
+    if (!os?.grupo || !p.categoria) return true;
+    if (p.categoria !== os.grupo) return false;
+    if (p.subgrupo && os.subgrupo && p.subgrupo !== os.subgrupo) return false;
+    return true;
+  });
 
   const observacoesQuery = useQuery({
     queryKey: ['observacoes-defeito-opcoes'],

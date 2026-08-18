@@ -16,6 +16,8 @@ interface CatalogoOtica {
   metodo_iso: string | null;
   mtf50_referencia_ciclos_px: number | null; // golden sample de resolução (ISO 8600-5)
   resolucao_tolerancia_pct: number | null;
+  grupo: string | null;
+  subgrupo: string | null;
 }
 
 export function CatalogoOticas() {
@@ -29,6 +31,32 @@ export function CatalogoOticas() {
         .order('descricao');
       if (error) throw error;
       return data as { id: number; descricao: string }[];
+    },
+  });
+
+  const gruposQuery = useQuery({
+    queryKey: ['grupos-produtos-servicos-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categorias_produtos_servicos')
+        .select('descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { descricao: string }[];
+    },
+  });
+
+  const subgruposQuery = useQuery({
+    queryKey: ['subgrupos-produtos-servicos-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('subgrupos')
+        .select('grupo, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { grupo: string; descricao: string }[];
     },
   });
 
@@ -53,6 +81,8 @@ export function CatalogoOticas() {
         { chave: 'tipo', label: 'Tipo' },
         { chave: 'diametro_mm', label: 'Diâmetro (mm)' },
         { chave: 'angulo_graus', label: 'Direção (°)' },
+        { chave: 'grupo', label: 'Grupo' },
+        { chave: 'subgrupo', label: 'Subgrupo' },
         {
           chave: 'fov_referencia_graus',
           label: 'FOV ref. (°)',
@@ -71,6 +101,18 @@ export function CatalogoOticas() {
         },
         { name: 'diametro_mm', label: 'Diâmetro (mm)', type: 'number' },
         { name: 'angulo_graus', label: 'Direção de visão nominal (°) — ex.: 0/30/45/70', type: 'number' },
+        {
+          name: 'grupo',
+          label: 'Grupo (mesmo cadastro usado em Cadastro de itens - ex.: "ÓTICA RIGIDA", "MINI ÓTICA RIGIDA")',
+          type: 'combobox',
+          opcoes: (gruposQuery.data ?? []).map((g) => g.descricao),
+        },
+        {
+          name: 'subgrupo',
+          label: 'Subgrupo - a lista abaixo mostra "grupo › subgrupo"',
+          type: 'combobox',
+          opcoes: (subgruposQuery.data ?? []).map((s) => ({ value: s.descricao, label: `${s.grupo} › ${s.descricao}` })),
+        },
         {
           name: 'fov_referencia_graus',
           label: 'FOV de referência (°) — normalmente vem do golden sample',
@@ -114,6 +156,8 @@ export function CatalogoOticas() {
       }}
       antesDeEnviar={(d) => ({
         ...d,
+        grupo: d.grupo || null,
+        subgrupo: d.subgrupo || null,
         diametro_mm: d.diametro_mm ? Number(d.diametro_mm) : null,
         angulo_graus: d.angulo_graus !== '' && d.angulo_graus != null ? Number(d.angulo_graus) : null,
         fov_referencia_graus:

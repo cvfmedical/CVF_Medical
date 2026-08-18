@@ -60,6 +60,8 @@ interface CatalogoOtica {
   tipo: string | null;
   diametro_mm: number | null;
   angulo_graus: number | null;
+  grupo: string | null;
+  subgrupo: string | null;
 }
 
 // Catálogo de produtos e serviços - usado aqui como catálogo de OUTROS tipos
@@ -218,7 +220,7 @@ export function EntradaEquipamento() {
     queryFn: async (): Promise<CatalogoOtica[]> => {
       const { data, error } = await supabase
         .from('catalogo_oticas')
-        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus')
+        .select('id, fabricante, modelo, tipo, diametro_mm, angulo_graus, grupo, subgrupo')
         .order('fabricante');
       if (error) throw error;
       return data as CatalogoOtica[];
@@ -271,8 +273,8 @@ export function EntradaEquipamento() {
       }));
       setEhOtica(true);
       setCatalogoOticaId(id);
-      setGrupoEquipamento('ÓTICA');
-      setSubgrupoEquipamento('ÓTICA');
+      setGrupoEquipamento(item.grupo ?? '');
+      setSubgrupoEquipamento(item.subgrupo ?? '');
     } else if (tipo === 'produto') {
       const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === id);
       if (!item) return;
