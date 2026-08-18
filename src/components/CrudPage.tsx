@@ -50,7 +50,10 @@ export interface CrudPageProps<Row extends { id: number }> {
   colunas: ColunaConfig<Row>[];
   campos: CampoConfig[];
   ordenarPor?: string;
-  camposFiltro?: string[];
+  // string: nome de uma coluna da própria linha. Função: valor derivado
+  // (ex: número da OS via lookup por ordem_servico_id) - útil quando a
+  // tabela só guarda o id, não o texto que faz sentido buscar.
+  camposFiltro?: (string | ((row: Row) => string))[];
   valorInicial?: Record<string, unknown>;
   validar?: (dados: Record<string, unknown>) => string | null;
   antesDeEnviar?: (dados: Record<string, unknown>) => Record<string, unknown>;
@@ -101,7 +104,7 @@ export function CrudPage<Row extends { id: number }>({
     const termo = filtro.trim().toLowerCase();
     return todas.filter((linha) =>
       camposFiltro.some((campo) =>
-        String((linha as Record<string, unknown>)[campo] ?? '')
+        String((typeof campo === 'function' ? campo(linha) : (linha as Record<string, unknown>)[campo]) ?? '')
           .toLowerCase()
           .includes(termo),
       ),

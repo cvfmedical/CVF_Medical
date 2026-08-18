@@ -20,6 +20,7 @@ export function ConfiguracoesUsuarios() {
   const [convidando, setConvidando] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [linkReenvio, setLinkReenvio] = useState<{ nome: string; link: string; codigo: string } | null>(null);
+  const [filtro, setFiltro] = useState('');
 
   const query = useQuery({
     queryKey: ['funcionarios-config'],
@@ -62,6 +63,16 @@ export function ConfiguracoesUsuarios() {
   }
 
   if (query.isLoading) return <CarregandoTela />;
+
+  const linhas = (query.data ?? []).filter((f) => {
+    if (!filtro.trim()) return true;
+    const termo = filtro.trim().toLowerCase();
+    return (
+      f.nome.toLowerCase().includes(termo) ||
+      (f.cargo ?? '').toLowerCase().includes(termo) ||
+      (f.email ?? '').toLowerCase().includes(termo)
+    );
+  });
 
   return (
     <div>
@@ -128,6 +139,13 @@ export function ConfiguracoesUsuarios() {
         </div>
       )}
 
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nome, cargo ou e-mail..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
+
       <table className="tabela-crud">
         <thead>
           <tr>
@@ -141,7 +159,7 @@ export function ConfiguracoesUsuarios() {
           </tr>
         </thead>
         <tbody>
-          {(query.data ?? []).map((f) => (
+          {linhas.map((f) => (
             <tr key={f.id}>
               <td>{f.nome}</td>
               <td>{f.cargo}</td>
@@ -160,7 +178,7 @@ export function ConfiguracoesUsuarios() {
               </td>
             </tr>
           ))}
-          {(query.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
               <td colSpan={7}>Nenhum funcionário encontrado.</td>
             </tr>

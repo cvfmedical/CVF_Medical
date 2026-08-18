@@ -24,6 +24,7 @@ export function TesteAutoclave() {
         titulo="Teste de autoclave"
         tabela="testes_autoclave"
         ordenarPor="id"
+        camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
         valorInicial={{ temperatura_celsius: 134, tempo_minutos: 15 }}
         colunas={[
           {

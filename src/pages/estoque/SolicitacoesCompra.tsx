@@ -52,6 +52,7 @@ export function SolicitacoesCompra() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [filtro, setFiltro] = useState('');
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('solicitacoes-compra', {
     titulo: 'Nova solicitação de compra',
@@ -172,6 +173,16 @@ export function SolicitacoesCompra() {
 
   if (query.isLoading || produtosQuery.isLoading || fornecedoresQuery.isLoading) return <CarregandoTela />;
 
+  const linhas = (query.data ?? []).filter((s) => {
+    if (!filtro.trim()) return true;
+    const termo = filtro.trim().toLowerCase();
+    return (
+      s.numero_solicitacao.toLowerCase().includes(termo) ||
+      nomeItem(s).toLowerCase().includes(termo) ||
+      nomeFornecedor(s.fornecedor_id).toLowerCase().includes(termo)
+    );
+  });
+
   return (
     <div>
       <div className="crud-cabecalho">
@@ -180,6 +191,13 @@ export function SolicitacoesCompra() {
           <IconPlus size={16} /> Nova solicitação
         </button>
       </div>
+
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nº, item ou fornecedor..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
 
       <table className="tabela-crud">
         <thead>
@@ -194,7 +212,7 @@ export function SolicitacoesCompra() {
           </tr>
         </thead>
         <tbody>
-          {(query.data ?? []).map((s) => (
+          {linhas.map((s) => (
             <tr key={s.id}>
               <td className="mono">{s.numero_solicitacao}</td>
               <td>{nomeItem(s)}</td>

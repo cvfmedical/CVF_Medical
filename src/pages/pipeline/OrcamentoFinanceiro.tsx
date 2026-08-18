@@ -160,6 +160,7 @@ export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
+  const [filtroLista, setFiltroLista] = useState('');
   const [observacoesFinanceiro, setObservacoesFinanceiro] = useState('');
   const [validadeProposta, setValidadeProposta] = useState('');
   const [condicoesPagamento, setCondicoesPagamento] = useState('');
@@ -887,9 +888,26 @@ export function OrcamentoFinanceiro() {
 
   if (orcamentosQuery.isLoading) return <CarregandoTela />;
 
+  const linhasLista = (orcamentosQuery.data ?? []).filter((o) => {
+    if (!filtroLista.trim()) return true;
+    const termo = filtroLista.trim().toLowerCase();
+    return (
+      o.numero_orcamento.toLowerCase().includes(termo) ||
+      (o.ordens_servico?.numero_os ?? '').toLowerCase().includes(termo) ||
+      (o.ordens_servico?.cliente_nome ?? '').toLowerCase().includes(termo)
+    );
+  });
+
   return (
     <div>
       <h1>Precificar orçamentos</h1>
+
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nº orçamento, OS ou cliente..."
+        value={filtroLista}
+        onChange={(e) => setFiltroLista(e.target.value)}
+      />
 
       <table className="tabela-crud">
         <thead>
@@ -902,7 +920,7 @@ export function OrcamentoFinanceiro() {
           </tr>
         </thead>
         <tbody>
-          {(orcamentosQuery.data ?? []).map((o) => (
+          {linhasLista.map((o) => (
             <tr key={o.id}>
               <td className="mono">{o.numero_orcamento}</td>
               <td className="mono">{o.ordens_servico?.numero_os}</td>
@@ -919,7 +937,7 @@ export function OrcamentoFinanceiro() {
               </td>
             </tr>
           ))}
-          {(orcamentosQuery.data ?? []).length === 0 && (
+          {linhasLista.length === 0 && (
             <tr>
               <td colSpan={5}>Nenhum orçamento encontrado.</td>
             </tr>

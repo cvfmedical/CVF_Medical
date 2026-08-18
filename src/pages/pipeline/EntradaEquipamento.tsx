@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -120,12 +120,16 @@ export function EntradaEquipamento() {
   // Preenchido só quando o Cliente selecionado é um terceirizado - identifica
   // qual cliente final (unidade atendida) está sendo atendido nesta entrada.
   const [clienteFinalId, setClienteFinalId] = useState('');
+  // Tipo do produto/equipamento não-ótica a buscar - nunca "Peça" (não damos
+  // manutenção em peça avulsa, só no equipamento/serviço em si).
+  const [tipoProdutoEntrada, setTipoProdutoEntrada] = useState<'Produto' | 'Serviço'>('Produto');
   const [convertendo, setConvertendo] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<Entrada | null>(null);
   const [fotosDetalhe, setFotosDetalhe] = useState<{ id: number; url: string | null }[]>([]);
   const [condicaoParaAdicionar, setCondicaoParaAdicionar] = useState('');
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
+  const [filtro, setFiltro] = useState('');
 
   // Minimizar/restaurar preservando dados entre telas. Os File das fotos ficam
   // vivos porque o contexto de rascunhos mora na raiz do app.
@@ -250,6 +254,22 @@ export function EntradaEquipamento() {
   function cliente(id: number) {
     return clientesQuery.data?.find((c) => c.id === id);
   }
+
+  const linhas = useMemo(() => {
+    const todas = entradasQuery.data ?? [];
+    if (!filtro.trim()) return todas;
+    const termo = filtro.trim().toLowerCase();
+    return todas.filter(
+      (e) =>
+        e.codigo_entrada.toLowerCase().includes(termo) ||
+        (cliente(e.cliente_id)?.razao_social ?? '').toLowerCase().includes(termo) ||
+        (e.equipamento_desc ?? '').toLowerCase().includes(termo) ||
+        (e.equipamento_sn ?? '').toLowerCase().includes(termo) ||
+        (e.nf_remessa_numero ?? '').toLowerCase().includes(termo) ||
+        (e.numero_controle_cliente ?? '').toLowerCase().includes(termo),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entradasQuery.data, filtro, clientesQuery.data]);
 
   // Cadastro rápido do cliente final (unidade atendida) direto da Entrada -
   // só o nome, sem passar pelo formulário completo de cliente (CNPJ é
@@ -527,6 +547,13 @@ export function EntradaEquipamento() {
         </button>
       </div>
 
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por código, cliente, equipamento, série ou NF..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
+
       <table className="tabela-crud">
         <thead>
           <tr>
@@ -541,7 +568,7 @@ export function EntradaEquipamento() {
           </tr>
         </thead>
         <tbody>
-          {(entradasQuery.data ?? []).map((e) => (
+          {linhas.map((e) => (
             <tr key={e.id}>
               <td className="mono">{e.codigo_entrada}</td>
               <td>{cliente(e.cliente_id)?.razao_social}</td>
@@ -654,17 +681,35 @@ export function EntradaEquipamento() {
             </div>
             <div className="campo-form">
               <label>Ou selecionar de outro tipo de produto/equipamento (não-ótica)</label>
-              <select defaultValue="" onChange={(e) => preencherDeProduto(e.target.value)}>
-                <option value="">Preencher manualmente...</option>
-                {(produtosCatalogoQuery.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome} {p.marca_fabricante ? `- ${p.marca_fabricante}` : ''} {p.tipo ? `(${p.tipo})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
+                  type="button"
+                  className={tipoProdutoEntrada === 'Produto' ? 'botao-primario botao-pequeno' : 'botao-secundario botao-pequeno'}
+                  onClick={() => setTipoProdutoEntrada('Produto')}
+                >
+                  Produto
+                </button>
+                <button
+                  type="button"
+                  className={tipoProdutoEntrada === 'Serviço' ? 'botao-primario botao-pequeno' : 'botao-secundario botao-pequeno'}
+                  onClick={() => setTipoProdutoEntrada('Serviço')}
+                >
+                  Serviço
+                </button>
+              </div>
+              <ComboboxBusca
+                opcoes={(produtosCatalogoQuery.data ?? [])
+                  .filter((p) => p.tipo === tipoProdutoEntrada)
+                  .map((p) => ({
+                    value: String(p.id),
+                    label: `${p.nome}${p.marca_fabricante ? ` - ${p.marca_fabricante}` : ''}`,
+                  }))}
+                valor=""
+                onChange={(valor) => preencherDeProduto(valor)}
+              />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Para peças/equipamentos que não são ópticas (ex.: peça de mão de shaver, motor, fonte de luz) — vêm do
-                cadastro de Produtos e serviços.
+                Só produtos e serviços cadastrados como "{tipoProdutoEntrada}" aparecem aqui - peças não entram
+                (não damos manutenção em peças avulsas, só nos equipamentos).
               </p>
             </div>
             <div className="campo-form">

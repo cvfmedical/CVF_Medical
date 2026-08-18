@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
@@ -11,6 +12,7 @@ import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrc
 export function OrcamentosAprovados() {
   const navigate = useNavigate();
   const query = useOrcamentosAprovados();
+  const [filtro, setFiltro] = useState('');
 
   function total(o: OrcamentoAprovado) {
     if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
@@ -23,6 +25,17 @@ export function OrcamentosAprovados() {
 
   if (query.isLoading) return <CarregandoTela />;
 
+  const linhas = (query.data ?? []).filter((o) => {
+    if (!filtro.trim()) return true;
+    const termo = filtro.trim().toLowerCase();
+    return (
+      o.numero_orcamento.toLowerCase().includes(termo) ||
+      (o.ordens_servico?.numero_os ?? '').toLowerCase().includes(termo) ||
+      (o.ordens_servico?.cliente_nome ?? '').toLowerCase().includes(termo) ||
+      (o.ordens_servico?.optica_desc ?? '').toLowerCase().includes(termo)
+    );
+  });
+
   return (
     <div>
       <h1>Orçamentos aprovados</h1>
@@ -30,6 +43,13 @@ export function OrcamentosAprovados() {
         Ordem de chegada da aprovação do cliente - o primeiro a aprovar aparece primeiro. Atualiza sozinha conforme
         novas aprovações chegam.
       </p>
+
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nº orçamento, OS, cliente ou equipamento..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
 
       <table className="tabela-crud">
         <thead>
@@ -44,7 +64,7 @@ export function OrcamentosAprovados() {
           </tr>
         </thead>
         <tbody>
-          {(query.data ?? []).map((o) => (
+          {linhas.map((o) => (
             <tr key={o.id}>
               <td>{o.data_resposta_cliente ? new Date(o.data_resposta_cliente).toLocaleString('pt-BR') : '-'}</td>
               <td className="mono">{o.numero_orcamento}</td>
@@ -62,9 +82,9 @@ export function OrcamentosAprovados() {
               </td>
             </tr>
           ))}
-          {(query.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhum orçamento aprovado aguardando manutenção.</td>
+              <td colSpan={7}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>

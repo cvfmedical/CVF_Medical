@@ -88,6 +88,12 @@ export function Entrega() {
       titulo="Entrega ao cliente"
       tabela="entregas"
       ordenarPor="id"
+      camposFiltro={[
+        (r) => porId(r.ordem_servico_id)?.numero_os ?? '',
+        (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '',
+        'forma_devolucao',
+        'nf_devolucao_numero',
+      ]}
       colunas={[
         {
           chave: 'ordem_servico_id',

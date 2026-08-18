@@ -81,6 +81,7 @@ export function Faturamento() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [filtro, setFiltro] = useState('');
 
   const contasQuery = useQuery({
     queryKey: ['faturamento-contas-receber'],
@@ -176,6 +177,17 @@ export function Faturamento() {
   function nomeCliente(id: number | null) {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}` : '-';
   }
+
+  const linhasFiltradas = linhas.filter((l) => {
+    if (!filtro.trim()) return true;
+    const termo = filtro.trim().toLowerCase();
+    return (
+      l.numero.toLowerCase().includes(termo) ||
+      l.descricao.toLowerCase().includes(termo) ||
+      nomeCliente(l.clienteId).toLowerCase().includes(termo) ||
+      (l.nf_numero ?? '').toLowerCase().includes(termo)
+    );
+  });
 
   function abrirLancarNota(l: LinhaFaturamento) {
     setLinhaSelecionada(l);
@@ -304,6 +316,13 @@ export function Faturamento() {
         </div>
       )}
 
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nº, descrição, cliente ou nº da NF..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
+
       <table className="tabela-crud">
         <thead>
           <tr>
@@ -316,7 +335,7 @@ export function Faturamento() {
           </tr>
         </thead>
         <tbody>
-          {linhas.map((l) => (
+          {linhasFiltradas.map((l) => (
             <tr key={l.chave}>
               <td className="mono">{l.numero}</td>
               <td>{nomeCliente(l.clienteId)}</td>

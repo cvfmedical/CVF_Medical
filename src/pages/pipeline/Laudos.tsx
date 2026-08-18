@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
@@ -35,6 +35,7 @@ export function Laudos() {
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [form, setForm] = useState({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+  const [filtro, setFiltro] = useState('');
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('laudos', {
     titulo: 'Nova nota técnica interna',
@@ -62,6 +63,22 @@ export function Laudos() {
       return data as Laudo[];
     },
   });
+
+  const linhas = useMemo(() => {
+    const todas = laudosQuery.data ?? [];
+    if (!filtro.trim()) return todas;
+    const termo = filtro.trim().toLowerCase();
+    return todas.filter((l) => {
+      const os = porId(l.ordem_servico_id);
+      return (
+        l.numero_laudo.toLowerCase().includes(termo) ||
+        (os?.numero_os ?? '').toLowerCase().includes(termo) ||
+        (os?.cliente_nome ?? '').toLowerCase().includes(termo) ||
+        (l.tecnico_responsavel ?? '').toLowerCase().includes(termo)
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laudosQuery.data, filtro]);
 
   async function baixarPdf(caminho: string | null) {
     if (!caminho) return;
@@ -140,6 +157,13 @@ export function Laudos() {
         <strong> nota interna simplificada</strong> (sem medições) e todos os documentos aparecem na lista abaixo.
       </p>
 
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nº laudo, OS, cliente ou técnico..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
+
       <table className="tabela-crud">
         <thead>
           <tr>
@@ -152,7 +176,7 @@ export function Laudos() {
           </tr>
         </thead>
         <tbody>
-          {(laudosQuery.data ?? []).map((l) => (
+          {linhas.map((l) => (
             <tr key={l.id}>
               <td className="mono">{l.numero_laudo}</td>
               <td className="mono">{porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`}</td>
@@ -168,9 +192,9 @@ export function Laudos() {
               </td>
             </tr>
           ))}
-          {(laudosQuery.data ?? []).length === 0 && (
+          {linhas.length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhum laudo emitido ainda.</td>
+              <td colSpan={6}>Nenhum laudo encontrado.</td>
             </tr>
           )}
         </tbody>

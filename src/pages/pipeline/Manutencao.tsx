@@ -47,6 +47,7 @@ export function Manutencao() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [filtro, setFiltro] = useState('');
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('manutencao', {
     titulo: 'Nova manutenção',
@@ -199,6 +200,17 @@ export function Manutencao() {
 
   if (isLoading || manutencoesQuery.isLoading) return <CarregandoTela />;
 
+  const linhas = (manutencoesQuery.data ?? []).filter((m) => {
+    if (!filtro.trim()) return true;
+    const termo = filtro.trim().toLowerCase();
+    const os = porId(m.ordem_servico_id);
+    return (
+      (os?.numero_os ?? '').toLowerCase().includes(termo) ||
+      (os?.cliente_nome ?? '').toLowerCase().includes(termo) ||
+      (m.observacoes ?? '').toLowerCase().includes(termo)
+    );
+  });
+
   return (
     <div>
       <div className="crud-cabecalho">
@@ -207,6 +219,13 @@ export function Manutencao() {
           <IconPlus size={16} /> Novo
         </button>
       </div>
+
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por OS, cliente ou observações..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
 
       <table className="tabela-crud">
         <thead>
@@ -219,7 +238,7 @@ export function Manutencao() {
           </tr>
         </thead>
         <tbody>
-          {(manutencoesQuery.data ?? []).map((m) => (
+          {linhas.map((m) => (
             <tr key={m.id}>
               <td className="mono">{porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`}</td>
               <td>{m.data_inicio ? new Date(m.data_inicio).toLocaleDateString('pt-BR') : '-'}</td>

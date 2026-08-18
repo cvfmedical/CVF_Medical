@@ -39,6 +39,7 @@ export function MedicaoDimensional() {
         titulo="Medição dimensional (ISO 8600-4)"
         tabela="medicoes_dimensionais"
         ordenarPor="id"
+        camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
         colunas={[
           {
             chave: 'ordem_servico_id',

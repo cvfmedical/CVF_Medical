@@ -44,6 +44,7 @@ export function ContasReceber() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [filtro, setFiltro] = useState('');
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('contas-receber', {
     titulo: 'Novo lançamento (conta a receber)',
@@ -162,6 +163,16 @@ export function ContasReceber() {
     .filter((c) => c.status === 'Em aberto')
     .reduce((soma, c) => soma + Number(c.valor), 0);
 
+  const linhas = (query.data ?? []).filter((c) => {
+    if (!filtro.trim()) return true;
+    const termo = filtro.trim().toLowerCase();
+    return (
+      c.numero_conta.toLowerCase().includes(termo) ||
+      nomeCliente(c.cliente_id).toLowerCase().includes(termo) ||
+      (c.descricao ?? '').toLowerCase().includes(termo)
+    );
+  });
+
   return (
     <div>
       <div className="crud-cabecalho">
@@ -173,6 +184,13 @@ export function ContasReceber() {
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Contas de orçamentos aprovados são lançadas automaticamente aqui. Total em aberto: R$ {totalEmAberto.toFixed(2)}
       </p>
+
+      <input
+        className="campo-filtro"
+        placeholder="Buscar por nº conta, cliente ou descrição..."
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+      />
 
       <table className="tabela-crud">
         <thead>
@@ -187,7 +205,7 @@ export function ContasReceber() {
           </tr>
         </thead>
         <tbody>
-          {(query.data ?? []).map((c) => {
+          {linhas.map((c) => {
             const st = statusExibicao(c);
             return (
               <tr key={c.id}>

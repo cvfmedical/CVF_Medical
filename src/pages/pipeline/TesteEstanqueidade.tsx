@@ -48,6 +48,7 @@ export function TesteEstanqueidade() {
         titulo="Teste de estanqueidade"
         tabela="testes_estanqueidade"
         ordenarPor="id"
+        camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
         valorInicial={{ imersao_total: false }}
         colunas={[
           {

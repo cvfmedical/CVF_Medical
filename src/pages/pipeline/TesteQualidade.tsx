@@ -22,6 +22,7 @@ export function TesteQualidade() {
         titulo="Teste de qualidade / funcionamento"
         tabela="testes_qualidade"
         ordenarPor="id"
+        camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
         colunas={[
           {
             chave: 'ordem_servico_id',
