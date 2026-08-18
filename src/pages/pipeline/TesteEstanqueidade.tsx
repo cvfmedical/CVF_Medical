@@ -122,7 +122,7 @@ export function TesteEstanqueidade() {
           { name: 'pressao_aplicada_kpa', label: 'Pressão aplicada / lida no manômetro (kPa) - mínimo 20', type: 'number', obrigatorio: true },
           {
             name: 'pressao_maxima_fabricante_kpa',
-            label: 'Pressão máx. segura do fabricante/RT (kPa) - trava de sobrepressão',
+            label: 'Pressão máx. segura do fabricante/RT (kPa) - opcional, trava de segurança da CVF (não é exigência da ISO 8600-7)',
             type: 'number',
           },
           { name: 'tempo_segundos', label: 'Tempo com pressão mantida e imerso (segundos) - mínimo 60', type: 'number', obrigatorio: true },

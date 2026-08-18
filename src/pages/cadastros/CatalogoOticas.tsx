@@ -68,13 +68,17 @@ export function CatalogoOticas() {
       ordenarPor="fabricante"
       camposFiltro={['fabricante', 'modelo', 'tipo']}
       // Novos modelos já nascem com os critérios ISO 8600-1 (15% / 10°),
-      // distância do Método A (50mm) e método A por padrão.
+      // distância do Método A (50mm) e método A por padrão. Pressão máxima
+      // 25 kPa é o padrão adotado pela CVF (referência: leak tester Storz,
+      // ~26,7 kPa) - não é exigência da norma, é só a trava de segurança
+      // padrão; ajustável por modelo se um fabricante especificar outro valor.
       valorInicial={{
         tolerancia_fov_pct: 15,
         tolerancia_direcao_graus: 10,
         distancia_medicao_mm: 50,
         metodo_iso: 'A',
         resolucao_tolerancia_pct: 20,
+        pressao_maxima_kpa: 25,
       }}
       colunas={[
         { chave: 'fabricante', label: 'Fabricante' },
