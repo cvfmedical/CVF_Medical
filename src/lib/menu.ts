@@ -117,6 +117,7 @@ export const MENU: CategoriaMenu[] = [
     icone: IconCoin,
     itens: [
       { label: 'Precificar orçamentos', path: '/orcamento-financeiro', categoria: 'financeiro', implementado: false },
+      { label: 'Lançamento retroativo', path: '/financeiro/lancamento-retroativo', categoria: 'financeiro', implementado: false },
       { label: 'Faturamento (NF-e / NFS-e)', path: '/financeiro/faturamento', categoria: 'financeiro', implementado: false },
       { label: 'Contas a receber', path: '/financeiro/contas-receber', categoria: 'financeiro', implementado: false },
       { label: 'Contas a pagar', path: '/financeiro/contas-pagar', categoria: 'financeiro', implementado: false },

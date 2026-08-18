@@ -35,6 +35,7 @@ import { OrdensServicoPanel } from './pages/pipeline/OrdensServicoPanel';
 import { OrcamentoTecnico } from './pages/pipeline/OrcamentoTecnico';
 import { OrcamentosAprovados } from './pages/pipeline/OrcamentosAprovados';
 import { OrcamentoFinanceiro } from './pages/pipeline/OrcamentoFinanceiro';
+import { LancamentoRetroativo } from './pages/financeiro/LancamentoRetroativo';
 import { Manutencao } from './pages/pipeline/Manutencao';
 import { TesteEstanqueidade } from './pages/pipeline/TesteEstanqueidade';
 import { TesteAutoclave } from './pages/pipeline/TesteAutoclave';
@@ -82,6 +83,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/orcamento-tecnico': OrcamentoTecnico,
   '/orcamentos-aprovados': OrcamentosAprovados,
   '/orcamento-financeiro': OrcamentoFinanceiro,
+  '/financeiro/lancamento-retroativo': LancamentoRetroativo,
   '/manutencao': Manutencao,
   '/teste-estanqueidade': TesteEstanqueidade,
   '/teste-autoclave': TesteAutoclave,
