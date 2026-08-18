@@ -270,14 +270,12 @@ export function OrcamentoFinanceiro() {
     },
   });
 
-  const produtosFiltradosFinanceiro = (produtosQuery.data ?? []).filter((p) => {
-    if (p.tipo === 'Produto') return false;
-    const os = orcamentoSelecionado?.ordens_servico;
-    if (!os?.grupo || !p.categoria) return true;
-    if (p.categoria !== os.grupo) return false;
-    if (p.subgrupo && os.subgrupo && p.subgrupo !== os.subgrupo) return false;
-    return true;
-  });
+  // Ao contrário do seletor de peças do técnico, este NÃO filtra por
+  // Grupo/Subgrupo da OS - itens avulsos do financeiro (hora técnica, taxa
+  // de urgência etc.) normalmente não são específicos de um equipamento, e
+  // filtrar por grupo os esconderia sempre (ex.: "HORA TÉCNICA" tem seu
+  // próprio grupo cadastrado, que nunca bate com o grupo do equipamento).
+  const produtosFiltradosFinanceiro = (produtosQuery.data ?? []).filter((p) => p.tipo !== 'Produto');
 
   async function adicionarItemFinanceiro() {
     if (!selecionadoId) return;
@@ -1446,16 +1444,22 @@ export function OrcamentoFinanceiro() {
                     onChange={(e) => setNovoItemFinanceiro((f) => ({ ...f, descricao_servico: e.target.value }))}
                   />
                 </div>
-                <div style={{ width: 90 }}>
+                <div style={{ width: 70, flexShrink: 0 }}>
                   <label style={{ fontSize: 12 }}>Qtd.</label>
                   <input
                     type="number"
                     min={1}
                     value={novoItemFinanceiro.quantidade}
                     onChange={(e) => setNovoItemFinanceiro((f) => ({ ...f, quantidade: e.target.value }))}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
-                <button className="botao-secundario botao-pequeno" onClick={adicionarItemFinanceiro} disabled={adicionandoItem}>
+                <button
+                  className="botao-secundario botao-pequeno"
+                  style={{ flexShrink: 0 }}
+                  onClick={adicionarItemFinanceiro}
+                  disabled={adicionandoItem}
+                >
                   {adicionandoItem ? 'Adicionando...' : 'Adicionar item'}
                 </button>
               </div>
