@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconEye, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash, IconX } from '@tabler/icons-react';
+import { IconEye, IconMail, IconPencil, IconPlus, IconPrinter, IconShare, IconTrash, IconX } from '@tabler/icons-react';
 import { CHECKLIST_AVARIAS, type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { imprimirRegistroEntrada } from '../../lib/relatorioEntrada';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
@@ -130,6 +130,7 @@ export function EntradaEquipamento() {
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
   const [filtro, setFiltro] = useState('');
+  const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
 
   // Minimizar/restaurar preservando dados entre telas. Os File das fotos ficam
   // vivos porque o contexto de rascunhos mora na raiz do app.
@@ -525,6 +526,43 @@ export function EntradaEquipamento() {
     imprimirRegistroEntrada(c, entrada, urls);
   }
 
+  // E-mail automático (via Resend, servidor) avisando o cliente que o
+  // equipamento chegou e já passou pela triagem - diferente do botão
+  // "Enviar link ao cliente" (que só abre um mailto:/WhatsApp manual).
+  async function enviarEmailChegada(entrada: Entrada) {
+    const c = cliente(entrada.cliente_id);
+    if (!c?.email) {
+      alert('Este cliente não tem e-mail cadastrado.');
+      return;
+    }
+    setEnviandoEmailId(entrada.id);
+    try {
+      const equipamento = [entrada.equipamento_desc, entrada.equipamento_fab].filter(Boolean).join(' - ');
+      const html = `<p>Prezado(a) cliente,</p>
+        <p>Informamos que o equipamento <strong>${equipamento || 'informado'}</strong>${entrada.equipamento_sn ? ` (Nº série ${entrada.equipamento_sn})` : ''}, referente à entrada <strong>${entrada.codigo_entrada}</strong>, foi recebido em nossa unidade e já passou pela triagem inicial.</p>
+        <p>Nossa equipe técnica dará início à avaliação e, em breve, você receberá o orçamento de manutenção.</p>
+        <p>Acompanhe o andamento a qualquer momento pelo Portal do Cliente:<br/>
+        <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
+        <p>Atenciosamente,<br/><strong>Q-CVF Medical</strong></p>`;
+
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: {
+          to: c.email,
+          subject: `Q-CVF Medical - Equipamento recebido (${entrada.codigo_entrada})`,
+          html,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+      alert(`E-mail enviado para ${c.email}.`);
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setEnviandoEmailId(null);
+    }
+  }
+
   function compartilharLink(entrada: Entrada) {
     const c = cliente(entrada.cliente_id);
     const mensagem = `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`;
@@ -541,7 +579,7 @@ export function EntradaEquipamento() {
   return (
     <div>
       <div className="crud-cabecalho">
-        <h1>Entrada do equipamento</h1>
+        <h1>Recebimento / triagem</h1>
         <button className="botao-primario botao-pequeno" onClick={abrirNova}>
           <IconPlus size={16} /> Nova entrada
         </button>
@@ -593,6 +631,14 @@ export function EntradaEquipamento() {
                 </button>
                 <button className="botao-icone" title="Enviar link ao cliente" onClick={() => compartilharLink(e)}>
                   <IconShare size={16} />
+                </button>
+                <button
+                  className="botao-icone"
+                  title="Enviar e-mail automático (equipamento recebido / triagem concluída)"
+                  disabled={enviandoEmailId === e.id}
+                  onClick={() => enviarEmailChegada(e)}
+                >
+                  <IconMail size={16} />
                 </button>
                 <button
                   className="botao-icone perigo"

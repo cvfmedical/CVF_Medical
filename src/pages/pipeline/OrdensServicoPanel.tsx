@@ -107,7 +107,7 @@ export function OrdensServicoPanel() {
 
   return (
     <div>
-      <h1>Ordens de serviço</h1>
+      <h1>Ordem de serviço / identificação de peças danificadas</h1>
       <input
         className="campo-filtro"
         placeholder="Buscar por nº OS, cliente, equipamento ou nº de série..."

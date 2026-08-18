@@ -57,13 +57,13 @@ export const MENU: CategoriaMenu[] = [
     titulo: 'Recepção & OS',
     icone: IconClipboardList,
     itens: [
-      { label: 'Entrada do equipamento', path: '/entrada-equipamento', categoria: 'recepcao_os', implementado: false },
+      { label: 'Recebimento / triagem', path: '/entrada-equipamento', categoria: 'recepcao_os', implementado: false },
       // Rota existe (acessada via "Converter em OS" e pelo botão em Ordens
       // de serviço), mas escondida do menu: aberta em branco não faz nada,
       // pois precisa de uma OS específica (?os=...).
       { label: 'Registro de entrada (revisão)', path: '/registro-entrada', categoria: 'recepcao_os', implementado: false, oculto: true },
       { label: 'Abrir nova OS', path: '/ordens-servico/nova', categoria: 'recepcao_os', implementado: false },
-      { label: 'Ordens de serviço', path: '/ordens-servico', categoria: 'recepcao_os', implementado: false },
+      { label: 'Ordem de serviço / identificação de peças danificadas', path: '/ordens-servico', categoria: 'recepcao_os', implementado: false },
       { label: 'Entrega ao cliente', path: '/entrega', categoria: 'recepcao_os', implementado: false },
     ],
   },
