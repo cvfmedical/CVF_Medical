@@ -22,6 +22,8 @@ interface OSResumo {
   defeito_relatado: string | null;
   triagem_avarias: ChecklistAvarias | null;
   prazo_entrega: string | null;
+  grupo: string | null;
+  subgrupo: string | null;
 }
 
 interface EntradaResumo {
@@ -69,7 +71,7 @@ export function RegistroEntrada() {
     queryFn: async (): Promise<OSResumo> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega')
+        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega, grupo, subgrupo')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
@@ -109,6 +111,17 @@ export function RegistroEntrada() {
     },
   });
   const travado = !!orcamentoExisteQuery.data;
+
+  // Mesmo filtro por grupo/subgrupo já aplicado no Recebimento/Triagem -
+  // aqui a OS já tem o grupo salvo (herdado da Entrada), então a lista fica
+  // consistente em vez de mostrar avarias de outros tipos de equipamento.
+  const checklistFiltrado = (avariasTriagemQuery.data ?? []).filter((item) => {
+    if (!item.grupo) return true;
+    if (!osQuery.data?.grupo) return true;
+    if (item.grupo !== osQuery.data.grupo) return false;
+    if (item.subgrupo && osQuery.data.subgrupo && item.subgrupo !== osQuery.data.subgrupo) return false;
+    return true;
+  });
 
   const clienteQuery = useQuery({
     queryKey: ['cliente-registro-entrada', osQuery.data?.cliente_id],
@@ -288,7 +301,7 @@ export function RegistroEntrada() {
 
       <div className="campo-form">
         <label>Avarias identificadas (marque tudo que se aplica)</label>
-        {(avariasTriagemQuery.data ?? []).map((item) => (
+        {checklistFiltrado.map((item) => (
           <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
             <input
               type="checkbox"

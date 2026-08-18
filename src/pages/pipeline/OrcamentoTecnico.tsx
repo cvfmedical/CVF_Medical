@@ -166,16 +166,16 @@ export function OrcamentoTecnico() {
 
   // "Produto" é o equipamento em si (não vendemos equipamento no orçamento,
   // só incluímos peças/serviços pra informar o que foi trocado/feito) - só
-  // Peça/Serviço aparecem aqui. Filtra também pelo Grupo/Subgrupo salvo na
-  // OS (herdado da Entrada), quando o item tiver essa marcação.
-  const produtosFiltrados = (produtosQuery.data ?? []).filter((p) => {
-    if (p.tipo === 'Produto') return false;
-    const os = osDetalheQuery.data;
-    if (!os?.grupo || !p.categoria) return true;
-    if (p.categoria !== os.grupo) return false;
-    if (p.subgrupo && os.subgrupo && p.subgrupo !== os.subgrupo) return false;
-    return true;
-  });
+  // Peça/Serviço aparecem aqui.
+  //
+  // O filtro por Grupo/Subgrupo (comparado com o que ficou salvo na OS) foi
+  // desligado por enquanto: a classificação de Grupo/Subgrupo das peças
+  // ainda está sendo ajustada manualmente (ex.: "ÓTICA RIGIDA"/"MINI ÓTICA
+  // RIGIDA" não batem com o "ÓTICA" salvo na OS) e, com o filtro estrito,
+  // uma peça fora do padrão esperado simplesmente sumia da lista - pior
+  // que mostrar peças a mais. Assim que a classificação estiver consistente
+  // dá pra reativar.
+  const produtosFiltrados = (produtosQuery.data ?? []).filter((p) => p.tipo !== 'Produto');
 
   const observacoesQuery = useQuery({
     queryKey: ['observacoes-defeito-opcoes'],
@@ -515,7 +515,7 @@ export function OrcamentoTecnico() {
                 onChange={(valor) => setNovoItem((f) => ({ ...f, produto_servico_id: valor }))}
               />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Só mostra peças/serviços (nunca equipamentos){osDetalheQuery.data?.grupo ? ` do grupo "${osDetalheQuery.data.grupo}"` : ''}.
+                Só mostra peças/serviços (nunca equipamentos).
               </p>
             </div>
             <div className="campo-form">
