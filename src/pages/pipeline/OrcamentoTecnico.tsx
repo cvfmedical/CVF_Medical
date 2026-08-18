@@ -30,6 +30,7 @@ interface OSDetalhe {
   optica_sn: string | null;
   defeito_relatado: string | null;
   prazo_entrega: string | null;
+  eh_otica: boolean | null;
 }
 
 interface Cliente {
@@ -126,7 +127,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<OSDetalhe> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega')
+        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
@@ -159,6 +160,25 @@ export function OrcamentoTecnico() {
       if (error) throw error;
       return data as { id: number; nome: string; categoria: string | null; subgrupo: string | null }[];
     },
+  });
+
+  // Cada Grupo pode ser marcado como "só ótica"/"só não-ótica"/"ambos" -
+  // usado abaixo pra filtrar o catálogo do "Adicionar Item" conforme a OS
+  // selecionada seja ou não de uma ótica.
+  const gruposQuery = useQuery({
+    queryKey: ['grupos-produtos-servicos-eh-otica'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('categorias_produtos_servicos').select('descricao, eh_otica');
+      if (error) throw error;
+      return data as { descricao: string; eh_otica: boolean | null }[];
+    },
+  });
+
+  const produtosFiltrados = (produtosQuery.data ?? []).filter((p) => {
+    if (osDetalheQuery.data?.eh_otica == null) return true;
+    const grupo = gruposQuery.data?.find((g) => g.descricao === p.categoria);
+    if (!grupo || grupo.eh_otica == null) return true;
+    return grupo.eh_otica === osDetalheQuery.data.eh_otica;
   });
 
   const observacoesQuery = useQuery({
@@ -494,10 +514,16 @@ export function OrcamentoTecnico() {
             <div className="campo-form">
               <label>Produto/serviço do catálogo (deixe em branco se for só mão de obra)</label>
               <ComboboxBusca
-                opcoes={(produtosQuery.data ?? []).map((p) => ({ value: String(p.id), label: p.nome }))}
+                opcoes={produtosFiltrados.map((p) => ({ value: String(p.id), label: p.nome }))}
                 valor={String(novoItem.produto_servico_id ?? '')}
                 onChange={(valor) => setNovoItem((f) => ({ ...f, produto_servico_id: valor }))}
               />
+              {osDetalheQuery.data?.eh_otica != null && (
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                  Mostrando só itens de grupos marcados como "{osDetalheQuery.data.eh_otica ? 'ótica' : 'não-ótica'}"
+                  ou "ambos".
+                </p>
+              )}
             </div>
             <div className="campo-form">
               <label>Serviço prestado (quando não há troca de peça)</label>
