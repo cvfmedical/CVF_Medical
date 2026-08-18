@@ -49,7 +49,12 @@ export function TesteEstanqueidade() {
         tabela="testes_estanqueidade"
         ordenarPor="id"
         camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
-        valorInicial={{ imersao_total: false }}
+        // Pressão e tempo já vêm preenchidos com o mínimo exigido pela ISO
+        // 8600-7 (20 kPa / 60 s) - é o valor que a CVF aplica como padrão de
+        // procedimento; o técnico ajusta se aplicar mais margem. Temperatura,
+        // método e imersão total ficam em branco de propósito: são leituras/
+        // confirmações reais de cada ensaio, não valores fixos da norma.
+        valorInicial={{ imersao_total: false, pressao_aplicada_kpa: 20, tempo_segundos: 60 }}
         colunas={[
           {
             chave: 'ordem_servico_id',
