@@ -215,9 +215,14 @@ export function EntradaEquipamento() {
   function preencherDoCatalogo(catalogoId: string) {
     const item = catalogoQuery.data?.find((c) => String(c.id) === catalogoId);
     if (!item) return;
-    const partes = [item.tipo, item.diametro_mm ? `${item.diametro_mm}mm` : null, item.angulo_graus != null ? `${item.angulo_graus}°` : null];
-    const descricao = partes.filter(Boolean).join(' ');
-    setForm((f) => ({ ...f, equipamento_fab: item.fabricante, equipamento_desc: descricao || item.modelo }));
+    // Fabricante fica só no campo próprio (equipamento_fab) - não repete
+    // dentro da descrição, pra não duplicar em telas que já mostram os
+    // dois juntos ("descrição (fabricante)") ou em linhas separadas.
+    setForm((f) => ({
+      ...f,
+      equipamento_fab: item.fabricante,
+      equipamento_desc: formatarModeloOtica({ ...item, fabricante: '' }),
+    }));
     setEhOtica(true);
     setCatalogoOticaId(catalogoId);
     setProdutoEntradaId('');
