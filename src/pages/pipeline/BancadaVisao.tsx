@@ -524,18 +524,22 @@ export function BancadaVisao() {
     // (OpenCV / manual) seguem inalterados.
     if (modeloId && spec && spec.fov_referencia_graus == null) {
       setErro('Modelo sem golden sample (FOV de referência). Cadastre em "Amostras-padrão" antes de emitir o laudo.');
+      setGerando(false);
       return;
     }
     if (modeloId && fovInformado && calibsValidas.length === 0) {
       setErro('Nenhum padrão de calibração válido (ativo e na validade). Atualize em "Calibração de padrões" antes do laudo.');
+      setGerando(false);
       return;
     }
     if (modeloId && fovInformado && !calibracaoId) {
       setErro('Selecione o padrão de calibração (alvo) usado no ensaio.');
+      setGerando(false);
       return;
     }
     if (modeloId && spec?.angulo_graus != null && fovInformado && direcaoMedida === '') {
       setErro('Informe a direção de visão medida — este modelo tem direção nominal (ISO 8600-1 §4.6).');
+      setGerando(false);
       return;
     }
     setGerando(true);
