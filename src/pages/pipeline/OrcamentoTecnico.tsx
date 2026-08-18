@@ -13,6 +13,7 @@ import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { CapturaFoto } from '../../components/CapturaFoto';
 
 interface Orcamento {
   id: number;
@@ -607,7 +608,10 @@ export function OrcamentoTecnico() {
             </div>
             <div className="campo-form">
               <label>Foto da peça danificada (opcional)</label>
-              <input type="file" accept="image/*" onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)} />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input type="file" accept="image/*" onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)} />
+                <CapturaFoto onCapturar={(arquivo) => setFotoItem(arquivo)} />
+              </div>
               {fotoItem && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
                   <span>{fotoItem.name}</span>
