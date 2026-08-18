@@ -12,6 +12,7 @@ import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 
 interface ProdutoServico {
   id: number;
@@ -162,9 +163,7 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
   const linhasFiltradas = (query.data ?? []).filter((p) => {
     const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
     return ativos.every(([chave, termo]) =>
-      String(valorColuna(p, chave) ?? '')
-        .toLowerCase()
-        .includes(termo.trim().toLowerCase()),
+      normalizarBusca(String(valorColuna(p, chave) ?? '')).includes(normalizarBusca(termo.trim())),
     );
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);

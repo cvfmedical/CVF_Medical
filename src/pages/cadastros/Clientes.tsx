@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -97,11 +98,11 @@ export function Clientes() {
 
   const linhas = (query.data ?? []).filter((c) => {
     if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return (
-      c.razao_social.toLowerCase().includes(termo) ||
+normalizarBusca(      c.razao_social).includes(termo) ||
       (c.cnpj ?? '').includes(termo) ||
-      (c.hospital_clinica ?? '').toLowerCase().includes(termo)
+normalizarBusca(      (c.hospital_clinica ?? '')).includes(termo)
     );
   });
 

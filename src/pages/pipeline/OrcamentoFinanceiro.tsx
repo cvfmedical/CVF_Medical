@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -1092,11 +1093,11 @@ export function OrcamentoFinanceiro() {
     if (!filtroLista.trim()) {
       return o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente';
     }
-    const termo = filtroLista.trim().toLowerCase();
+    const termo = normalizarBusca(filtroLista.trim());
     return (
-      o.numero_orcamento.toLowerCase().includes(termo) ||
-      (o.ordens_servico?.numero_os ?? '').toLowerCase().includes(termo) ||
-      (o.ordens_servico?.cliente_nome ?? '').toLowerCase().includes(termo)
+normalizarBusca(      o.numero_orcamento).includes(termo) ||
+normalizarBusca(      (o.ordens_servico?.numero_os ?? '')).includes(termo) ||
+normalizarBusca(      (o.ordens_servico?.cliente_nome ?? '')).includes(termo)
     );
   });
 

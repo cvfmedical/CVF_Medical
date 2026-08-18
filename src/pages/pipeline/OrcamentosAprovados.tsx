@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useNavigate } from 'react-router-dom';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
@@ -27,12 +28,12 @@ export function OrcamentosAprovados() {
 
   const linhas = (query.data ?? []).filter((o) => {
     if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return (
-      o.numero_orcamento.toLowerCase().includes(termo) ||
-      (o.ordens_servico?.numero_os ?? '').toLowerCase().includes(termo) ||
-      (o.ordens_servico?.cliente_nome ?? '').toLowerCase().includes(termo) ||
-      (o.ordens_servico?.optica_desc ?? '').toLowerCase().includes(termo)
+normalizarBusca(      o.numero_orcamento).includes(termo) ||
+normalizarBusca(      (o.ordens_servico?.numero_os ?? '')).includes(termo) ||
+normalizarBusca(      (o.ordens_servico?.cliente_nome ?? '')).includes(termo) ||
+normalizarBusca(      (o.ordens_servico?.optica_desc ?? '')).includes(termo)
     );
   });
 

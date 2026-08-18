@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -180,12 +181,12 @@ export function Faturamento() {
 
   const linhasFiltradas = linhas.filter((l) => {
     if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return (
-      l.numero.toLowerCase().includes(termo) ||
-      l.descricao.toLowerCase().includes(termo) ||
-      nomeCliente(l.clienteId).toLowerCase().includes(termo) ||
-      (l.nf_numero ?? '').toLowerCase().includes(termo)
+normalizarBusca(      l.numero).includes(termo) ||
+normalizarBusca(      l.descricao).includes(termo) ||
+normalizarBusca(      nomeCliente(l.clienteId)).includes(termo) ||
+normalizarBusca(      (l.nf_numero ?? '')).includes(termo)
     );
   });
 

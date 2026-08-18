@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -202,12 +203,12 @@ export function Manutencao() {
 
   const linhas = (manutencoesQuery.data ?? []).filter((m) => {
     if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     const os = porId(m.ordem_servico_id);
     return (
-      (os?.numero_os ?? '').toLowerCase().includes(termo) ||
-      (os?.cliente_nome ?? '').toLowerCase().includes(termo) ||
-      (m.observacoes ?? '').toLowerCase().includes(termo)
+normalizarBusca(      (os?.numero_os ?? '')).includes(termo) ||
+normalizarBusca(      (os?.cliente_nome ?? '')).includes(termo) ||
+normalizarBusca(      (m.observacoes ?? '')).includes(termo)
     );
   });
 

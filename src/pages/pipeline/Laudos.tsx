@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
@@ -67,14 +68,14 @@ export function Laudos() {
   const linhas = useMemo(() => {
     const todas = laudosQuery.data ?? [];
     if (!filtro.trim()) return todas;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return todas.filter((l) => {
       const os = porId(l.ordem_servico_id);
       return (
-        l.numero_laudo.toLowerCase().includes(termo) ||
-        (os?.numero_os ?? '').toLowerCase().includes(termo) ||
-        (os?.cliente_nome ?? '').toLowerCase().includes(termo) ||
-        (l.tecnico_responsavel ?? '').toLowerCase().includes(termo)
+normalizarBusca(        l.numero_laudo).includes(termo) ||
+normalizarBusca(        (os?.numero_os ?? '')).includes(termo) ||
+normalizarBusca(        (os?.cliente_nome ?? '')).includes(termo) ||
+normalizarBusca(        (l.tecnico_responsavel ?? '')).includes(termo)
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

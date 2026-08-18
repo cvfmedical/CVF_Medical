@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
@@ -175,11 +176,11 @@ export function SolicitacoesCompra() {
 
   const linhas = (query.data ?? []).filter((s) => {
     if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return (
-      s.numero_solicitacao.toLowerCase().includes(termo) ||
-      nomeItem(s).toLowerCase().includes(termo) ||
-      nomeFornecedor(s.fornecedor_id).toLowerCase().includes(termo)
+normalizarBusca(      s.numero_solicitacao).includes(termo) ||
+normalizarBusca(      nomeItem(s)).includes(termo) ||
+normalizarBusca(      nomeFornecedor(s.fornecedor_id)).includes(termo)
     );
   });
 

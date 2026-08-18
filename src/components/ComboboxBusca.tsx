@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { normalizarBusca } from '../lib/normalizarBusca';
 
 export interface OpcaoCombobox {
   value: string;
@@ -38,9 +39,9 @@ export function ComboboxBusca({
   const opcaoSelecionada = useMemo(() => opcoes.find((o) => o.value === valor) ?? null, [opcoes, valor]);
 
   const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
+    const termo = normalizarBusca(busca.trim());
     if (!termo) return opcoes;
-    return opcoes.filter((o) => o.label.toLowerCase().includes(termo));
+    return opcoes.filter((o) => normalizarBusca(o.label).includes(termo));
   }, [opcoes, busca]);
 
   useEffect(() => {

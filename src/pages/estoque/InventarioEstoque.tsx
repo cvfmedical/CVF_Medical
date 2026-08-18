@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -69,8 +70,8 @@ export function InventarioEstoque() {
 
   const linhas = (query.data ?? []).filter((p) => {
     if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
-    return p.nome.toLowerCase().includes(termo) || (p.codigo ?? '').toLowerCase().includes(termo);
+    const termo = normalizarBusca(filtro.trim());
+    return normalizarBusca(p.nome).includes(termo) || normalizarBusca(p.codigo ?? '').includes(termo);
   });
 
   function abrirMovimento(p: ProdutoEstoque) {

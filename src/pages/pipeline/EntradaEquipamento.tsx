@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -318,15 +319,15 @@ export function EntradaEquipamento() {
   const linhas = useMemo(() => {
     const todas = entradasQuery.data ?? [];
     if (!filtro.trim()) return todas;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return todas.filter(
       (e) =>
-        e.codigo_entrada.toLowerCase().includes(termo) ||
-        (cliente(e.cliente_id)?.razao_social ?? '').toLowerCase().includes(termo) ||
-        (e.equipamento_desc ?? '').toLowerCase().includes(termo) ||
-        (e.equipamento_sn ?? '').toLowerCase().includes(termo) ||
-        (e.nf_remessa_numero ?? '').toLowerCase().includes(termo) ||
-        (e.numero_controle_cliente ?? '').toLowerCase().includes(termo),
+normalizarBusca(        e.codigo_entrada).includes(termo) ||
+normalizarBusca(        (cliente(e.cliente_id)?.razao_social ?? '')).includes(termo) ||
+normalizarBusca(        (e.equipamento_desc ?? '')).includes(termo) ||
+normalizarBusca(        (e.equipamento_sn ?? '')).includes(termo) ||
+normalizarBusca(        (e.nf_remessa_numero ?? '')).includes(termo) ||
+normalizarBusca(        (e.numero_controle_cliente ?? '')).includes(termo),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entradasQuery.data, filtro, clientesQuery.data]);

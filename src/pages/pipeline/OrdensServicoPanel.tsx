@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { normalizarBusca } from '../../lib/normalizarBusca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -95,13 +96,13 @@ export function OrdensServicoPanel() {
   const linhas = useMemo(() => {
     const todas = query.data ?? [];
     if (!filtro.trim()) return todas;
-    const termo = filtro.trim().toLowerCase();
+    const termo = normalizarBusca(filtro.trim());
     return todas.filter(
       (os) =>
-        os.numero_os.toLowerCase().includes(termo) ||
-        os.cliente_nome.toLowerCase().includes(termo) ||
-        (os.optica_sn ?? '').toLowerCase().includes(termo) ||
-        (os.optica_desc ?? '').toLowerCase().includes(termo),
+normalizarBusca(        os.numero_os).includes(termo) ||
+normalizarBusca(        os.cliente_nome).includes(termo) ||
+normalizarBusca(        (os.optica_sn ?? '')).includes(termo) ||
+normalizarBusca(        (os.optica_desc ?? '')).includes(termo),
     );
   }, [query.data, filtro]);
 

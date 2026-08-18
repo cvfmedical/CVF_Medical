@@ -9,6 +9,7 @@ import { CarregandoTela } from './CarregandoTela';
 import { ComboboxBusca } from './ComboboxBusca';
 import { ThOrdenavel } from './ThOrdenavel';
 import { useLinhasOrdenadas } from '../lib/useOrdenacao';
+import { normalizarBusca } from '../lib/normalizarBusca';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'combobox' | 'checkbox' | 'date';
 
@@ -108,9 +109,9 @@ export function CrudPage<Row extends { id: number }>({
     if (ativos.length === 0) return todas;
     return todas.filter((linha) =>
       ativos.every(([chave, termo]) =>
-        String((linha as Record<string, unknown>)[chave] ?? '')
-          .toLowerCase()
-          .includes(termo.trim().toLowerCase()),
+        normalizarBusca(String((linha as Record<string, unknown>)[chave] ?? '')).includes(
+          normalizarBusca(termo.trim()),
+        ),
       ),
     );
   }, [listQuery.data, filtrosColuna]);
