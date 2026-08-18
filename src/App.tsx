@@ -14,7 +14,7 @@ import { Fornecedores } from './pages/cadastros/Fornecedores';
 import { Transportadoras } from './pages/cadastros/Transportadoras';
 import { CatalogoOticas } from './pages/cadastros/CatalogoOticas';
 import { EquipamentosClientes } from './pages/cadastros/EquipamentosClientes';
-import { ProdutosServicos } from './pages/cadastros/ProdutosServicos';
+import { ProdutosServicos, CadastroPecas } from './pages/cadastros/ProdutosServicos';
 import { PadroesCalibracao } from './pages/cadastros/PadroesCalibracao';
 import { AmostrasPadrao } from './pages/cadastros/AmostrasPadrao';
 import { TesteResolucao } from './pages/pipeline/TesteResolucao';
@@ -62,7 +62,8 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/transportadoras': Transportadoras,
   '/catalogo-oticas': CatalogoOticas,
   '/equipamentos': EquipamentosClientes,
-  '/produtos-servicos': ProdutosServicos,
+  '/produtos-servicos': CadastroPecas,
+  '/produtos-e-servicos': ProdutosServicos,
   '/padroes-calibracao': PadroesCalibracao,
   '/amostras-padrao': AmostrasPadrao,
   '/teste-resolucao': TesteResolucao,

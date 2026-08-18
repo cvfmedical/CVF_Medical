@@ -31,6 +31,8 @@ interface OSDetalhe {
   defeito_relatado: string | null;
   prazo_entrega: string | null;
   eh_otica: boolean | null;
+  grupo: string | null;
+  subgrupo: string | null;
 }
 
 interface Cliente {
@@ -127,7 +129,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<OSDetalhe> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica')
+        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica, grupo, subgrupo')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
@@ -154,31 +156,25 @@ export function OrcamentoTecnico() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('produtos_servicos')
-        .select('id, nome, categoria, subgrupo')
+        .select('id, nome, tipo, categoria, subgrupo')
         .eq('status_ativo', true)
         .order('nome');
       if (error) throw error;
-      return data as { id: number; nome: string; categoria: string | null; subgrupo: string | null }[];
+      return data as { id: number; nome: string; tipo: string | null; categoria: string | null; subgrupo: string | null }[];
     },
   });
 
-  // Cada Grupo pode ser marcado como "só ótica"/"só não-ótica"/"ambos" -
-  // usado abaixo pra filtrar o catálogo do "Adicionar Item" conforme a OS
-  // selecionada seja ou não de uma ótica.
-  const gruposQuery = useQuery({
-    queryKey: ['grupos-produtos-servicos-eh-otica'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('categorias_produtos_servicos').select('descricao, eh_otica');
-      if (error) throw error;
-      return data as { descricao: string; eh_otica: boolean | null }[];
-    },
-  });
-
+  // "Produto" é o equipamento em si (não vendemos equipamento no orçamento,
+  // só incluímos peças/serviços pra informar o que foi trocado/feito) - só
+  // Peça/Serviço aparecem aqui. Filtra também pelo Grupo/Subgrupo salvo na
+  // OS (herdado da Entrada), quando o item tiver essa marcação.
   const produtosFiltrados = (produtosQuery.data ?? []).filter((p) => {
-    if (osDetalheQuery.data?.eh_otica == null) return true;
-    const grupo = gruposQuery.data?.find((g) => g.descricao === p.categoria);
-    if (!grupo || grupo.eh_otica == null) return true;
-    return grupo.eh_otica === osDetalheQuery.data.eh_otica;
+    if (p.tipo === 'Produto') return false;
+    const os = osDetalheQuery.data;
+    if (!os?.grupo || !p.categoria) return true;
+    if (p.categoria !== os.grupo) return false;
+    if (p.subgrupo && os.subgrupo && p.subgrupo !== os.subgrupo) return false;
+    return true;
   });
 
   const observacoesQuery = useQuery({
@@ -512,18 +508,15 @@ export function OrcamentoTecnico() {
       {modalAberto && (
         <ModalJanela titulo="Adicionar item" aoFechar={() => setModalAberto(false)}>
             <div className="campo-form">
-              <label>Produto/serviço do catálogo (deixe em branco se for só mão de obra)</label>
+              <label>Peça ou serviço (deixe em branco se for só mão de obra)</label>
               <ComboboxBusca
                 opcoes={produtosFiltrados.map((p) => ({ value: String(p.id), label: p.nome }))}
                 valor={String(novoItem.produto_servico_id ?? '')}
                 onChange={(valor) => setNovoItem((f) => ({ ...f, produto_servico_id: valor }))}
               />
-              {osDetalheQuery.data?.eh_otica != null && (
-                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                  Mostrando só itens de grupos marcados como "{osDetalheQuery.data.eh_otica ? 'ótica' : 'não-ótica'}"
-                  ou "ambos".
-                </p>
-              )}
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Só mostra peças/serviços (nunca equipamentos){osDetalheQuery.data?.grupo ? ` do grupo "${osDetalheQuery.data.grupo}"` : ''}.
+              </p>
             </div>
             <div className="campo-form">
               <label>Serviço prestado (quando não há troca de peça)</label>

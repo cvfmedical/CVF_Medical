@@ -43,6 +43,8 @@ interface Entrada {
   eh_otica: boolean | null;
   catalogo_otica_id: number | null;
   cliente_final_id: number | null;
+  grupo: string | null;
+  subgrupo: string | null;
 }
 
 interface FotoEntrada {
@@ -121,15 +123,19 @@ export function EntradaEquipamento() {
   // cobrir entrada digitada na mão.
   const [ehOtica, setEhOtica] = useState<boolean | null>(null);
   const [catalogoOticaId, setCatalogoOticaId] = useState('');
-  // Produto (não-ótica) escolhido no combobox "outro tipo de produto" - só
-  // usado pra filtrar o checklist de avarias pelo grupo/subgrupo dele.
-  const [produtoEntradaId, setProdutoEntradaId] = useState('');
+  // Valor do combobox único "Selecionar tipo de equipamento" - combina
+  // catálogo de óticas e produtos/serviços num só campo, no formato
+  // "otica:<id>" ou "produto:<id>" (ver selecionarTipoEquipamento).
+  const [tipoEquipamentoSelecionado, setTipoEquipamentoSelecionado] = useState('');
+  // Grupo/Subgrupo do equipamento selecionado - fixo "ÓTICA"/"ÓTICA" quando
+  // vem do catálogo de óticas, ou copiado do produto/serviço escolhido
+  // quando não-ótica. Salvo na Entrada/OS pra filtrar peças/observações de
+  // defeito no Orçamento Técnico.
+  const [grupoEquipamento, setGrupoEquipamento] = useState('');
+  const [subgrupoEquipamento, setSubgrupoEquipamento] = useState('');
   // Preenchido só quando o Cliente selecionado é um terceirizado - identifica
   // qual cliente final (unidade atendida) está sendo atendido nesta entrada.
   const [clienteFinalId, setClienteFinalId] = useState('');
-  // Tipo do produto/equipamento não-ótica a buscar - nunca "Peça" (não damos
-  // manutenção em peça avulsa, só no equipamento/serviço em si).
-  const [tipoProdutoEntrada, setTipoProdutoEntrada] = useState<'Produto' | 'Serviço'>('Produto');
   const [convertendo, setConvertendo] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<Entrada | null>(null);
   const [fotosDetalhe, setFotosDetalhe] = useState<{ id: number; url: string | null }[]>([]);
@@ -153,6 +159,9 @@ export function EntradaEquipamento() {
       editando,
       ehOtica,
       catalogoOticaId,
+      tipoEquipamentoSelecionado,
+      grupoEquipamento,
+      subgrupoEquipamento,
     }),
     aoRestaurar: (e) => {
       setForm((e.form as typeof formVazio) ?? formVazio);
@@ -166,6 +175,9 @@ export function EntradaEquipamento() {
       setEditando((e.editando as Entrada | null) ?? null);
       setEhOtica((e.ehOtica as boolean | null) ?? null);
       setCatalogoOticaId((e.catalogoOticaId as string) ?? '');
+      setTipoEquipamentoSelecionado((e.tipoEquipamentoSelecionado as string) ?? '');
+      setGrupoEquipamento((e.grupoEquipamento as string) ?? '');
+      setSubgrupoEquipamento((e.subgrupoEquipamento as string) ?? '');
       setErro(null);
       setModalAberto(true);
     },
@@ -213,24 +225,10 @@ export function EntradaEquipamento() {
     },
   });
 
-  function preencherDoCatalogo(catalogoId: string) {
-    const item = catalogoQuery.data?.find((c) => String(c.id) === catalogoId);
-    if (!item) return;
-    // Fabricante fica só no campo próprio (equipamento_fab) - não repete
-    // dentro da descrição, pra não duplicar em telas que já mostram os
-    // dois juntos ("descrição (fabricante)") ou em linhas separadas.
-    setForm((f) => ({
-      ...f,
-      equipamento_fab: item.fabricante,
-      equipamento_desc: formatarModeloOtica({ ...item, fabricante: '' }),
-    }));
-    setEhOtica(true);
-    setCatalogoOticaId(catalogoId);
-    setProdutoEntradaId('');
-  }
-
   // Catálogo de produtos/serviços usado como fonte de OUTROS equipamentos
-  // (não-ótica) - ex.: peça de mão de shaver, motor, cabo, fonte de luz.
+  // (não-ótica) - ex.: peça de mão de shaver, bomba de infusão. Só tipo
+  // Produto/Serviço - "Peça" é peça de reposição, nunca um equipamento
+  // recebido pra manutenção.
   const produtosCatalogoQuery = useQuery({
     queryKey: ['produtos-servicos-catalogo-entrada'],
     queryFn: async (): Promise<ProdutoCatalogo[]> => {
@@ -238,33 +236,64 @@ export function EntradaEquipamento() {
         .from('produtos_servicos')
         .select('id, nome, marca_fabricante, tipo, categoria, subgrupo')
         .eq('status_ativo', true)
+        .in('tipo', ['Produto', 'Serviço'])
         .order('nome');
       if (error) throw error;
       return data as ProdutoCatalogo[];
     },
   });
 
-  function preencherDeProduto(produtoId: string) {
-    const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === produtoId);
-    if (!item) return;
-    const descricao = [item.nome, item.tipo ? `(${item.tipo})` : null].filter(Boolean).join(' ');
-    setForm((f) => ({ ...f, equipamento_fab: item.marca_fabricante ?? '', equipamento_desc: descricao }));
-    setEhOtica(false);
-    setCatalogoOticaId('');
-    setProdutoEntradaId(produtoId);
+  // Combobox único "Selecionar tipo de equipamento" - junta o catálogo de
+  // óticas (métricas ISO 8600) com os equipamentos não-ótica cadastrados em
+  // Produtos e serviços. O valor combina os dois catálogos como
+  // "otica:<id>" / "produto:<id>" pra distinguir de onde veio.
+  const opcoesTipoEquipamento = [
+    ...(catalogoQuery.data ?? []).map((c) => ({ value: `otica:${c.id}`, label: `Ótica — ${formatarModeloOtica(c)}` })),
+    ...(produtosCatalogoQuery.data ?? []).map((p) => ({
+      value: `produto:${p.id}`,
+      label: `${p.tipo} — ${p.nome}${p.marca_fabricante ? ` (${p.marca_fabricante})` : ''}`,
+    })),
+  ];
+
+  function selecionarTipoEquipamento(valor: string) {
+    setTipoEquipamentoSelecionado(valor);
+    const [tipo, id] = valor.split(':');
+    if (tipo === 'otica') {
+      const item = catalogoQuery.data?.find((c) => String(c.id) === id);
+      if (!item) return;
+      // Fabricante fica só no campo próprio (equipamento_fab) - não repete
+      // dentro da descrição, pra não duplicar em telas que já mostram os
+      // dois juntos ("descrição (fabricante)") ou em linhas separadas.
+      setForm((f) => ({
+        ...f,
+        equipamento_fab: item.fabricante,
+        equipamento_desc: formatarModeloOtica({ ...item, fabricante: '' }),
+      }));
+      setEhOtica(true);
+      setCatalogoOticaId(id);
+      setGrupoEquipamento('ÓTICA');
+      setSubgrupoEquipamento('ÓTICA');
+    } else if (tipo === 'produto') {
+      const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === id);
+      if (!item) return;
+      setForm((f) => ({ ...f, equipamento_fab: item.marca_fabricante ?? '', equipamento_desc: item.nome }));
+      setEhOtica(false);
+      setCatalogoOticaId('');
+      setGrupoEquipamento(item.categoria ?? '');
+      setSubgrupoEquipamento(item.subgrupo ?? '');
+    }
   }
 
   const avariasTriagemQuery = useAvariasTriagem();
 
-  // Produto escolhido acima (não-ótica) - usado só para filtrar o checklist
-  // de avarias pelo grupo/subgrupo dele, quando esses itens tiverem essa
-  // marcação (cadastro "Avarias de triagem").
-  const produtoEntradaSelecionado = produtosCatalogoQuery.data?.find((p) => String(p.id) === produtoEntradaId);
+  // Filtra o checklist de avarias pelo grupo/subgrupo do equipamento
+  // selecionado acima, quando os itens tiverem essa marcação (cadastro
+  // "Avarias de triagem").
   const checklistFiltrado = (avariasTriagemQuery.data ?? []).filter((item) => {
     if (!item.grupo) return true;
-    if (!produtoEntradaSelecionado?.categoria) return true;
-    if (item.grupo !== produtoEntradaSelecionado.categoria) return false;
-    if (item.subgrupo && produtoEntradaSelecionado.subgrupo && item.subgrupo !== produtoEntradaSelecionado.subgrupo) return false;
+    if (!grupoEquipamento) return true;
+    if (item.grupo !== grupoEquipamento) return false;
+    if (item.subgrupo && subgrupoEquipamento && item.subgrupo !== subgrupoEquipamento) return false;
     return true;
   });
 
@@ -327,7 +356,9 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(null);
     setCatalogoOticaId('');
-    setProdutoEntradaId('');
+    setTipoEquipamentoSelecionado('');
+    setGrupoEquipamento('');
+    setSubgrupoEquipamento('');
     setClienteFinalId('');
     setErro(null);
     setModalAberto(true);
@@ -371,7 +402,13 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(e.eh_otica ?? null);
     setCatalogoOticaId(e.catalogo_otica_id ? String(e.catalogo_otica_id) : '');
-    setProdutoEntradaId('');
+    // Só dá pra reconstruir o valor do combobox quando veio do catálogo de
+    // óticas (guarda o id); quando não-ótica, só o grupo/subgrupo ficaram
+    // salvos - o combobox some em branco, mas o filtro do checklist abaixo
+    // continua funcionando com o que já está salvo.
+    setTipoEquipamentoSelecionado(e.catalogo_otica_id ? `otica:${e.catalogo_otica_id}` : '');
+    setGrupoEquipamento(e.grupo ?? '');
+    setSubgrupoEquipamento(e.subgrupo ?? '');
     setClienteFinalId(e.cliente_final_id ? String(e.cliente_final_id) : '');
     setErro(null);
     setModalAberto(true);
@@ -441,6 +478,8 @@ export function EntradaEquipamento() {
         eh_otica: ehOtica,
         catalogo_otica_id: catalogoOticaId ? Number(catalogoOticaId) : null,
         cliente_final_id: clienteFinalId ? Number(clienteFinalId) : null,
+        grupo: grupoEquipamento || null,
+        subgrupo: subgrupoEquipamento || null,
       };
 
       if (editando) {
@@ -518,6 +557,8 @@ export function EntradaEquipamento() {
           eh_otica: entrada.eh_otica,
           catalogo_otica_id: entrada.catalogo_otica_id,
           cliente_final_id: entrada.cliente_final_id,
+          grupo: entrada.grupo,
+          subgrupo: entrada.subgrupo,
         })
         .select('id')
         .single();
@@ -755,66 +796,16 @@ export function EntradaEquipamento() {
               </div>
             )}
             <div className="campo-form">
-              <label>Selecionar do catálogo de óticas (opcional)</label>
+              <label>Selecionar tipo de equipamento *</label>
               <ComboboxBusca
-                opcoes={(catalogoQuery.data ?? []).map((c) => ({
-                  value: String(c.id),
-                  label: formatarModeloOtica(c),
-                }))}
-                valor=""
-                onChange={(valor) => preencherDoCatalogo(valor)}
+                opcoes={opcoesTipoEquipamento}
+                valor={tipoEquipamentoSelecionado}
+                onChange={selecionarTipoEquipamento}
               />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Preenche descrição e fabricante abaixo - o número de série e o resto continuam manuais.
-              </p>
-            </div>
-            <div className="campo-form">
-              <label>Ou selecionar de outro tipo de produto/equipamento (não-ótica)</label>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                <button
-                  type="button"
-                  className={tipoProdutoEntrada === 'Produto' ? 'botao-primario botao-pequeno' : 'botao-secundario botao-pequeno'}
-                  onClick={() => setTipoProdutoEntrada('Produto')}
-                >
-                  Produto
-                </button>
-                <button
-                  type="button"
-                  className={tipoProdutoEntrada === 'Serviço' ? 'botao-primario botao-pequeno' : 'botao-secundario botao-pequeno'}
-                  onClick={() => setTipoProdutoEntrada('Serviço')}
-                >
-                  Serviço
-                </button>
-              </div>
-              <ComboboxBusca
-                opcoes={(produtosCatalogoQuery.data ?? [])
-                  .filter((p) => p.tipo === tipoProdutoEntrada)
-                  .map((p) => ({
-                    value: String(p.id),
-                    label: `${p.nome}${p.marca_fabricante ? ` - ${p.marca_fabricante}` : ''}`,
-                  }))}
-                valor=""
-                onChange={(valor) => preencherDeProduto(valor)}
-              />
-              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Só produtos e serviços cadastrados como "{tipoProdutoEntrada}" aparecem aqui - peças não entram
-                (não damos manutenção em peças avulsas, só nos equipamentos).
-              </p>
-            </div>
-            <div className="campo-form">
-              <label>Este equipamento é uma ótica?</label>
-              <select
-                value={ehOtica === null ? '' : ehOtica ? 'sim' : 'nao'}
-                onChange={(e) => setEhOtica(e.target.value === '' ? null : e.target.value === 'sim')}
-              >
-                <option value="">Não informado</option>
-                <option value="sim">Sim</option>
-                <option value="nao">Não</option>
-              </select>
-              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Já preenchido sozinho ao usar um dos catálogos acima - confira/ajuste se a entrada foi digitada na
-                mão. Define se o checklist de manutenção de óticas aparece no orçamento e se o equipamento passa
-                pelos ensaios ópticos (ISO 8600).
+                Junta o catálogo de óticas e os equipamentos cadastrados em "Produtos e serviços" - preenche
+                descrição, fabricante e o grupo do equipamento sozinho (usado depois pra filtrar as peças
+                disponíveis no orçamento). Só o número de série continua manual.
               </p>
             </div>
             <div className="campo-form">

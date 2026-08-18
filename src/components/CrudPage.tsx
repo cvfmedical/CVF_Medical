@@ -7,6 +7,8 @@ import { useRascunhos } from '../contexts/RascunhosContext';
 import { ModalJanela } from './ModalJanela';
 import { CarregandoTela } from './CarregandoTela';
 import { ComboboxBusca } from './ComboboxBusca';
+import { ThOrdenavel } from './ThOrdenavel';
+import { useLinhasOrdenadas } from '../lib/useOrdenacao';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'combobox' | 'checkbox' | 'date';
 
@@ -71,7 +73,6 @@ export function CrudPage<Row extends { id: number }>({
   colunas,
   campos,
   ordenarPor = 'id',
-  camposFiltro,
   valorInicial = {},
   validar,
   antesDeEnviar,
@@ -81,7 +82,10 @@ export function CrudPage<Row extends { id: number }>({
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
   const { minimizar, rascunhos, pedidoRestauracao, fecharRascunho, limparPedido } = useRascunhos();
-  const [filtro, setFiltro] = useState('');
+  // Filtro por coluna (um campo de busca embaixo de cada cabeçalho) - substituiu
+  // a busca única genérica; `camposFiltro` não é mais usado pra filtrar, mas
+  // continua aceito na prop por compatibilidade com quem ainda passa.
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [editando, setEditando] = useState<Row | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -98,18 +102,20 @@ export function CrudPage<Row extends { id: number }>({
     });
   }
 
-  const linhas = useMemo(() => {
+  const linhasFiltradas = useMemo(() => {
     const todas = listQuery.data ?? [];
-    if (!filtro.trim() || !camposFiltro?.length) return todas;
-    const termo = filtro.trim().toLowerCase();
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    if (ativos.length === 0) return todas;
     return todas.filter((linha) =>
-      camposFiltro.some((campo) =>
-        String((typeof campo === 'function' ? campo(linha) : (linha as Record<string, unknown>)[campo]) ?? '')
+      ativos.every(([chave, termo]) =>
+        String((linha as Record<string, unknown>)[chave] ?? '')
           .toLowerCase()
-          .includes(termo),
+          .includes(termo.trim().toLowerCase()),
       ),
     );
-  }, [listQuery.data, filtro, camposFiltro]);
+  }, [listQuery.data, filtrosColuna]);
+
+  const { linhasOrdenadas: linhas, coluna: colunaOrdenada, direcao, ordenarPor: ordenarPorColuna } = useLinhasOrdenadas(linhasFiltradas);
 
   function abrirNovo() {
     setEditando(null);
@@ -202,15 +208,6 @@ export function CrudPage<Row extends { id: number }>({
         </button>
       </div>
 
-      {camposFiltro && camposFiltro.length > 0 && (
-        <input
-          className="campo-filtro"
-          placeholder="Buscar..."
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-        />
-      )}
-
       {listQuery.isLoading && <CarregandoTela />}
       {listQuery.isError && <p className="erro-login">{mensagemErro(listQuery.error)}</p>}
 
@@ -219,7 +216,23 @@ export function CrudPage<Row extends { id: number }>({
           <thead>
             <tr>
               {colunas.map((c) => (
-                <th key={c.chave}>{c.label}</th>
+                <ThOrdenavel key={c.chave} chave={c.chave} colunaAtiva={colunaOrdenada} direcao={direcao} onClick={ordenarPorColuna}>
+                  {c.label}
+                </ThOrdenavel>
+              ))}
+              <th></th>
+            </tr>
+            <tr>
+              {colunas.map((c) => (
+                <th key={c.chave} style={{ padding: '2px 6px' }}>
+                  <input
+                    type="text"
+                    className="campo-filtro-coluna"
+                    placeholder="Filtrar..."
+                    value={filtrosColuna[c.chave] ?? ''}
+                    onChange={(e) => setFiltrosColuna((f) => ({ ...f, [c.chave]: e.target.value }))}
+                  />
+                </th>
               ))}
               <th></th>
             </tr>

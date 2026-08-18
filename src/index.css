@@ -462,6 +462,18 @@ button {
   font-family: var(--font-body);
 }
 
+.campo-filtro-coluna {
+  width: 100%;
+  min-width: 60px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  font-family: var(--font-body);
+  background: var(--paper-0);
+}
+
 .tabela-crud {
   width: 100%;
   border-collapse: collapse;

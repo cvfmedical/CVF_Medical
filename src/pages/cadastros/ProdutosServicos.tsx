@@ -10,6 +10,8 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { ThOrdenavel } from '../../components/ThOrdenavel';
+import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 
 interface ProdutoServico {
   id: number;
@@ -45,37 +47,46 @@ async function gerarCodigo(tipo: string): Promise<string> {
   return `${prefixo}-${String((count ?? 0) + 1).padStart(5, '0')}`;
 }
 
-const formVazio = {
-  codigo: '',
-  nome: '',
-  tipo: 'Peça',
-  descricao: '',
-  categoria: '',
-  subgrupo: '',
-  marca_fabricante: '',
-  fornecedor_id: '',
-  ncm: '',
-  codigo_barras: '',
-  preco_custo: '',
-  preco_unitario: '',
-  unidade: 'un',
-  observacoes: '',
-  status_ativo: true,
-};
+function formVazioPara(tipos: string[]) {
+  return {
+    codigo: '',
+    nome: '',
+    tipo: tipos[0],
+    descricao: '',
+    categoria: '',
+    subgrupo: '',
+    marca_fabricante: '',
+    fornecedor_id: '',
+    ncm: '',
+    codigo_barras: '',
+    preco_custo: '',
+    preco_unitario: '',
+    unidade: 'un',
+    observacoes: '',
+    status_ativo: true,
+  };
+}
 
-export function ProdutosServicos() {
+// Uma tabela só (produtos_servicos) com duas telas de cadastro por cima,
+// filtradas pelo campo "tipo" - "Cadastro de itens" mostra só Peças (o que
+// entra no orçamento pra troca), "Produtos e serviços" mostra Produto/Serviço
+// (os equipamentos recebidos pra manutenção). Evita duas tabelas físicas
+// já que tudo o que referencia produtos_servicos.id (itens de orçamento,
+// preço fixo de contrato, seletor da Entrada) continua funcionando igual.
+function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; tipos: string[]; rascunhoKey: string }) {
   const qc = useQueryClient();
+  const formVazio = formVazioPara(tipos);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<ProdutoServico | null>(null);
   const [form, setForm] = useState(formVazio);
-  const [filtro, setFiltro] = useState('');
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [fotos, setFotos] = useState<File[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
 
-  const { minimizar: minimizarRascunho } = useRascunhoDeTela('produtos-servicos', {
-    titulo: editando ? 'Editar produto/serviço' : 'Novo produto/serviço',
+  const { minimizar: minimizarRascunho } = useRascunhoDeTela(rascunhoKey, {
+    titulo: editando ? `Editar ${titulo.toLowerCase()}` : `Novo(a) ${titulo.toLowerCase()}`,
     obterEstado: () => ({ form, editando, fotos, fotosExistentes }),
     aoRestaurar: (e) => {
       setForm((e.form as typeof formVazio) ?? formVazio);
@@ -95,9 +106,9 @@ export function ProdutosServicos() {
   }
 
   const query = useQuery({
-    queryKey: ['produtos-servicos'],
+    queryKey: ['produtos-servicos', tipos.join(',')],
     queryFn: async (): Promise<ProdutoServico[]> => {
-      const { data, error } = await supabase.from('produtos_servicos').select('*').order('nome');
+      const { data, error } = await supabase.from('produtos_servicos').select('*').in('tipo', tipos).order('nome');
       if (error) throw error;
       return data as ProdutoServico[];
     },
@@ -142,16 +153,21 @@ export function ProdutosServicos() {
     return id ? fornecedoresQuery.data?.find((f) => f.id === id)?.razao_social ?? `#${id}` : '-';
   }
 
-  const linhas = (query.data ?? []).filter((p) => {
-    if (!filtro.trim()) return true;
-    const termo = filtro.trim().toLowerCase();
-    return (
-      p.nome.toLowerCase().includes(termo) ||
-      (p.categoria ?? '').toLowerCase().includes(termo) ||
-      (p.codigo ?? '').toLowerCase().includes(termo) ||
-      (p.codigo_barras ?? '').toLowerCase().includes(termo)
+  // "fornecedor_id" é filtrado/ordenado pelo nome resolvido, não pelo id cru.
+  function valorColuna(p: ProdutoServico, chave: string): unknown {
+    if (chave === 'fornecedor_id') return nomeFornecedor(p.fornecedor_id);
+    return (p as unknown as Record<string, unknown>)[chave];
+  }
+
+  const linhasFiltradas = (query.data ?? []).filter((p) => {
+    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
+    return ativos.every(([chave, termo]) =>
+      String(valorColuna(p, chave) ?? '')
+        .toLowerCase()
+        .includes(termo.trim().toLowerCase()),
     );
   });
+  const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   // Gera o código automaticamente conforme o tipo escolhido, só para
   // registros novos - ao editar, o código já existente nunca muda.
@@ -295,28 +311,48 @@ export function ProdutosServicos() {
   return (
     <div>
       <div className="crud-cabecalho">
-        <h1>Cadastro de itens</h1>
+        <h1>{titulo}</h1>
         <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
           <IconPlus size={16} /> Novo
         </button>
       </div>
 
-      <input className="campo-filtro" placeholder="Buscar..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
-
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Código</th>
-            <th>Nome</th>
-            <th>Tipo</th>
-            <th>Grupo</th>
-            <th>Subgrupo</th>
-            <th>Marca/fabricante</th>
-            <th>Preço de custo</th>
-            <th>Preço de venda</th>
-            <th>Unidade</th>
-            <th>Fornecedor</th>
-            <th>Ativo</th>
+            {[
+              ['codigo', 'Código'],
+              ['nome', 'Nome'],
+              ['tipo', 'Tipo'],
+              ['categoria', 'Grupo'],
+              ['subgrupo', 'Subgrupo'],
+              ['marca_fabricante', 'Marca/fabricante'],
+              ['preco_custo', 'Preço de custo'],
+              ['preco_unitario', 'Preço de venda'],
+              ['unidade', 'Unidade'],
+              ['fornecedor_id', 'Fornecedor'],
+              ['status_ativo', 'Ativo'],
+            ].map(([chave, label]) => (
+              <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+                {label}
+              </ThOrdenavel>
+            ))}
+            <th></th>
+          </tr>
+          <tr>
+            {['codigo', 'nome', 'tipo', 'categoria', 'subgrupo', 'marca_fabricante', 'preco_custo', 'preco_unitario', 'unidade', 'fornecedor_id', 'status_ativo'].map(
+              (chave) => (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <input
+                    type="text"
+                    className="campo-filtro-coluna"
+                    placeholder="Filtrar..."
+                    value={filtrosColuna[chave] ?? ''}
+                    onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
+                  />
+                </th>
+              ),
+            )}
             <th></th>
           </tr>
         </thead>
@@ -356,7 +392,7 @@ export function ProdutosServicos() {
 
       {modalAberto && (
         <ModalJanela
-          titulo={editando ? 'Editar produto/serviço' : 'Novo produto/serviço'}
+          titulo={editando ? `Editar ${titulo.toLowerCase()}` : `Novo(a) ${titulo.toLowerCase()}`}
           aoFechar={() => setModalAberto(false)}
           aoMinimizar={minimizarProduto}
           larguraMax={560}
@@ -366,14 +402,18 @@ export function ProdutosServicos() {
               <label>Código interno (SKU) - gerado automaticamente</label>
               <input type="text" value={form.codigo} disabled style={{ background: 'var(--paper-50)', color: 'var(--ink-400)' }} />
             </div>
-            <div className="campo-form">
-              <label>Tipo *</label>
-              <select value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}>
-                <option value="Produto">Produto</option>
-                <option value="Peça">Peça</option>
-                <option value="Serviço">Serviço</option>
-              </select>
-            </div>
+            {tipos.length > 1 && (
+              <div className="campo-form">
+                <label>Tipo *</label>
+                <select value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}>
+                  {tipos.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="campo-form">
               <label>Nome *</label>
               <input type="text" value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} />
@@ -541,4 +581,12 @@ export function ProdutosServicos() {
       )}
     </div>
   );
+}
+
+export function CadastroPecas() {
+  return <TelaProdutosServicos titulo="Cadastro de itens" tipos={['Peça']} rascunhoKey="cadastro-pecas" />;
+}
+
+export function ProdutosServicos() {
+  return <TelaProdutosServicos titulo="Produtos e serviços" tipos={['Produto', 'Serviço']} rascunhoKey="produtos-servicos" />;
 }
