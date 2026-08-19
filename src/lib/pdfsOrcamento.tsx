@@ -94,6 +94,7 @@ export interface DadosOrcamentoPdf {
   validade: string;
   pagamento: string;
   observacoes: string;
+  observacoesTecnico?: string | null;
   ehOtica?: boolean | null;
   garantiaResumo: string;
   garantiaIntro: string;
@@ -139,6 +140,13 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
           </>
         ) : null}
         <Text style={s.total}>Total: {formatarMoeda(d.total)}</Text>
+
+        {d.observacoesTecnico && (
+          <View wrap={false}>
+            <Text style={s.secao}>Defeito identificado (Ordem de Serviço)</Text>
+            <Text style={{ marginBottom: 3 }}>{d.observacoesTecnico}</Text>
+          </View>
+        )}
 
         {d.ehOtica && (
           <View wrap={false}>
