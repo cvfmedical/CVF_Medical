@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -7,7 +7,7 @@ import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
-import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconCamera, IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
@@ -332,6 +332,38 @@ export function OrcamentoTecnico() {
     if (url) window.open(url, '_blank');
   }
 
+  // Adicionar/trocar foto de um item já existente - independe de `travado`
+  // de propósito: é só uma evidência anexada, não muda preço/descrição/
+  // quantidade, então continua permitido mesmo em orçamentos já
+  // precificados/entregues (ex.: complementar fotos depois da entrega).
+  const fotoItemInputRef = useRef<HTMLInputElement>(null);
+  const [itemParaFoto, setItemParaFoto] = useState<number | null>(null);
+  const [enviandoFotoItem, setEnviandoFotoItem] = useState(false);
+
+  function pedirFotoItem(itemId: number) {
+    setItemParaFoto(itemId);
+    fotoItemInputRef.current?.click();
+  }
+
+  async function aoEscolherFotoItem(e: React.ChangeEvent<HTMLInputElement>) {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo || !itemParaFoto || !orcamentoQuery.data) return;
+    setEnviandoFotoItem(true);
+    setErro(null);
+    try {
+      const caminho = await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, arquivo);
+      const { error } = await supabase.from('orcamento_itens').update({ foto_peca_danificada_path: caminho }).eq('id', itemParaFoto);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data.id] });
+    } catch (err) {
+      setErro(mensagemErro(err));
+    } finally {
+      setEnviandoFotoItem(false);
+      setItemParaFoto(null);
+    }
+  }
+
   // Desbloqueia a OS (tela Registro de Entrada) excluindo o orçamento
   // inteiro - só funciona enquanto ainda está em "Aguardando Precificação"
   // (RLS): se o financeiro já começou a precificar, primeiro ele precisa
@@ -450,6 +482,14 @@ export function OrcamentoTecnico() {
                         <IconPhoto size={16} />
                       </button>
                     )}
+                    <button
+                      className="botao-icone"
+                      title={item.foto_peca_danificada_path ? 'Trocar foto' : 'Adicionar foto'}
+                      onClick={() => pedirFotoItem(item.id)}
+                      disabled={enviandoFotoItem}
+                    >
+                      <IconCamera size={16} />
+                    </button>
                     <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)} disabled={travado}>
                       <IconTrash size={16} />
                     </button>
@@ -463,6 +503,14 @@ export function OrcamentoTecnico() {
               )}
             </tbody>
           </table>
+          <input
+            type="file"
+            accept="image/*"
+            ref={fotoItemInputRef}
+            style={{ display: 'none' }}
+            onChange={aoEscolherFotoItem}
+          />
+          {enviandoFotoItem && <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Enviando foto...</p>}
 
           <div className="campo-form" style={{ marginTop: 16 }}>
             <label>Observações técnicas gerais (defeito/serviço quando não há troca de peça)</label>
