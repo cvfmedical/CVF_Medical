@@ -10,7 +10,7 @@ import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
-import { tonoDoStatusOS } from '../../lib/statusOS';
+import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { mensagemErro } from '../../lib/erros';
@@ -101,7 +101,15 @@ export function OrdensServicoPanel() {
     return (os as unknown as Record<string, unknown>)[chave];
   }
 
+  // Sem filtro em nenhuma coluna, esconde as OS já finalizadas (entregue ou
+  // devolvida sem reparo) - senão o painel vira um histórico infinito.
+  // Assim que alguma coluna é filtrada, passa a buscar em todos os status
+  // (inclusive as finalizadas), pra continuar achável.
+  const algumFiltroAtivo = Object.values(filtrosColuna).some((v) => v.trim());
   const linhasFiltradas = (query.data ?? []).filter((os) => {
+    if (!algumFiltroAtivo) {
+      return os.status_os !== STATUS_ENTREGUE && os.status_os !== STATUS_DEVOLUCAO_SEM_REPARO;
+    }
     const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
     return ativos.every(([chave, termo]) =>
       normalizarBusca(String(valorColuna(os, chave) ?? '')).includes(normalizarBusca(termo.trim())),
@@ -114,6 +122,10 @@ export function OrdensServicoPanel() {
   return (
     <div>
       <h1>Ordem de serviço / identificação de peças danificadas</h1>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+        Mostrando só o que ainda está em andamento. OS já entregues ou devolvidas sem reparo saem desta lista - use
+        os filtros das colunas abaixo pra encontrá-las.
+      </p>
 
       {erro && <p className="erro-login">{erro}</p>}
 

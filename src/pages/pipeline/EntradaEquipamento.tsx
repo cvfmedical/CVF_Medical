@@ -327,7 +327,13 @@ export function EntradaEquipamento() {
     return (e as unknown as Record<string, unknown>)[chave];
   }
 
+  // Sem filtro em nenhuma coluna, esconde as entradas já convertidas em OS -
+  // a partir daí quem acompanha o andamento é a tela "Ordem de serviço", não
+  // esta. Assim que alguma coluna é filtrada, passa a buscar em tudo
+  // (inclusive já convertidas), pra continuar achável.
+  const algumFiltroAtivo = Object.values(filtrosColuna).some((v) => v.trim());
   const linhasFiltradas = (entradasQuery.data ?? []).filter((e) => {
+    if (!algumFiltroAtivo) return !e.ordem_servico_id;
     const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
     return ativos.every(([chave, termo]) =>
       normalizarBusca(String(valorColuna(e, chave) ?? '')).includes(normalizarBusca(termo.trim())),
@@ -668,6 +674,10 @@ export function EntradaEquipamento() {
           <IconPlus size={16} /> Nova entrada
         </button>
       </div>
+      <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+        Mostrando só o que ainda não foi convertido em OS. Entradas já convertidas saem desta lista - use os filtros
+        das colunas abaixo pra encontrá-las (ou acompanhe pela tela "Ordem de serviço").
+      </p>
 
       <table className="tabela-crud">
         <thead>

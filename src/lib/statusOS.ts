@@ -26,6 +26,7 @@ export const STATUS_TESTE_ESTANQUEIDADE = '7. TESTE DE ESTANQUEIDADE';
 export const STATUS_TESTE_AUTOCLAVE = '8. TESTE DE AUTOCLAVE';
 export const STATUS_CHECKPOINT_B = '9. BANCADA DE VISÃO - CHECKPOINT B';
 export const STATUS_PRONTO_ENTREGA = '10. PRONTO PARA ENTREGA';
+export const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
 // Desvios do fluxo normal (fora da sequência numerada 1-11) - não são
 // "avanços", são saídas do fluxo de reparo.
