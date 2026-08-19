@@ -77,6 +77,7 @@ export interface ItemOrcamentoPdf {
   nome: string;
   quantidade: number;
   precoUnit: number;
+  observacao?: string | null;
 }
 
 export interface DadosOrcamentoPdf {
@@ -94,7 +95,6 @@ export interface DadosOrcamentoPdf {
   validade: string;
   pagamento: string;
   observacoes: string;
-  observacoesTecnico?: string | null;
   ehOtica?: boolean | null;
   garantiaResumo: string;
   garantiaIntro: string;
@@ -122,7 +122,12 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
         </View>
         {d.itens.map((it, i) => (
           <View style={s.td} key={i}>
-            <Text style={s.cItem}>{it.nome}</Text>
+            <View style={s.cItem}>
+              <Text>{it.nome}</Text>
+              {it.observacao && (
+                <Text style={{ fontSize: 8, color: cinza, marginTop: 2 }}>Defeito identificado: {it.observacao}</Text>
+              )}
+            </View>
             <Text style={s.cQtd}>{it.quantidade}</Text>
             <Text style={s.cNum}>{formatarMoeda(it.precoUnit)}</Text>
             <Text style={s.cNum}>{formatarMoeda(it.precoUnit * it.quantidade)}</Text>
@@ -140,13 +145,6 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
           </>
         ) : null}
         <Text style={s.total}>Total: {formatarMoeda(d.total)}</Text>
-
-        {d.observacoesTecnico && (
-          <View wrap={false}>
-            <Text style={s.secao}>Defeito identificado (Ordem de Serviço)</Text>
-            <Text style={{ marginBottom: 3 }}>{d.observacoesTecnico}</Text>
-          </View>
-        )}
 
         {d.ehOtica && (
           <View wrap={false}>

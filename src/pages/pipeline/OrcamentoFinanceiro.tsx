@@ -905,6 +905,7 @@ export function OrcamentoFinanceiro() {
             nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
             quantidade: it.quantidade,
             precoUnit: it.preco_unitario ?? 0,
+            observacao: it.observacao,
           })),
           subtotal: subtotalCalc,
           desconto: descontoCalc,
@@ -913,7 +914,6 @@ export function OrcamentoFinanceiro() {
           validade: o.validade_proposta ?? '',
           pagamento: o.condicoes_pagamento ?? '',
           observacoes: o.observacoes_financeiro ?? '',
-          observacoesTecnico: o.observacoes_tecnico,
           ehOtica: os?.eh_otica ?? false,
           garantiaResumo: GARANTIA_CVF.resumo,
           garantiaIntro: GARANTIA_CVF.intro,
@@ -1033,6 +1033,7 @@ export function OrcamentoFinanceiro() {
           nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
           quantidade: it.quantidade,
           precoUnit: Number(precos[it.id]) || 0,
+          observacao: it.observacao,
         })),
         subtotal,
         desconto: descontoNum,
@@ -1041,7 +1042,6 @@ export function OrcamentoFinanceiro() {
         validade: validadeProposta,
         pagamento: condicoesPagamento,
         observacoes: observacoesFinanceiro,
-        observacoesTecnico: orcamentoSelecionado.observacoes_tecnico,
         ehOtica: os?.eh_otica ?? false,
         garantiaResumo: GARANTIA_CVF.resumo,
         garantiaIntro: GARANTIA_CVF.intro,
@@ -1444,7 +1444,14 @@ export function OrcamentoFinanceiro() {
               <tbody>
                 {(itensQuery.data ?? []).map((item) => (
                   <tr key={item.id}>
-                    <td>{nomeItem(item)}</td>
+                    <td>
+                      {nomeItem(item)}
+                      {item.observacao && (
+                        <p style={{ fontSize: 11, color: 'var(--ink-400)', margin: '2px 0 0' }}>
+                          Defeito identificado: {item.observacao}
+                        </p>
+                      )}
+                    </td>
                     <td>{item.quantidade}</td>
                     <td>
                       <input
@@ -1532,7 +1539,7 @@ export function OrcamentoFinanceiro() {
 
             {orcamentoSelecionado.observacoes_tecnico && (
               <div className="campo-form">
-                <label>Defeito identificado (Ordem de Serviço)</label>
+                <label>Observações do técnico</label>
                 <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico}</p>
               </div>
             )}
