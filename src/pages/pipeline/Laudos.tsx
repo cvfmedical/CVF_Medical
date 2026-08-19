@@ -15,8 +15,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { Badge } from '../../components/Badge';
 import { LaudoPdf } from './LaudoPdf';
-import { LaudoDiagnosticoPdf } from './LaudoDiagnosticoPdf';
-import { LaudoServicoPdf } from './LaudoServicoPdf';
+import { LaudoEquipamentoPdf } from './LaudoEquipamentoPdf';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 interface Laudo {
@@ -28,13 +27,19 @@ interface Laudo {
   storage_path: string | null;
   data_emissao: string;
   tipo_laudo: string | null;
+  tipo_equipamento_laudo_id: number | null;
 }
 
-type TipoLaudo = 'diagnostico' | 'servico' | 'nota';
+type TipoLaudo = 'equipamento' | 'nota';
 
+// 'diagnostico'/'servico' não são mais gerados (o defeito identificado
+// agora sai direto da Ordem de Serviço, botão "Ordem de Serviços - Laudo
+// Técnico") - o rótulo continua aqui só pra laudos antigos já emitidos
+// não aparecerem como "undefined" na lista.
 const LABEL_TIPO_LAUDO: Record<string, string> = {
-  diagnostico: 'Diagnóstico',
-  servico: 'Serviço executado',
+  diagnostico: 'Diagnóstico (antigo)',
+  servico: 'Serviço executado (antigo)',
+  equipamento: 'Laudo de equipamento',
   nota: 'Nota interna',
 };
 
@@ -42,7 +47,16 @@ async function gerarNumeroLaudo(): Promise<string> {
   return gerarNumeroSequencial('LAUDO', 'laudos', 'numero_laudo');
 }
 
-const COLUNAS_FILTRAVEIS = ['numero_laudo', 'numero_os', 'cliente_nome', 'tipo_laudo', 'tecnico_responsavel', 'resultado', 'data_emissao'];
+const COLUNAS_FILTRAVEIS = [
+  'numero_laudo',
+  'numero_os',
+  'cliente_nome',
+  'tipo_laudo',
+  'tipo_equipamento',
+  'tecnico_responsavel',
+  'resultado',
+  'data_emissao',
+];
 
 export function Laudos() {
   const { funcionario } = useAuth();
@@ -51,8 +65,14 @@ export function Laudos() {
   const [modalAberto, setModalAberto] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [tipoLaudo, setTipoLaudo] = useState<TipoLaudo>('diagnostico');
-  const [form, setForm] = useState({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+  const [tipoLaudo, setTipoLaudo] = useState<TipoLaudo>('equipamento');
+  const [form, setForm] = useState({
+    ordem_servico_id: '',
+    tipo_equipamento_laudo_id: '',
+    resultado: 'Aprovado',
+    observacoes_tecnicas: '',
+  });
+  const [respostas, setRespostas] = useState<Record<number, boolean | null>>({});
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -63,10 +83,54 @@ export function Laudos() {
     algumFiltroAtivo,
   } = useFiltrosColuna();
 
-  // Puxa o defeito relatado e os itens do orçamento (com a observação de
-  // defeito que o técnico já registrou ao montar o orçamento) - assim os
-  // laudos de Diagnóstico/Serviço Executado nascem prontos, sem precisar
-  // redigitar o que já foi identificado na Ordem de Serviço.
+  const tiposEquipamentoQuery = useQuery({
+    queryKey: ['tipos-equipamento-laudo-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tipos_equipamento_laudo')
+        .select('id, descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { id: number; descricao: string }[];
+    },
+  });
+
+  const checklistItensQuery = useQuery({
+    queryKey: ['checklist-laudo-itens', form.tipo_equipamento_laudo_id],
+    enabled: tipoLaudo === 'equipamento' && !!form.tipo_equipamento_laudo_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('checklist_laudo_itens')
+        .select('id, descricao, ordem')
+        .eq('tipo_equipamento_laudo_id', Number(form.tipo_equipamento_laudo_id))
+        .eq('status_ativo', true)
+        .order('ordem');
+      if (error) throw error;
+      return data as { id: number; descricao: string; ordem: number }[];
+    },
+  });
+
+  function nomeTipoEquipamento(id: number | null) {
+    if (!id) return null;
+    return tiposEquipamentoQuery.data?.find((t) => t.id === id)?.descricao ?? null;
+  }
+
+  function escolherTipoEquipamento(valor: string) {
+    setForm((f) => ({ ...f, tipo_equipamento_laudo_id: valor }));
+    setRespostas({});
+  }
+
+  function marcarTodosConforme() {
+    const novo: Record<number, boolean | null> = {};
+    (checklistItensQuery.data ?? []).forEach((it) => {
+      novo[it.id] = true;
+    });
+    setRespostas(novo);
+  }
+
+  // Puxa os dados de cabeçalho da OS/equipamento pra não precisar redigitar
+  // no laudo (cliente, unidade atendida, equipamento, data de abertura).
   const dadosOSQuery = useQuery({
     queryKey: ['laudo-dados-os', form.ordem_servico_id],
     enabled: !!form.ordem_servico_id && tipoLaudo !== 'nota',
@@ -74,31 +138,10 @@ export function Laudos() {
       const osId = Number(form.ordem_servico_id);
       const { data: os, error: errOS } = await supabase
         .from('ordens_servico')
-        .select('numero_os, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn, defeito_relatado')
+        .select('numero_os, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn, data_abertura')
         .eq('id', osId)
         .single();
       if (errOS) throw errOS;
-
-      const { data: orcamento } = await supabase
-        .from('orcamentos')
-        .select('id, observacoes_tecnico')
-        .eq('ordem_servico_id', osId)
-        .order('data_criacao', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      let itens: { nome: string; quantidade: number; observacao: string | null }[] = [];
-      if (orcamento) {
-        const { data: itensData } = await supabase
-          .from('orcamento_itens')
-          .select('quantidade, observacao, descricao_servico, produtos_servicos(nome)')
-          .eq('orcamento_id', orcamento.id);
-        itens = (itensData ?? []).map((it) => ({
-          nome: (it as unknown as { produtos_servicos: { nome: string } | null }).produtos_servicos?.nome ?? it.descricao_servico ?? '-',
-          quantidade: it.quantidade,
-          observacao: it.observacao,
-        }));
-      }
 
       let clienteFinalNome: string | null = null;
       if (os.cliente_final_id) {
@@ -106,16 +149,24 @@ export function Laudos() {
         clienteFinalNome = cf?.razao_social ?? null;
       }
 
-      return { os, orcamento, itens, clienteFinalNome };
+      return { os, clienteFinalNome };
     },
   });
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('laudos', {
     titulo: 'Novo laudo',
-    obterEstado: () => ({ form, tipoLaudo }),
+    obterEstado: () => ({ form, tipoLaudo, respostas }),
     aoRestaurar: (e) => {
-      setForm((e.form as typeof form) ?? { ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
-      setTipoLaudo((e.tipoLaudo as TipoLaudo) ?? 'diagnostico');
+      setForm(
+        (e.form as typeof form) ?? {
+          ordem_servico_id: '',
+          tipo_equipamento_laudo_id: '',
+          resultado: 'Aprovado',
+          observacoes_tecnicas: '',
+        },
+      );
+      setTipoLaudo((e.tipoLaudo as TipoLaudo) ?? 'equipamento');
+      setRespostas((e.respostas as Record<number, boolean | null>) ?? {});
       setErro(null);
       setModalAberto(true);
     },
@@ -131,7 +182,7 @@ export function Laudos() {
     queryFn: async (): Promise<Laudo[]> => {
       const { data, error } = await supabase
         .from('laudos')
-        .select('id, numero_laudo, ordem_servico_id, tecnico_responsavel, resultado, storage_path, data_emissao, tipo_laudo')
+        .select('id, numero_laudo, ordem_servico_id, tecnico_responsavel, resultado, storage_path, data_emissao, tipo_laudo, tipo_equipamento_laudo_id')
         .order('data_emissao', { ascending: false });
       if (error) throw error;
       return data as Laudo[];
@@ -142,6 +193,7 @@ export function Laudos() {
     if (chave === 'numero_os') return porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`;
     if (chave === 'cliente_nome') return porId(l.ordem_servico_id)?.cliente_nome ?? '';
     if (chave === 'tipo_laudo') return l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : 'ISO 8600 / outro';
+    if (chave === 'tipo_equipamento') return nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-';
     if (chave === 'data_emissao') return l.data_emissao;
     return (l as unknown as Record<string, unknown>)[chave];
   }
@@ -167,6 +219,10 @@ export function Laudos() {
       setErro('Selecione a ordem de serviço.');
       return;
     }
+    if (tipoLaudo === 'equipamento' && !form.tipo_equipamento_laudo_id) {
+      setErro('Selecione o tipo de equipamento.');
+      return;
+    }
     const os = porId(Number(form.ordem_servico_id));
     setGerando(true);
     try {
@@ -175,47 +231,33 @@ export function Laudos() {
       const equipamentoDesc = [dadosOSQuery.data?.os.optica_desc, dadosOSQuery.data?.os.optica_fab].filter(Boolean).join(' - ');
       const numeroSerie = dadosOSQuery.data?.os.optica_sn ?? '';
       const clienteFinalNome = dadosOSQuery.data?.clienteFinalNome ?? null;
+      const dataAbertura = dadosOSQuery.data?.os.data_abertura
+        ? new Date(dadosOSQuery.data.os.data_abertura).toLocaleDateString('pt-BR')
+        : '';
 
       let blob: Blob;
-      if (tipoLaudo === 'diagnostico') {
-        const itensComProblema = (dadosOSQuery.data?.itens ?? [])
-          .filter((it) => it.observacao)
-          .map((it) => ({ nome: it.nome, problema: it.observacao as string }));
+      let itensChecklist: { descricao: string; conforme: boolean | null }[] = [];
+      if (tipoLaudo === 'equipamento') {
+        const tipoNome = nomeTipoEquipamento(Number(form.tipo_equipamento_laudo_id)) ?? '';
+        itensChecklist = (checklistItensQuery.data ?? []).map((it) => ({
+          descricao: it.descricao,
+          conforme: respostas[it.id] ?? null,
+        }));
         blob = await pdf(
-          <LaudoDiagnosticoPdf
+          <LaudoEquipamentoPdf
             dados={{
               numeroLaudo,
               numeroOS: os?.numero_os ?? '',
               clienteNome: os?.cliente_nome ?? '',
               clienteFinalNome,
+              tipoEquipamento: tipoNome,
               equipamentoDesc,
               numeroSerie,
-              defeitoRelatado: dadosOSQuery.data?.os.defeito_relatado ?? '',
-              itens: itensComProblema,
-              observacoesAdicionais: form.observacoes_tecnicas,
-              tecnicoResponsavel: funcionario?.nome ?? '',
-              dataEmissao,
-            }}
-          />,
-        ).toBlob();
-      } else if (tipoLaudo === 'servico') {
-        const todosItens = (dadosOSQuery.data?.itens ?? []).map((it) => ({ nome: it.nome, quantidade: it.quantidade }));
-        const observacoesTecnicas = [dadosOSQuery.data?.orcamento?.observacoes_tecnico, form.observacoes_tecnicas]
-          .filter(Boolean)
-          .join('\n\n');
-        blob = await pdf(
-          <LaudoServicoPdf
-            dados={{
-              numeroLaudo,
-              numeroOS: os?.numero_os ?? '',
-              clienteNome: os?.cliente_nome ?? '',
-              clienteFinalNome,
-              equipamentoDesc,
-              numeroSerie,
-              itens: todosItens,
-              observacoesTecnicas,
+              itens: itensChecklist,
+              observacoes: form.observacoes_tecnicas,
               resultado: form.resultado,
               tecnicoResponsavel: funcionario?.nome ?? '',
+              dataAbertura,
               dataEmissao,
             }}
           />,
@@ -251,12 +293,15 @@ export function Laudos() {
         observacoes_tecnicas: form.observacoes_tecnicas || null,
         storage_path: caminho,
         tipo_laudo: tipoLaudo,
+        tipo_equipamento_laudo_id: tipoLaudo === 'equipamento' ? Number(form.tipo_equipamento_laudo_id) : null,
+        checklist_respostas: tipoLaudo === 'equipamento' ? itensChecklist : null,
       });
       if (erroInsert) throw erroInsert;
 
       setModalAberto(false);
-      setTipoLaudo('diagnostico');
-      setForm({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+      setTipoLaudo('equipamento');
+      setForm({ ordem_servico_id: '', tipo_equipamento_laudo_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+      setRespostas({});
       qc.invalidateQueries({ queryKey: ['laudos'] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -284,10 +329,10 @@ export function Laudos() {
       </div>
       <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: '0 0 12px', maxWidth: 760 }}>
         Os <strong>laudos de conformidade ISO 8600</strong> (com medições e critérios) são gerados na
-        <strong> Bancada de Visão</strong> e no <strong>Teste de resolução</strong> - pra equipamentos ópticos. Este
-        botão gera os laudos de <strong>equipamentos não-ópticos (produtos)</strong>: Diagnóstico (o defeito
-        identificado) e Serviço executado (o que foi feito), puxando automaticamente o que já foi registrado na
-        Ordem de Serviço/Orçamento. Todos os documentos aparecem na lista abaixo.
+        <strong> Bancada de Visão</strong> e no <strong>Teste de resolução</strong> - pra equipamentos ópticos. O
+        defeito identificado ao cliente sai direto da Ordem de Serviço, no botão "Imprimir Ordem de Serviços - Laudo
+        Técnico" (tela Montar orçamento). Aqui você gera o <strong>Laudo de equipamento</strong> (checklist de
+        manutenção por tipo de equipamento, ex: consoles/fontes de luz) ou uma nota interna simples.
       </p>
 
       <table className="tabela-crud">
@@ -298,6 +343,7 @@ export function Laudos() {
               ['numero_os', 'OS'],
               ['cliente_nome', 'Cliente'],
               ['tipo_laudo', 'Tipo'],
+              ['tipo_equipamento', 'Equipamento'],
               ['tecnico_responsavel', 'Técnico'],
               ['resultado', 'Resultado'],
               ['data_emissao', 'Emitido em'],
@@ -342,6 +388,7 @@ export function Laudos() {
               <td className="mono">{porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`}</td>
               <td>{porId(l.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : <span style={{ color: 'var(--ink-400)' }}>ISO 8600 / outro</span>}</td>
+              <td>{nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-'}</td>
               <td>{l.tecnico_responsavel}</td>
               <td>
                 <Badge tono={l.resultado === 'Aprovado' ? 'teal' : 'danger'}>{l.resultado}</Badge>
@@ -356,40 +403,35 @@ export function Laudos() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={8}>Nenhum laudo encontrado.</td>
+              <td colSpan={9}>Nenhum laudo encontrado.</td>
             </tr>
           )}
         </tbody>
       </table>
 
       {modalAberto && (
-        <ModalJanela
-          titulo="Novo laudo"
-          aoFechar={() => setModalAberto(false)}
-          aoMinimizar={minimizarLaudo}
-        >
-            <div className="campo-form">
-              <label>Tipo de laudo *</label>
-              <select value={tipoLaudo} onChange={(e) => setTipoLaudo(e.target.value as TipoLaudo)}>
-                <option value="diagnostico">Diagnóstico (problema encontrado)</option>
-                <option value="servico">Serviço executado (o que foi feito)</option>
-                <option value="nota">Nota interna simples (texto livre)</option>
-              </select>
-            </div>
-            <div className="campo-form">
-              <label>Ordem de serviço *</label>
-              <ComboboxBusca
-                opcoes={opcoesOS}
-                valor={String(form.ordem_servico_id ?? '')}
-                onChange={(valor) => setForm((f) => ({ ...f, ordem_servico_id: valor }))}
-              />
-              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                O defeito relatado e os itens já registrados no orçamento dessa OS são puxados automaticamente
-                abaixo - não precisa redigitar.
-              </p>
-            </div>
+        <ModalJanela titulo="Novo laudo" aoFechar={() => setModalAberto(false)} aoMinimizar={minimizarLaudo}>
+          <div className="campo-form">
+            <label>Tipo de laudo *</label>
+            <select value={tipoLaudo} onChange={(e) => setTipoLaudo(e.target.value as TipoLaudo)}>
+              <option value="equipamento">Laudo de equipamento (checklist de manutenção)</option>
+              <option value="nota">Nota interna simples (texto livre)</option>
+            </select>
+          </div>
+          <div className="campo-form">
+            <label>Ordem de serviço *</label>
+            <ComboboxBusca
+              opcoes={opcoesOS}
+              valor={String(form.ordem_servico_id ?? '')}
+              onChange={(valor) => setForm((f) => ({ ...f, ordem_servico_id: valor }))}
+            />
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+              Cliente, unidade atendida e equipamento dessa OS são puxados automaticamente.
+            </p>
+          </div>
 
-            {tipoLaudo !== 'nota' && form.ordem_servico_id && (
+          {tipoLaudo === 'equipamento' && form.ordem_servico_id && (
+            <>
               <div
                 style={{
                   background: 'var(--paper-50)',
@@ -402,78 +444,126 @@ export function Laudos() {
               >
                 {dadosOSQuery.isLoading ? (
                   <p style={{ margin: 0 }}>Carregando dados da OS...</p>
-                ) : tipoLaudo === 'diagnostico' ? (
-                  <>
-                    <p style={{ margin: 0 }}>
-                      <strong>Defeito relatado:</strong> {dadosOSQuery.data?.os.defeito_relatado || 'Não informado'}
-                    </p>
-                    <p style={{ margin: '8px 0 4px' }}>
-                      <strong>Problemas identificados por item:</strong>
-                    </p>
-                    {(dadosOSQuery.data?.itens ?? []).filter((it) => it.observacao).length === 0 ? (
-                      <p style={{ margin: 0, color: 'var(--ink-400)' }}>
-                        Nenhum item com observação de defeito registrada no orçamento.
-                      </p>
-                    ) : (
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {(dadosOSQuery.data?.itens ?? [])
-                          .filter((it) => it.observacao)
-                          .map((it, i) => (
-                            <li key={i}>
-                              <strong>{it.nome}:</strong> {it.observacao}
-                            </li>
-                          ))}
-                      </ul>
-                    )}
-                  </>
                 ) : (
                   <>
-                    <p style={{ margin: '0 0 4px' }}>
-                      <strong>Serviços/peças registrados no orçamento:</strong>
+                    <p style={{ margin: 0 }}>
+                      <strong>Cliente:</strong> {dadosOSQuery.data?.os.cliente_nome}
+                      {dadosOSQuery.data?.clienteFinalNome ? ` (unidade: ${dadosOSQuery.data.clienteFinalNome})` : ''}
                     </p>
-                    {(dadosOSQuery.data?.itens ?? []).length === 0 ? (
-                      <p style={{ margin: 0, color: 'var(--ink-400)' }}>Nenhum item registrado.</p>
-                    ) : (
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {(dadosOSQuery.data?.itens ?? []).map((it, i) => (
-                          <li key={i}>
-                            {it.nome} (x{it.quantidade})
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <p style={{ margin: 0 }}>
+                      <strong>Equipamento:</strong>{' '}
+                      {[dadosOSQuery.data?.os.optica_desc, dadosOSQuery.data?.os.optica_fab].filter(Boolean).join(' - ') || '-'}
+                      {dadosOSQuery.data?.os.optica_sn ? ` · Nº série ${dadosOSQuery.data.os.optica_sn}` : ''}
+                    </p>
                   </>
                 )}
               </div>
-            )}
 
-            {tipoLaudo !== 'diagnostico' && (
               <div className="campo-form">
-                <label>Resultado</label>
-                <select value={form.resultado} onChange={(e) => setForm((f) => ({ ...f, resultado: e.target.value }))}>
-                  <option value="Aprovado">Aprovado</option>
-                  <option value="Reprovado">Reprovado</option>
-                </select>
+                <label>Tipo de equipamento *</label>
+                <ComboboxBusca
+                  opcoes={(tiposEquipamentoQuery.data ?? []).map((t) => ({ value: String(t.id), label: t.descricao }))}
+                  valor={String(form.tipo_equipamento_laudo_id ?? '')}
+                  onChange={escolherTipoEquipamento}
+                  placeholder="Buscar tipo de equipamento..."
+                />
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                  Define qual checklist aparece abaixo. Cadastre novos tipos em "Cadastros gerais" › "Tipos de
+                  equipamento (laudo)".
+                </p>
               </div>
-            )}
+
+              {form.tipo_equipamento_laudo_id && (
+                <div className="campo-form">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ marginBottom: 0 }}>Checklist</label>
+                    {(checklistItensQuery.data ?? []).length > 0 && (
+                      <button type="button" className="botao-secundario botao-pequeno" onClick={marcarTodosConforme}>
+                        Marcar todos como C
+                      </button>
+                    )}
+                  </div>
+                  {checklistItensQuery.isLoading ? (
+                    <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Carregando checklist...</p>
+                  ) : (checklistItensQuery.data ?? []).length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+                      Nenhum item de checklist cadastrado para este tipo de equipamento ainda.
+                    </p>
+                  ) : (
+                    <table className="tabela-crud" style={{ marginTop: 6 }}>
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th style={{ width: 60, textAlign: 'center' }}>C</th>
+                          <th style={{ width: 60, textAlign: 'center' }}>NC</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(checklistItensQuery.data ?? []).map((it) => (
+                          <tr key={it.id}>
+                            <td>{it.descricao}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="radio"
+                                name={`checklist-${it.id}`}
+                                checked={respostas[it.id] === true}
+                                onChange={() => setRespostas((r) => ({ ...r, [it.id]: true }))}
+                              />
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="radio"
+                                name={`checklist-${it.id}`}
+                                checked={respostas[it.id] === false}
+                                onChange={() => setRespostas((r) => ({ ...r, [it.id]: false }))}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {tipoLaudo === 'equipamento' && (
             <div className="campo-form">
-              <label>{tipoLaudo === 'nota' ? 'Observações técnicas' : 'Observações adicionais'}</label>
-              <textarea
-                value={form.observacoes_tecnicas}
-                onChange={(e) => setForm((f) => ({ ...f, observacoes_tecnicas: e.target.value }))}
-              />
+              <label>Equipamento conforme parâmetros de funcionamento (resultado final)</label>
+              <select value={form.resultado} onChange={(e) => setForm((f) => ({ ...f, resultado: e.target.value }))}>
+                <option value="Aprovado">Aprovado</option>
+                <option value="Reprovado">Reprovado</option>
+              </select>
             </div>
-
-            {erro && <p className="erro-login">{erro}</p>}
-
-            <div className="modal-acoes">
-              <button className="botao-secundario" onClick={() => setModalAberto(false)} disabled={gerando}>
-                Cancelar
-              </button>
-              <button className="botao-primario" onClick={gerarLaudo} disabled={gerando}>
-                {gerando ? 'Gerando...' : 'Gerar laudo'}
-              </button>
+          )}
+          {tipoLaudo === 'nota' && (
+            <div className="campo-form">
+              <label>Resultado</label>
+              <select value={form.resultado} onChange={(e) => setForm((f) => ({ ...f, resultado: e.target.value }))}>
+                <option value="Aprovado">Aprovado</option>
+                <option value="Reprovado">Reprovado</option>
+              </select>
             </div>
+          )}
+          <div className="campo-form">
+            <label>{tipoLaudo === 'nota' ? 'Observações técnicas' : 'Observações'}</label>
+            <textarea
+              value={form.observacoes_tecnicas}
+              onChange={(e) => setForm((f) => ({ ...f, observacoes_tecnicas: e.target.value }))}
+            />
+          </div>
+
+          {erro && <p className="erro-login">{erro}</p>}
+
+          <div className="modal-acoes">
+            <button className="botao-secundario" onClick={() => setModalAberto(false)} disabled={gerando}>
+              Cancelar
+            </button>
+            <button className="botao-primario" onClick={gerarLaudo} disabled={gerando}>
+              {gerando ? 'Gerando...' : 'Gerar laudo'}
+            </button>
+          </div>
         </ModalJanela>
       )}
     </div>

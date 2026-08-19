@@ -11,35 +11,42 @@ const styles = StyleSheet.create({
   th: { flexDirection: 'row', backgroundColor: '#f4f3ef', paddingVertical: 4, paddingHorizontal: 6, fontWeight: 700, fontSize: 10 },
   td: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e4e1d8', paddingVertical: 4, paddingHorizontal: 6 },
   cItem: { flex: 1 },
-  assinatura: { marginTop: 60, borderTop: 1, borderColor: '#999', paddingTop: 4, width: 250 },
+  cMarca: { width: 40, textAlign: 'center' },
+  resultado: { marginTop: 16, padding: 8, fontSize: 13, fontWeight: 700 },
+  aprovado: { backgroundColor: '#dcfce7', color: '#166534' },
+  reprovado: { backgroundColor: '#fee2e2', color: '#991b1b' },
+  assinatura: { marginTop: 40, borderTop: 1, borderColor: '#999', paddingTop: 4, width: 250 },
 });
 
-export interface ItemDiagnostico {
-  nome: string;
-  problema: string;
+export interface ItemChecklistPdf {
+  descricao: string;
+  conforme: boolean | null;
 }
 
-export interface DadosLaudoDiagnosticoPdf {
+export interface DadosLaudoEquipamentoPdf {
   numeroLaudo: string;
   numeroOS: string;
   clienteNome: string;
   clienteFinalNome?: string | null;
+  tipoEquipamento: string;
   equipamentoDesc: string;
   numeroSerie: string;
-  defeitoRelatado: string;
-  itens: ItemDiagnostico[];
-  observacoesAdicionais: string;
+  itens: ItemChecklistPdf[];
+  observacoes: string;
+  resultado: string;
   tecnicoResponsavel: string;
+  dataAbertura: string;
   dataEmissao: string;
 }
 
-export function LaudoDiagnosticoPdf({ dados: d }: { dados: DadosLaudoDiagnosticoPdf }) {
+export function LaudoEquipamentoPdf({ dados: d }: { dados: DadosLaudoEquipamentoPdf }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.titulo}>Q-CVF Medical - Laudo de Diagnóstico Técnico</Text>
+        <Text style={styles.titulo}>Q-CVF Medical - Laudo Técnico de Equipamento</Text>
         <Text style={styles.subtitulo}>Manutenção em Equipamentos Cirúrgicos</Text>
 
+        <Text style={styles.secao}>1 - Dados do solicitante</Text>
         <View style={styles.linha}>
           <Text style={styles.rotulo}>Nº do laudo</Text>
           <Text style={styles.valor}>{d.numeroLaudo}</Text>
@@ -59,49 +66,56 @@ export function LaudoDiagnosticoPdf({ dados: d }: { dados: DadosLaudoDiagnostico
           </View>
         )}
         <View style={styles.linha}>
+          <Text style={styles.rotulo}>Tipo de equipamento</Text>
+          <Text style={styles.valor}>{d.tipoEquipamento}</Text>
+        </View>
+        <View style={styles.linha}>
           <Text style={styles.rotulo}>Equipamento</Text>
-          <Text style={styles.valor}>
-            {d.equipamentoDesc}
-            {d.numeroSerie ? ` · Nº série ${d.numeroSerie}` : ''}
-          </Text>
+          <Text style={styles.valor}>{d.equipamentoDesc || '-'}</Text>
+        </View>
+        <View style={styles.linha}>
+          <Text style={styles.rotulo}>Nº de série</Text>
+          <Text style={styles.valor}>{d.numeroSerie || '-'}</Text>
+        </View>
+        <View style={styles.linha}>
+          <Text style={styles.rotulo}>Data da abertura</Text>
+          <Text style={styles.valor}>{d.dataAbertura || '-'}</Text>
         </View>
         <View style={styles.linha}>
           <Text style={styles.rotulo}>Data de emissão</Text>
           <Text style={styles.valor}>{d.dataEmissao}</Text>
         </View>
 
-        <Text style={styles.secao}>Defeito relatado</Text>
-        <Text>{d.defeitoRelatado || 'Não informado.'}</Text>
-
-        <Text style={styles.secao}>Problemas identificados na avaliação técnica</Text>
+        <Text style={styles.secao}>2 - Checklist (C = conforme, NC = não conforme)</Text>
         {d.itens.length === 0 ? (
-          <Text style={{ color: '#8c8a83' }}>Nenhum problema específico registrado por item.</Text>
+          <Text style={{ color: '#8c8a83' }}>Nenhum item de checklist cadastrado para este tipo de equipamento.</Text>
         ) : (
           <>
             <View style={styles.th}>
               <Text style={styles.cItem}>Item</Text>
-              <Text style={styles.cItem}>Problema identificado</Text>
+              <Text style={styles.cMarca}>C</Text>
+              <Text style={styles.cMarca}>NC</Text>
             </View>
             {d.itens.map((it, i) => (
               <View style={styles.td} key={i}>
-                <Text style={styles.cItem}>{it.nome}</Text>
-                <Text style={styles.cItem}>{it.problema}</Text>
+                <Text style={styles.cItem}>{it.descricao}</Text>
+                <Text style={styles.cMarca}>{it.conforme === true ? 'X' : ''}</Text>
+                <Text style={styles.cMarca}>{it.conforme === false ? 'X' : ''}</Text>
               </View>
             ))}
           </>
         )}
 
-        {d.observacoesAdicionais && (
+        {d.observacoes && (
           <>
-            <Text style={styles.secao}>Observações adicionais</Text>
-            <Text>{d.observacoesAdicionais}</Text>
+            <Text style={styles.secao}>Observações</Text>
+            <Text>{d.observacoes}</Text>
           </>
         )}
 
-        <View style={styles.linha}>
-          <Text style={styles.rotulo}>Técnico responsável</Text>
-          <Text style={styles.valor}>{d.tecnicoResponsavel}</Text>
-        </View>
+        <Text style={[styles.resultado, d.resultado === 'Aprovado' ? styles.aprovado : styles.reprovado]}>
+          Equipamento conforme parâmetros de funcionamento: {d.resultado}
+        </Text>
 
         <View style={styles.assinatura}>
           <Text>Assinatura do técnico responsável</Text>

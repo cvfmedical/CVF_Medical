@@ -485,7 +485,7 @@ export function OrcamentoTecnico() {
               onClick={imprimirRelatorioTecnico}
               disabled={(itensQuery.data ?? []).length === 0 && !observacoesGerais.trim()}
             >
-              Imprimir relatório técnico
+              Imprimir Ordem de Serviços - Laudo Técnico
             </button>
             <button className="botao-primario" onClick={finalizar}>
               Finalizar identificação de danos

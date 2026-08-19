@@ -42,7 +42,7 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
     .join('');
 
   return `
-    <h1>Relatório da Ordem de Serviço - Peças Danificadas</h1>
+    <h1>Ordem de Serviços - Laudo Técnico</h1>
     <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
     <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${os.numero_os}</div></div>
     <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${os.cliente_nome}</div></div>
@@ -77,7 +77,7 @@ export function imprimirRelatorioOS(
   const corpo = montarCorpoRelatorioOS(os, itens);
   const mensagem = `Olá! Identificamos as avarias abaixo no equipamento ${os.optica_desc ?? ''} (OS ${os.numero_os}). O orçamento será enviado em seguida. Acompanhe pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
   abrirImpressao(
-    `Relatório da Ordem de Serviço ${os.numero_os}`,
+    `Ordem de Serviços - Laudo Técnico ${os.numero_os}`,
     corpo,
     cliente
       ? {

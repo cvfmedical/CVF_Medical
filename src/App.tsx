@@ -28,6 +28,8 @@ import { SubgruposProdutosServicos } from './pages/cadastros/SubgruposProdutosSe
 import { TiposOtica } from './pages/cadastros/TiposOtica';
 import { CondicoesPagamento } from './pages/cadastros/CondicoesPagamento';
 import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
+import { TiposEquipamentoLaudo } from './pages/cadastros/TiposEquipamentoLaudo';
+import { ChecklistLaudoItens } from './pages/cadastros/ChecklistLaudoItens';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
 import { RegistroEntrada } from './pages/pipeline/RegistroEntrada';
 import { RastreioEquipamento } from './pages/pipeline/RastreioEquipamento';
@@ -79,6 +81,8 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/tipos-otica': TiposOtica,
   '/condicoes-pagamento': CondicoesPagamento,
   '/condicoes-chegada': CondicoesChegada,
+  '/tipos-equipamento-laudo': TiposEquipamentoLaudo,
+  '/checklist-laudo-itens': ChecklistLaudoItens,
   '/entrada-equipamento': EntradaEquipamento,
   '/registro-entrada': RegistroEntrada,
   '/rastreio/:codigo': RastreioEquipamento,

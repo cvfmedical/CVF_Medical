@@ -55,6 +55,8 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Tipos de ótica', path: '/tipos-otica', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Condições de pagamento', path: '/condicoes-pagamento', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Condições de chegada', path: '/condicoes-chegada', categoria: 'cadastros_gerais', implementado: false },
+      { label: 'Tipos de equipamento (laudo)', path: '/tipos-equipamento-laudo', categoria: 'cadastros_gerais', implementado: false },
+      { label: 'Checklist de laudo (itens)', path: '/checklist-laudo-itens', categoria: 'cadastros_gerais', implementado: false },
     ],
   },
   {
