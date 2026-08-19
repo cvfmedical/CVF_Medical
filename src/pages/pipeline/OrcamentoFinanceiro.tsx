@@ -105,14 +105,6 @@ const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
 // Opções pré-definidas das condições comerciais (o campo continua sendo texto
 // livre no banco - estas são só atalhos; "Outro" libera a digitação).
 const OPCOES_VALIDADE = ['10 dias', '15 dias', '30 dias'];
-const OPCOES_PAGAMENTO = [
-  'À vista',
-  '28 DDL',
-  '2x (28/56 DDL)',
-  '3x (28/56/84 DDL)',
-  '4x (28/56/84/112 DDL)',
-  '50% de sinal; 50% em 15 DDL no faturamento.',
-];
 
 // Select com opções + "Outro" que libera um campo de texto livre.
 function CampoSelecao({
@@ -235,6 +227,19 @@ export function OrcamentoFinanceiro() {
     orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
   const avariasTriagemQuery = useAvariasTriagem();
+
+  const condicoesPagamentoQuery = useQuery({
+    queryKey: ['condicoes-pagamento-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('condicoes_pagamento')
+        .select('descricao')
+        .eq('status_ativo', true)
+        .order('descricao');
+      if (error) throw error;
+      return data as { descricao: string }[];
+    },
+  });
 
   const itensQuery = useQuery({
     queryKey: ['itens-orcamento-financeiro', selecionadoId],
@@ -1585,10 +1590,13 @@ export function OrcamentoFinanceiro() {
               <CampoSelecao
                 valor={condicoesPagamento}
                 aoMudar={setCondicoesPagamento}
-                opcoes={OPCOES_PAGAMENTO}
+                opcoes={(condicoesPagamentoQuery.data ?? []).map((c) => c.descricao)}
                 placeholder="Escreva a condição de pagamento"
                 disabled={travado}
               />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Pra adicionar uma nova opção fixa na lista, cadastre em Cadastros gerais → Condições de pagamento.
+              </p>
             </div>
             <div className="campo-form">
               <label>Observações do financeiro</label>

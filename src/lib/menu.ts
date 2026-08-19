@@ -53,6 +53,7 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Grupos de produtos/serviços', path: '/categorias-produtos-servicos', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Subgrupos de produtos/serviços', path: '/subgrupos-produtos-servicos', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Tipos de ótica', path: '/tipos-otica', categoria: 'cadastros_gerais', implementado: false },
+      { label: 'Condições de pagamento', path: '/condicoes-pagamento', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Condições de chegada', path: '/condicoes-chegada', categoria: 'cadastros_gerais', implementado: false },
     ],
   },
