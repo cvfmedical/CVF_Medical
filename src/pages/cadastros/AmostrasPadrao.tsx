@@ -70,6 +70,7 @@ export function AmostrasPadrao() {
           chave: 'catalogo_otica_id',
           label: 'Modelo',
           render: (r) => mapaModelo.get(r.catalogo_otica_id) ?? String(r.catalogo_otica_id),
+          valorFiltro: (r) => mapaModelo.get(r.catalogo_otica_id) ?? String(r.catalogo_otica_id),
         },
         { chave: 'fov_medido_graus', label: 'FOV ref. (°)', render: (r) => `${r.fov_medido_graus}°` },
         {
@@ -82,6 +83,7 @@ export function AmostrasPadrao() {
           chave: 'ativo',
           label: 'Referência ativa',
           render: (r) => <Badge tono={r.ativo ? 'teal' : 'neutro'}>{r.ativo ? 'Ativa' : 'Inativa'}</Badge>,
+          rotuloFiltro: (r) => (r.ativo ? 'Ativa' : 'Inativa'),
         },
       ]}
       campos={[

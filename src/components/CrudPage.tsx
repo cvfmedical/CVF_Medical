@@ -46,6 +46,16 @@ export interface ColunaConfig<Row> {
   // Identificadores (Nº OS, nº de série, código de laudo) usam
   // IBM Plex Mono, discreto, pra não competir com o conteúdo da linha.
   mono?: boolean;
+  // Rótulo mostrado no dropdown "estilo Excel" do filtro de coluna, quando
+  // o valor cru da linha não é auto-explicativo (ex: campo timestamp cujo
+  // `render` mostra um Badge "Aguardando" quando vazio, em vez da data).
+  // Sem isso, cai no formatarValorParaFiltro (detecta data/timestamp ISO).
+  rotuloFiltro?: (row: Row) => string;
+  // Valor usado pra filtrar/agrupar esta coluna, quando `chave` não é um
+  // campo de verdade da linha (ex: coluna derivada por lookup, tipo
+  // "Cliente" via porId(ordem_servico_id)) - sem isso o filtro compara
+  // contra `linha[chave]`, que fica undefined e nunca bate com nada.
+  valorFiltro?: (row: Row) => unknown;
 }
 
 export interface CrudPageProps<Row extends { id: number }> {
@@ -122,7 +132,7 @@ export function CrudPage<Row extends { id: number }>({
   const linhasFiltradas = useMemo(() => {
     const todas = listQuery.data ?? [];
     return todas.filter((linha) =>
-      colunas.every((c) => passaFiltro((linha as Record<string, unknown>)[c.chave], c.chave)),
+      colunas.every((c) => passaFiltro(c.valorFiltro ? c.valorFiltro(linha) : (linha as Record<string, unknown>)[c.chave], c.chave)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listQuery.data, filtrosColuna, filtrosValores, colunas]);
@@ -243,9 +253,14 @@ export function CrudPage<Row extends { id: number }>({
             </tr>
             <tr>
               {colunas.map((c) => {
+                const valorColuna = (linha: Row) =>
+                  c.valorFiltro ? c.valorFiltro(linha) : (linha as Record<string, unknown>)[c.chave];
                 const valoresDisponiveis = Array.from(
-                  new Set((listQuery.data ?? []).map((linha) => String((linha as Record<string, unknown>)[c.chave] ?? ''))),
+                  new Set((listQuery.data ?? []).map((linha) => String(valorColuna(linha) ?? ''))),
                 ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+                const rotulos = c.rotuloFiltro
+                  ? Object.fromEntries((listQuery.data ?? []).map((linha) => [String(valorColuna(linha) ?? ''), c.rotuloFiltro!(linha)]))
+                  : undefined;
                 return (
                   <th key={c.chave} style={{ padding: '2px 6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -258,6 +273,7 @@ export function CrudPage<Row extends { id: number }>({
                       />
                       <FiltroColunaValores
                         valores={valoresDisponiveis}
+                        rotulos={rotulos}
                         selecionados={filtrosValores[c.chave] ?? new Set()}
                         onChange={(v) => setValoresColuna(c.chave, v)}
                       />

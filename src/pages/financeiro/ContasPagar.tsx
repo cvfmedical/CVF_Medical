@@ -63,7 +63,12 @@ export function ContasPagar() {
       valorInicial={{ status: 'Em aberto' }}
       colunas={[
         { chave: 'numero_conta', label: 'Nº conta', mono: true },
-        { chave: 'fornecedor_id', label: 'Fornecedor', render: (r) => nomeFornecedor(r.fornecedor_id) },
+        {
+          chave: 'fornecedor_id',
+          label: 'Fornecedor',
+          render: (r) => nomeFornecedor(r.fornecedor_id),
+          valorFiltro: (r) => nomeFornecedor(r.fornecedor_id),
+        },
         { chave: 'descricao', label: 'Descrição' },
         { chave: 'valor', label: 'Valor', render: (r) => `R$ ${Number(r.valor).toFixed(2)}` },
         {

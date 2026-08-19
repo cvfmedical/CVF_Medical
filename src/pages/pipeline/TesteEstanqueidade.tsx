@@ -73,16 +73,23 @@ export function TesteEstanqueidade() {
             label: 'OS',
             mono: true,
             render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+            valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
           },
           {
             chave: 'cliente_nome',
             label: 'Cliente',
             render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+            valorFiltro: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
           },
           { chave: 'pressao_aplicada_kpa', label: 'Pressão (kPa)' },
           { chave: 'tempo_segundos', label: 'Tempo (s)' },
           { chave: 'temperatura_celsius', label: 'Temp. (°C)' },
-          { chave: 'imersao_total', label: 'Imersão total', render: (r) => (r.imersao_total ? 'Sim' : 'Não') },
+          {
+            chave: 'imersao_total',
+            label: 'Imersão total',
+            render: (r) => (r.imersao_total ? 'Sim' : 'Não'),
+            rotuloFiltro: (r) => (r.imersao_total ? 'Sim' : 'Não'),
+          },
           {
             chave: 'metodo_observacao',
             label: 'Método',
@@ -94,6 +101,7 @@ export function TesteEstanqueidade() {
               ) : (
                 '-'
               ),
+            rotuloFiltro: (r) => (r.metodo_observacao === METODO_ISO ? 'ISO' : r.metodo_observacao ? 'Desvio' : '-'),
           },
           {
             chave: 'resultado',

@@ -184,6 +184,7 @@ export function ContratosManutencao() {
               </>
             );
           },
+          valorFiltro: (r) => nomeCliente(r.cliente_id),
         },
         { chave: 'tipo_contrato', label: 'Tipo' },
         { chave: 'periodicidade_visitas', label: 'Periodicidade' },
@@ -204,6 +205,7 @@ export function ContratosManutencao() {
             const s = statusExibicao(r);
             return <Badge tono={s.tono}>{s.texto}</Badge>;
           },
+          valorFiltro: (r) => statusExibicao(r).texto,
         },
         {
           chave: 'precos_fixos',

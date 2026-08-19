@@ -194,11 +194,13 @@ export function Entrega() {
           label: 'OS',
           mono: true,
           render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+          valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
         },
         {
           chave: 'cliente',
           label: 'Cliente',
           render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          valorFiltro: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
         },
         {
           chave: 'situacao',
@@ -209,6 +211,8 @@ export function Entrega() {
             ) : (
               <Badge tono="teal">Pós-reparo</Badge>
             ),
+          valorFiltro: (r) =>
+            porId(r.ordem_servico_id)?.status_os === STATUS_DEVOLUCAO_SEM_REPARO ? 'Devolução sem reparo' : 'Pós-reparo',
         },
         { chave: 'forma_devolucao', label: 'Forma de devolução' },
         { chave: 'nf_devolucao_numero', label: 'NF devolução', mono: true },
@@ -222,6 +226,8 @@ export function Entrega() {
             ) : (
               <Badge tono="neutro">Aguardando</Badge>
             ),
+          rotuloFiltro: (r) =>
+            r.confirmado_pelo_cliente_em ? new Date(r.confirmado_pelo_cliente_em).toLocaleString('pt-BR') : 'Aguardando',
         },
         { chave: 'detalhes', label: 'Detalhes' },
       ]}

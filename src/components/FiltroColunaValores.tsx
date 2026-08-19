@@ -5,6 +5,11 @@ import { formatarValorParaFiltro } from '../lib/useFiltrosColuna';
 
 export interface FiltroColunaValoresProps {
   valores: string[];
+  // Rótulo alternativo por valor cru, para colunas cujo `render` mostra
+  // algo que não é uma formatação genérica de data (ex: Badge "Aguardando"
+  // quando o campo timestamp está vazio). Sem entrada pro valor, cai no
+  // formatarValorParaFiltro (detecta data/timestamp ISO).
+  rotulos?: Record<string, string>;
   selecionados: Set<string>;
   onChange: (novo: Set<string>) => void;
 }
@@ -12,7 +17,7 @@ export interface FiltroColunaValoresProps {
 // Filtro "estilo Excel" - clica na seta, marca um ou mais valores exatos
 // que já existem na coluna. Complementa (não substitui) o campo de busca
 // por texto parcial que já existe ao lado dele.
-export function FiltroColunaValores({ valores, selecionados, onChange }: FiltroColunaValoresProps) {
+export function FiltroColunaValores({ valores, rotulos, selecionados, onChange }: FiltroColunaValoresProps) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,9 +34,13 @@ export function FiltroColunaValores({ valores, selecionados, onChange }: FiltroC
     return () => document.removeEventListener('mousedown', aoClicarFora);
   }, [aberto]);
 
+  function rotulo(v: string): string {
+    return rotulos?.[v] ?? formatarValorParaFiltro(v);
+  }
+
   const termo = normalizarBusca(busca.trim());
   const valoresFiltrados = termo
-    ? valores.filter((v) => normalizarBusca(v).includes(termo) || normalizarBusca(formatarValorParaFiltro(v)).includes(termo))
+    ? valores.filter((v) => normalizarBusca(v).includes(termo) || normalizarBusca(rotulo(v)).includes(termo))
     : valores;
 
   function alternar(v: string) {
@@ -74,7 +83,7 @@ export function FiltroColunaValores({ valores, selecionados, onChange }: FiltroC
               <li key={v}>
                 <label>
                   <input type="checkbox" checked={selecionados.has(v)} onChange={() => alternar(v)} />
-                  <span>{formatarValorParaFiltro(v) || '(vazio)'}</span>
+                  <span>{rotulo(v) || '(vazio)'}</span>
                 </label>
               </li>
             ))}

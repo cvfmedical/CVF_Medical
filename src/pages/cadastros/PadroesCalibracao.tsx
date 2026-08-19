@@ -51,6 +51,7 @@ export function PadroesCalibracao() {
             const s = statusValidade(r.data_validade);
             return <Badge tono={s.tono}>{s.texto}</Badge>;
           },
+          valorFiltro: (r) => statusValidade(r.data_validade).texto,
         },
       ]}
       campos={[

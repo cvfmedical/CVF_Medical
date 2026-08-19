@@ -49,7 +49,12 @@ export function LotesEstoque() {
       camposFiltro={['numero_lote']}
       valorInicial={{ status_ativo: true, quantidade: 0 }}
       colunas={[
-        { chave: 'produto_servico_id', label: 'Produto/peça', render: (r) => nomeProduto(r.produto_servico_id) },
+        {
+          chave: 'produto_servico_id',
+          label: 'Produto/peça',
+          render: (r) => nomeProduto(r.produto_servico_id),
+          valorFiltro: (r) => nomeProduto(r.produto_servico_id),
+        },
         { chave: 'numero_lote', label: 'Nº do lote', mono: true },
         { chave: 'quantidade', label: 'Quantidade' },
         {
@@ -64,6 +69,7 @@ export function LotesEstoque() {
             const s = statusValidade(r.data_validade);
             return <Badge tono={s.tono}>{s.texto}</Badge>;
           },
+          valorFiltro: (r) => statusValidade(r.data_validade).texto,
         },
       ]}
       campos={[

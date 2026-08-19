@@ -31,6 +31,7 @@ export function Fornecedores() {
           chave: 'status_ativo',
           label: 'Ativo',
           render: (r) => <Badge tono={r.status_ativo ? 'teal' : 'neutro'}>{r.status_ativo ? 'Ativo' : 'Inativo'}</Badge>,
+          rotuloFiltro: (r) => (r.status_ativo ? 'Ativo' : 'Inativo'),
         },
       ]}
       campos={[
