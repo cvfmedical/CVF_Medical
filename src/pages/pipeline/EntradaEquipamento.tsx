@@ -150,6 +150,11 @@ export function EntradaEquipamento() {
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
+  // Envio em lote (igual ao Financeiro): manda o e-mail de chegada de
+  // várias entradas do mesmo cliente num só e-mail, em vez de um por um.
+  const [selecionadasEnvio, setSelecionadasEnvio] = useState<Set<number>>(new Set());
+  const [enviandoLote, setEnviandoLote] = useState(false);
+  const [erroLote, setErroLote] = useState<string | null>(null);
 
   // Minimizar/restaurar preservando dados entre telas. Os File das fotos ficam
   // vivos porque o contexto de rascunhos mora na raiz do app.
@@ -657,6 +662,92 @@ export function EntradaEquipamento() {
     }
   }
 
+  function alternarSelecaoEnvio(e: Entrada) {
+    setSelecionadasEnvio((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(e.id)) {
+        novo.delete(e.id);
+        return novo;
+      }
+      const primeiroId = [...novo][0];
+      if (primeiroId != null) {
+        const primeira = entradasQuery.data?.find((x) => x.id === primeiroId);
+        if (primeira?.cliente_id !== e.cliente_id) {
+          alert('Só é possível enviar em lote entradas do mesmo cliente - desmarque a seleção atual primeiro.');
+          return atual;
+        }
+      }
+      novo.add(e.id);
+      return novo;
+    });
+  }
+
+  function alternarSelecaoTodosVisiveis(visiveis: Entrada[]) {
+    const todosJaSelecionados = visiveis.length > 0 && visiveis.every((e) => selecionadasEnvio.has(e.id));
+    if (todosJaSelecionados) {
+      setSelecionadasEnvio(new Set());
+      return;
+    }
+    const clienteAlvo = visiveis[0]?.cliente_id;
+    const mesmoCliente = visiveis.filter((e) => e.cliente_id === clienteAlvo);
+    if (mesmoCliente.length < visiveis.length) {
+      alert('Só é possível enviar em lote entradas do mesmo cliente - filtre pela coluna "Cliente" antes de selecionar todas.');
+    }
+    setSelecionadasEnvio(new Set(mesmoCliente.map((e) => e.id)));
+  }
+
+  // Igual ao envio em lote do Financeiro: um único e-mail listando todas as
+  // entradas selecionadas (do mesmo cliente), em vez de um e-mail por entrada.
+  async function enviarSelecionadasPorEmail() {
+    const lista = (entradasQuery.data ?? []).filter((e) => selecionadasEnvio.has(e.id));
+    if (lista.length === 0) return;
+    const c = cliente(lista[0].cliente_id);
+    if (!c?.email) {
+      setErroLote('Este cliente não tem e-mail cadastrado.');
+      return;
+    }
+    setErroLote(null);
+    setEnviandoLote(true);
+    try {
+      const itensHtml = lista
+        .map((e) => {
+          const equipamento = [e.equipamento_desc, e.equipamento_fab].filter(Boolean).join(' - ');
+          return `<li><strong>${e.codigo_entrada}</strong> — ${equipamento || 'equipamento informado'}${e.equipamento_sn ? ` (Nº série ${e.equipamento_sn})` : ''}</li>`;
+        })
+        .join('');
+      const html = `<p>Prezado(a) cliente,</p>
+        <p>Informamos que os equipamentos abaixo foram recebidos em nossa unidade e já passaram pela triagem inicial:</p>
+        <ul>${itensHtml}</ul>
+        <p>Nossa equipe técnica dará início à avaliação e, em breve, você receberá o(s) orçamento(s) de manutenção.</p>
+        <p>Acompanhe o andamento a qualquer momento pelo Portal do Cliente:<br/>
+        <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
+        <p>Atenciosamente,<br/><strong>Q-CVF Medical</strong></p>`;
+
+      const assunto = `Q-CVF Medical - Equipamentos recebidos (${lista.map((e) => e.codigo_entrada).join(', ')})`;
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: { to: c.email, subject: assunto, html },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+
+      await registrarEmailEnviado({
+        resendId: data?.id,
+        destinatarios: [c.email],
+        assunto,
+        entradaIds: lista.map((e) => e.id),
+        enviadoPor: funcionario?.id ?? null,
+      });
+
+      alert(`E-mail enviado para ${c.email} com ${lista.length} entrada(s).`);
+      setSelecionadasEnvio(new Set());
+    } catch (e) {
+      setErroLote(mensagemErro(e));
+    } finally {
+      setEnviandoLote(false);
+    }
+  }
+
   function compartilharLink(entrada: Entrada) {
     const c = cliente(entrada.cliente_id);
     const mensagem = `Olá! Recebemos o equipamento ${entrada.equipamento_desc ?? ''} (entrada ${entrada.codigo_entrada}). Acompanhe o andamento no portal do cliente: ${PORTAL_CLIENTE_URL}`;
@@ -680,12 +771,51 @@ export function EntradaEquipamento() {
       </div>
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
         Mostrando só o que ainda não foi convertido em OS. Entradas já convertidas saem desta lista - use os filtros
-        das colunas abaixo pra encontrá-las (ou acompanhe pela tela "Ordem de serviço").
+        das colunas abaixo pra encontrá-las (ou acompanhe pela tela "Ordem de serviço"). Marque a caixa nas linhas
+        para enviar o e-mail de chegada de várias entradas do mesmo cliente num só e-mail.
       </p>
+
+      {selecionadasEnvio.size > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: 'var(--paper-50)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 10,
+            marginBottom: 12,
+          }}
+        >
+          <span style={{ fontSize: 13 }}>{selecionadasEnvio.size} entrada(s) selecionada(s)</span>
+          <button className="botao-primario botao-pequeno" onClick={enviarSelecionadasPorEmail} disabled={enviandoLote}>
+            {enviandoLote ? 'Enviando...' : `Enviar por e-mail (${selecionadasEnvio.size})`}
+          </button>
+          <button className="botao-secundario botao-pequeno" onClick={() => setSelecionadasEnvio(new Set())} disabled={enviandoLote}>
+            Limpar seleção
+          </button>
+          {erroLote && <span className="erro-login">{erroLote}</span>}
+        </div>
+      )}
 
       <table className="tabela-crud">
         <thead>
           <tr>
+            <th>
+              {(() => {
+                if (linhas.length === 0) return null;
+                const todosSelecionados = linhas.every((e) => selecionadasEnvio.has(e.id));
+                return (
+                  <input
+                    type="checkbox"
+                    checked={todosSelecionados}
+                    onChange={() => alternarSelecaoTodosVisiveis(linhas)}
+                    title="Selecionar todas as linhas visíveis (mesmo cliente)"
+                  />
+                );
+              })()}
+            </th>
             {[
               ['codigo_entrada', 'Código'],
               ['cliente', 'Cliente'],
@@ -702,6 +832,7 @@ export function EntradaEquipamento() {
             <th></th>
           </tr>
           <tr>
+            <th></th>
             {['codigo_entrada', 'cliente', 'equipamento_desc', 'equipamento_sn', 'nf_remessa', 'status', 'data_entrada'].map(
               (chave) => (
                 <th key={chave} style={{ padding: '2px 6px' }}>
@@ -721,6 +852,9 @@ export function EntradaEquipamento() {
         <tbody>
           {linhas.map((e) => (
             <tr key={e.id}>
+              <td>
+                <input type="checkbox" checked={selecionadasEnvio.has(e.id)} onChange={() => alternarSelecaoEnvio(e)} />
+              </td>
               <td className="mono">{e.codigo_entrada}</td>
               <td>{cliente(e.cliente_id)?.razao_social}</td>
               <td>{e.equipamento_desc}</td>
@@ -789,7 +923,7 @@ export function EntradaEquipamento() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={8}>Nenhum registro encontrado.</td>
+              <td colSpan={9}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>

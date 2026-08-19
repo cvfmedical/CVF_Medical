@@ -11,15 +11,17 @@ export async function registrarEmailEnviado(params: {
   assunto: string;
   orcamentoIds?: number[];
   entradaId?: number | null;
+  entradaIds?: number[];
   enviadoPor?: number | null;
 }) {
   if (!params.resendId) return;
+  const entradaIds = params.entradaIds?.length ? params.entradaIds : params.entradaId ? [params.entradaId] : [];
   const { error } = await supabase.from('emails_enviados').insert({
     resend_id: params.resendId,
     destinatarios: params.destinatarios,
     assunto: params.assunto,
     orcamento_ids: params.orcamentoIds ?? [],
-    entrada_id: params.entradaId ?? null,
+    entrada_ids: entradaIds,
     enviado_por: params.enviadoPor ?? null,
   });
   if (error) console.error('Falha ao registrar rastreio de e-mail:', error);
