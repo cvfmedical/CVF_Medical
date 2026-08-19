@@ -5,6 +5,7 @@ import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useNavigate } from 'react-router-dom';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Consulta para o técnico ver, em ordem de aprovação (quem aprovou
 // primeiro aparece primeiro), quais orçamentos já foram aprovados pelo
@@ -14,6 +15,8 @@ import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrc
 // alerta flutuante (AlertaOrcamentosAprovados).
 export function OrcamentosAprovados() {
   const navigate = useNavigate();
+  const { temPermissao } = useAuth();
+  const podeVerValor = temPermissao('financeiro');
   const query = useOrcamentosAprovados();
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
 
@@ -67,7 +70,7 @@ export function OrcamentosAprovados() {
               ['numero_os', 'OS'],
               ['cliente_nome', 'Cliente'],
               ['equipamento', 'Equipamento'],
-              ['valor', 'Valor'],
+              ...(podeVerValor ? [['valor', 'Valor']] : []),
             ].map(([chave, label]) => (
               <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
                 {label}
@@ -76,7 +79,14 @@ export function OrcamentosAprovados() {
             <th></th>
           </tr>
           <tr>
-            {['data_resposta_cliente', 'numero_orcamento', 'numero_os', 'cliente_nome', 'equipamento', 'valor'].map((chave) => (
+            {[
+              'data_resposta_cliente',
+              'numero_orcamento',
+              'numero_os',
+              'cliente_nome',
+              'equipamento',
+              ...(podeVerValor ? ['valor'] : []),
+            ].map((chave) => (
               <th key={chave} style={{ padding: '2px 6px' }}>
                 <input
                   type="text"
@@ -101,7 +111,7 @@ export function OrcamentosAprovados() {
                 {o.ordens_servico?.optica_desc} ({o.ordens_servico?.optica_fab}) -{' '}
                 <span className="mono">{o.ordens_servico?.optica_sn}</span>
               </td>
-              <td>R$ {total(o).toFixed(2)}</td>
+              {podeVerValor && <td>R$ {total(o).toFixed(2)}</td>}
               <td className="acoes-tabela">
                 <button className="botao-primario botao-pequeno" onClick={() => iniciarManutencao(o.ordem_servico_id)}>
                   Iniciar manutenção
@@ -111,7 +121,7 @@ export function OrcamentosAprovados() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhum orçamento encontrado.</td>
+              <td colSpan={podeVerValor ? 7 : 6}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>

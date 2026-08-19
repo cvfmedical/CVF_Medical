@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
@@ -168,6 +169,7 @@ export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
+  const [searchParams] = useSearchParams();
   const [filtrosColunaLista, setFiltrosColunaLista] = useState<Record<string, string>>({});
   const [observacoesFinanceiro, setObservacoesFinanceiro] = useState('');
   const [validadeProposta, setValidadeProposta] = useState('');
@@ -329,6 +331,13 @@ export function OrcamentoFinanceiro() {
       return data;
     },
   });
+
+  // Pré-seleciona o orçamento quando vem de "Orçamentos aguardando
+  // aprovação" (link direto pra abrir e aprovar, sem precisar achar na lista).
+  useEffect(() => {
+    const orcamentoParam = searchParams.get('orcamento');
+    if (orcamentoParam) setSelecionadoId(Number(orcamentoParam));
+  }, [searchParams]);
 
   // Pré-preenche os e-mails adicionais a partir do cadastro do cliente
   // sempre que um novo orçamento é selecionado (ainda editável no envio).
@@ -810,6 +819,25 @@ export function OrcamentoFinanceiro() {
     });
   }
 
+  // "Selecionar todos" do cabeçalho: marca todas as linhas visíveis
+  // elegíveis (Aguardando Envio ao Cliente) - se forem de clientes
+  // diferentes, respeita a mesma regra de "só o mesmo cliente por lote"
+  // usando o cliente da primeira linha como referência e ignorando o resto
+  // (o fluxo esperado é filtrar por cliente antes de selecionar todos).
+  function alternarSelecaoTodosVisiveis(elegiveis: Orcamento[]) {
+    const todosJaSelecionados = elegiveis.length > 0 && elegiveis.every((o) => selecionadosEnvio.has(o.id));
+    if (todosJaSelecionados) {
+      setSelecionadosEnvio(new Set());
+      return;
+    }
+    const clienteAlvo = elegiveis[0]?.ordens_servico?.cliente_id;
+    const mesmoCliente = elegiveis.filter((o) => o.ordens_servico?.cliente_id === clienteAlvo);
+    if (mesmoCliente.length < elegiveis.length) {
+      alert('Só é possível enviar em lote orçamentos do mesmo cliente - filtre pela coluna "Cliente" antes de selecionar todos.');
+    }
+    setSelecionadosEnvio(new Set(mesmoCliente.map((o) => o.id)));
+  }
+
   // Envio em lote: gera os PDFs de cada orçamento selecionado (Entrada + OS +
   // Orçamento, sem repetir a orientação/manual), anexa o manual do portal só
   // uma vez ao final, e manda tudo num único e-mail. Ao terminar, marca todos
@@ -1230,7 +1258,21 @@ export function OrcamentoFinanceiro() {
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th></th>
+            <th>
+              {(() => {
+                const elegiveis = linhasLista.filter((o) => o.status === 'Aguardando Envio ao Cliente');
+                if (elegiveis.length === 0) return null;
+                const todosSelecionados = elegiveis.every((o) => selecionadosEnvio.has(o.id));
+                return (
+                  <input
+                    type="checkbox"
+                    checked={todosSelecionados}
+                    onChange={() => alternarSelecaoTodosVisiveis(elegiveis)}
+                    title="Selecionar todas as linhas visíveis aguardando envio (mesmo cliente)"
+                  />
+                );
+              })()}
+            </th>
             {[
               ['numero_orcamento', 'Nº orçamento'],
               ['numero_os', 'OS'],
@@ -1319,6 +1361,17 @@ export function OrcamentoFinanceiro() {
                   fontSize: 13,
                 }}
               >
+                <div>
+                  <strong>Cliente:</strong> {orcamentoSelecionado.ordens_servico.cliente_nome}
+                  {clienteFinalQuery.data && (
+                    <>
+                      {' '}
+                      <span style={{ color: 'var(--copper-800)' }}>
+                        (terceirizado — atende: <strong>{clienteFinalQuery.data.razao_social}</strong>)
+                      </span>
+                    </>
+                  )}
+                </div>
                 <strong>Ótica da OS {orcamentoSelecionado.ordens_servico.numero_os}:</strong>{' '}
                 {[orcamentoSelecionado.ordens_servico.optica_fab, orcamentoSelecionado.ordens_servico.optica_desc]
                   .filter(Boolean)

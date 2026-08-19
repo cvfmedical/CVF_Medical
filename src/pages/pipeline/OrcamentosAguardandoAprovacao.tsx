@@ -119,8 +119,12 @@ export function OrcamentosAguardandoAprovacao() {
                 </td>
                 <td>R$ {total(o).toFixed(2)}</td>
                 <td className="acoes-tabela">
-                  <button className="botao-secundario botao-pequeno" onClick={() => navigate('/orcamento-financeiro')}>
-                    Ver no Financeiro
+                  <button
+                    className="botao-primario botao-pequeno"
+                    onClick={() => navigate(`/orcamento-financeiro?orcamento=${o.id}`)}
+                    title="Abre este orçamento direto no Financeiro, já pronto para aprovar/recusar manualmente"
+                  >
+                    Aprovar
                   </button>
                 </td>
               </tr>

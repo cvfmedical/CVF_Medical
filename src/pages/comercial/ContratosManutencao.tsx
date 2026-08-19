@@ -66,9 +66,12 @@ export function ContratosManutencao() {
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes-contratos'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('clientes').select('id, razao_social').order('razao_social');
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, razao_social, eh_terceirizado, representante_id')
+        .order('razao_social');
       if (error) throw error;
-      return data as { id: number; razao_social: string }[];
+      return data as { id: number; razao_social: string; eh_terceirizado: boolean; representante_id: number | null }[];
     },
   });
 
@@ -99,6 +102,17 @@ export function ContratosManutencao() {
 
   function nomeCliente(id: number) {
     return clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}`;
+  }
+
+  // Mostra a relação terceirizado/cliente final (quando existir) pra
+  // financeiro/comercial não confundir de quem é o contrato - ex.: contrato
+  // em nome de "GF" (cliente final) cujo terceirizado é "Allmed".
+  function relacaoTerceirizado(id: number): string | null {
+    const c = clientesQuery.data?.find((x) => x.id === id);
+    if (!c) return null;
+    if (c.representante_id) return `terceirizado: ${nomeCliente(c.representante_id)}`;
+    if (c.eh_terceirizado) return 'é terceirizado/representante';
+    return null;
   }
 
   function nomeOtica(catalogoOticaId: number) {
@@ -153,7 +167,24 @@ export function ContratosManutencao() {
       valorInicial={{ status: 'Ativo' }}
       colunas={[
         { chave: 'numero_contrato', label: 'Nº contrato', mono: true },
-        { chave: 'cliente_id', label: 'Cliente', render: (r) => nomeCliente(r.cliente_id) },
+        {
+          chave: 'cliente_id',
+          label: 'Cliente',
+          render: (r) => {
+            const relacao = relacaoTerceirizado(r.cliente_id);
+            return (
+              <>
+                {nomeCliente(r.cliente_id)}
+                {relacao && (
+                  <>
+                    {' '}
+                    <span style={{ fontSize: 11, color: 'var(--copper-800)' }}>({relacao})</span>
+                  </>
+                )}
+              </>
+            );
+          },
+        },
         { chave: 'tipo_contrato', label: 'Tipo' },
         { chave: 'periodicidade_visitas', label: 'Periodicidade' },
         {
@@ -190,7 +221,10 @@ export function ContratosManutencao() {
           label: 'Cliente',
           type: 'combobox',
           obrigatorio: true,
-          opcoes: (clientesQuery.data ?? []).map((c) => ({ value: String(c.id), label: c.razao_social })),
+          opcoes: (clientesQuery.data ?? []).map((c) => {
+            const relacao = relacaoTerceirizado(c.id);
+            return { value: String(c.id), label: relacao ? `${c.razao_social} (${relacao})` : c.razao_social };
+          }),
         },
         {
           name: 'tipo_contrato',
