@@ -589,7 +589,7 @@ export function OrcamentoFinanceiro() {
       .map(
         (item) => `
         <tr>
-          <td>${item.produtos_servicos?.nome ?? item.descricao_servico ?? ''}</td>
+          <td>${item.produtos_servicos?.nome ?? item.descricao_servico ?? ''}${item.observacao ? `<br><span style="font-size:11px;color:var(--ink-400);">Defeito identificado: ${item.observacao}</span>` : ''}</td>
           <td>${item.quantidade}</td>
           <td>${formatarMoeda(Number(precos[item.id]) || 0)}</td>
           <td>${formatarMoeda((Number(precos[item.id]) || 0) * item.quantidade)}</td>
