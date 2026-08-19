@@ -145,3 +145,160 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
   `);
   janela.document.close();
 }
+
+function conteudoEtiqueta(d: DadosEtiquetaDespacho): string {
+  const enderecoHtml = formatarEndereco(d);
+  return `
+    <div class="cab-logo-wrap">
+      <img class="cab-logo" src="${cvfLogoCompleto}" alt="CVF Medical" />
+    </div>
+    <div class="cab-barra"></div>
+    <div class="miolo">
+      <div class="remetente">
+        <span class="rot">REMETENTE:</span> ${EMPRESA.razaoSocial}<br>
+        ${EMPRESA.endereco}<br>
+        Tel.: ${EMPRESA.telefone}
+      </div>
+      <div class="destinatario">
+        <div class="rot">Destinatário</div>
+        <div class="nome">${d.clienteNome}</div>
+        ${d.clienteFinalNome ? `<div class="unidade">A/C: ${d.clienteFinalNome}</div>` : ''}
+        <div class="endereco">${enderecoHtml || '<em>Endereço não cadastrado</em>'}</div>
+      </div>
+      <div class="rodape">
+        <div class="os">OS ${d.numeroOS}</div>
+        ${d.equipamento ? `<div class="equip">${d.equipamento}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+// Imprime várias etiquetas DIFERENTES (uma por OS) de uma vez, 4 por folha
+// A4 - pra usar numa impressora comum enquanto a térmica de etiqueta
+// (100x150mm) não está disponível. Pagina automaticamente de 4 em 4;
+// preenche as células vazias da última folha só pra manter a grade.
+export function imprimirEtiquetasDespachoLote(lista: DadosEtiquetaDespacho[]) {
+  if (lista.length === 0) {
+    alert('Nenhuma etiqueta para imprimir.');
+    return;
+  }
+  const janela = window.open('', '_blank', 'width=900,height=700');
+  if (!janela) {
+    alert('Não foi possível abrir a janela de impressão (verifique o bloqueador de pop-ups).');
+    return;
+  }
+
+  const folhas: DadosEtiquetaDespacho[][] = [];
+  for (let i = 0; i < lista.length; i += 4) {
+    folhas.push(lista.slice(i, i + 4));
+  }
+
+  const folhasHtml = folhas
+    .map(
+      (folha) => `
+        <div class="folha">
+          ${folha.map((d) => `<div class="etiqueta">${conteudoEtiqueta(d)}</div>`).join('')}
+          ${Array.from({ length: 4 - folha.length })
+            .map(() => '<div class="etiqueta etiqueta-vazia"></div>')
+            .join('')}
+        </div>
+      `,
+    )
+    .join('');
+
+  janela.document.open();
+  janela.document.write(`
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Etiquetas de despacho (${lista.length})</title>
+      <style>
+        * { box-sizing: border-box; }
+        body {
+          font-family: Helvetica, Arial, sans-serif;
+          color: #000;
+          margin: 0;
+          background: #ccc;
+        }
+        .acoes { text-align: center; padding: 10px; }
+        .acoes button {
+          padding: 10px 20px; border-radius: 6px; border: none; background: #344d95;
+          color: #fff; font-size: 13px; cursor: pointer;
+        }
+        .folha {
+          width: 200mm;
+          height: 287mm;
+          margin: 12px auto;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          grid-template-rows: 1fr 1fr;
+          gap: 4mm;
+          background: #fff;
+          padding: 5mm;
+        }
+        .etiqueta {
+          background: #fff;
+          display: flex;
+          flex-direction: column;
+          border: 1px dashed #999;
+          overflow: hidden;
+        }
+        .etiqueta-vazia { border: none; }
+        .cab-logo-wrap { text-align: center; padding: 3mm 3mm 2mm; }
+        .cab-logo { height: 14mm; width: auto; }
+        .cab-barra { height: 1.2mm; background: linear-gradient(90deg, #344d95, #5b78bd); }
+        .miolo { padding: 2mm 3mm 0; display: flex; flex-direction: column; flex: 1; }
+        .remetente {
+          font-size: 7px;
+          line-height: 1.3;
+          color: #344d95;
+          border-bottom: 1px dashed #344d95;
+          padding-bottom: 4px;
+          margin-bottom: 6px;
+        }
+        .remetente .rot { font-weight: 700; letter-spacing: 0.04em; }
+        .destinatario { flex: 1; }
+        .destinatario .rot {
+          font-size: 8px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+          margin-bottom: 3px; color: #344d95;
+        }
+        .destinatario .nome { font-size: 13px; font-weight: 700; line-height: 1.2; margin-bottom: 5px; }
+        .destinatario .unidade { font-size: 10px; font-weight: 600; margin-bottom: 5px; }
+        .destinatario .endereco { font-size: 10px; line-height: 1.4; }
+        .rodape {
+          border-top: 1.5px solid #344d95;
+          padding-top: 5px;
+          margin-top: 6px;
+          padding-bottom: 3mm;
+        }
+        .rodape .os {
+          font-family: 'Courier New', monospace;
+          font-size: 15px;
+          font-weight: 700;
+          border: 1.5px solid #344d95;
+          color: #000;
+          text-align: center;
+          padding: 4px;
+          letter-spacing: 0.04em;
+        }
+        .rodape .equip { font-size: 8px; margin-top: 4px; text-align: center; }
+        @media print {
+          @page { size: A4; margin: 0; }
+          body { background: #fff; }
+          .acoes { display: none; }
+          .folha { margin: 0; page-break-after: always; width: 100%; height: 100vh; }
+          .folha:last-child { page-break-after: auto; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="acoes">
+        <button onclick="window.print()">Imprimir ${lista.length} etiqueta${lista.length > 1 ? 's' : ''} (${folhas.length} folha${folhas.length > 1 ? 's' : ''} A4)</button>
+      </div>
+      ${folhasHtml}
+    </body>
+    </html>
+  `);
+  janela.document.close();
+}

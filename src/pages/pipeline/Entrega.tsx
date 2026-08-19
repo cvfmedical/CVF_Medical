@@ -5,9 +5,10 @@ import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { imprimirOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
-import { imprimirEtiquetaDespacho } from '../../lib/etiquetaDespacho';
+import { imprimirEtiquetaDespacho, imprimirEtiquetasDespachoLote, type DadosEtiquetaDespacho } from '../../lib/etiquetaDespacho';
 import { IconPrinter } from '@tabler/icons-react';
 import { mensagemErro } from '../../lib/erros';
+import { useState } from 'react';
 
 interface EntregaRow {
   id: number;
@@ -26,6 +27,7 @@ interface EntregaRow {
 
 export function Entrega() {
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  const [imprimindoLote, setImprimindoLote] = useState(false);
   if (isLoading) return <CarregandoTela />;
 
   // Porteira: só entra na entrega quem terminou o fluxo ("Pronto para entrega")
@@ -36,9 +38,9 @@ export function Entrega() {
   };
   const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)));
 
-  async function imprimirEtiqueta(ordemServicoId: number) {
+  async function buscarDadosEtiqueta(ordemServicoId: number): Promise<DadosEtiquetaDespacho | null> {
     const os = porId(ordemServicoId);
-    if (!os) return;
+    if (!os) return null;
     const { data: cliente, error } = await supabase
       .from('clientes')
       .select('razao_social, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
@@ -46,7 +48,7 @@ export function Entrega() {
       .single();
     if (error) {
       alert(mensagemErro(error));
-      return;
+      return null;
     }
     let clienteFinalNome: string | null = null;
     const { data: osCompleta } = await supabase
@@ -62,7 +64,7 @@ export function Entrega() {
         .single();
       clienteFinalNome = clienteFinal?.razao_social ?? null;
     }
-    imprimirEtiquetaDespacho({
+    return {
       numeroOS: os.numero_os,
       clienteNome: cliente.razao_social,
       clienteFinalNome,
@@ -74,12 +76,41 @@ export function Entrega() {
       uf: cliente.uf,
       cep: cliente.cep,
       equipamento: os.optica_desc,
-    });
+    };
+  }
+
+  async function imprimirEtiqueta(ordemServicoId: number) {
+    const dados = await buscarDadosEtiqueta(ordemServicoId);
+    if (dados) imprimirEtiquetaDespacho(dados);
+  }
+
+  // Imprime de uma vez a etiqueta de TODAS as OS liberadas para entrega
+  // (mesmas da lista "Ordem de serviço" do formulário "+ Novo"), 4 por
+  // folha A4 - pra usar numa impressora comum enquanto a térmica não está
+  // disponível, sem precisar clicar OS por OS.
+  async function imprimirEtiquetasLote() {
+    setImprimindoLote(true);
+    try {
+      const lista = (
+        await Promise.all(opcoesEntrega.map((o) => buscarDadosEtiqueta(Number(o.value))))
+      ).filter((d): d is DadosEtiquetaDespacho => d != null);
+      imprimirEtiquetasDespachoLote(lista);
+    } finally {
+      setImprimindoLote(false);
+    }
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+        <button
+          className="botao-secundario"
+          onClick={imprimirEtiquetasLote}
+          disabled={imprimindoLote || opcoesEntrega.length === 0}
+          title="Imprime a etiqueta de todas as OS liberadas para entrega, 4 por folha A4 (impressora comum)"
+        >
+          {imprimindoLote ? 'Gerando...' : `Imprimir etiquetas prontas (${opcoesEntrega.length}) - 4 por folha`}
+        </button>
         <button className="botao-secundario" onClick={imprimirOrientacaoEsterilizacao}>
           Orientação de esterilização (PDF)
         </button>
