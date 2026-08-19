@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 import { supabase } from '../../lib/supabaseClient';
@@ -30,6 +31,8 @@ async function gerarNumeroLaudo(): Promise<string> {
   return gerarNumeroSequencial('LAUDO', 'laudos', 'numero_laudo');
 }
 
+const COLUNAS_FILTRAVEIS = ['numero_laudo', 'numero_os', 'cliente_nome', 'tecnico_responsavel', 'resultado', 'data_emissao'];
+
 export function Laudos() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
@@ -38,7 +41,7 @@ export function Laudos() {
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [form, setForm] = useState({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('laudos', {
     titulo: 'Nova nota técnica interna',
@@ -74,12 +77,9 @@ export function Laudos() {
     return (l as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (laudosQuery.data ?? []).filter((l) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(l, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = (laudosQuery.data ?? []).filter((l) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(l, chave), chave)),
+  );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   async function baixarPdf(caminho: string | null) {
@@ -177,17 +177,29 @@ export function Laudos() {
             <th></th>
           </tr>
           <tr>
-            {['numero_laudo', 'numero_os', 'cliente_nome', 'tecnico_responsavel', 'resultado', 'data_emissao'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((laudosQuery.data ?? []).map((l) => String(valorColuna(l, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
             <th></th>
           </tr>
         </thead>

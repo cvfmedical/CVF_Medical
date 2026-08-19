@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
@@ -48,6 +49,8 @@ const formVazio = {
   observacoes: '',
 };
 
+const COLUNAS_FILTRAVEIS = ['numero_solicitacao', 'item', 'quantidade', 'fornecedor', 'status', 'data_solicitacao'];
+
 export function SolicitacoesCompra() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
@@ -55,7 +58,7 @@ export function SolicitacoesCompra() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('solicitacoes-compra', {
     titulo: 'Nova solicitação de compra',
@@ -183,12 +186,9 @@ export function SolicitacoesCompra() {
     return (s as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (query.data ?? []).filter((s) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(s, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = (query.data ?? []).filter((s) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(s, chave), chave)),
+  );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   if (query.isLoading || produtosQuery.isLoading || fornecedoresQuery.isLoading) return <CarregandoTela />;
@@ -220,17 +220,29 @@ export function SolicitacoesCompra() {
             <th></th>
           </tr>
           <tr>
-            {['numero_solicitacao', 'item', 'quantidade', 'fornecedor', 'status', 'data_solicitacao'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((query.data ?? []).map((s) => String(valorColuna(s, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
             <th></th>
           </tr>
         </thead>

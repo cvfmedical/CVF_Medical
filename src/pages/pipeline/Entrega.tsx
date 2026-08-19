@@ -9,6 +9,7 @@ import { imprimirEtiquetaDespacho, imprimirEtiquetasDespachoLote, type DadosEtiq
 import { IconPrinter } from '@tabler/icons-react';
 import { mensagemErro } from '../../lib/erros';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface EntregaRow {
   id: number;
@@ -26,6 +27,7 @@ interface EntregaRow {
 }
 
 export function Entrega() {
+  const qc = useQueryClient();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   const [imprimindoLote, setImprimindoLote] = useState(false);
   const [selecionandoEtiquetas, setSelecionandoEtiquetas] = useState(false);
@@ -194,6 +196,11 @@ export function Entrega() {
           render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
         },
         {
+          chave: 'cliente',
+          label: 'Cliente',
+          render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+        },
+        {
           chave: 'situacao',
           label: 'Situação',
           render: (r) =>
@@ -261,6 +268,10 @@ export function Entrega() {
           .from('ordens_servico')
           .update({ status_os: '11. ENTREGUE AO CLIENTE' })
           .eq('id', dados.ordem_servico_id as number);
+        // A lista de "OS liberadas para entrega" (useOrdensServicoOpcoes) tem
+        // seu próprio cache separado - sem isso, a OS recém-entregue continua
+        // aparecendo como selecionável até a página ser recarregada.
+        qc.invalidateQueries({ queryKey: ['ordens-servico-opcoes'] });
       }}
     />
     </div>

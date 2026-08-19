@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -23,6 +24,8 @@ import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { formatarModeloOtica } from '../../lib/formato';
 import { registrarEmailEnviado } from '../../lib/emailsEnviados';
+
+const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'cliente', 'equipamento_desc', 'equipamento_sn', 'nf_remessa', 'status', 'data_entrada'];
 
 interface Entrada {
   id: number;
@@ -148,7 +151,7 @@ export function EntradaEquipamento() {
   const [condicaoParaAdicionar, setCondicaoParaAdicionar] = useState('');
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
   // Envio em lote (igual ao Financeiro): manda o e-mail de chegada de
   // várias entradas do mesmo cliente num só e-mail, em vez de um por um.
@@ -340,13 +343,11 @@ export function EntradaEquipamento() {
   // a partir daí quem acompanha o andamento é a tela "Ordem de serviço", não
   // esta. Assim que alguma coluna é filtrada, passa a buscar em tudo
   // (inclusive já convertidas), pra continuar achável.
-  const algumFiltroAtivo = Object.values(filtrosColuna).some((v) => v.trim());
+  const algumFiltroAtivo =
+    Object.values(filtrosColuna).some((v) => v.trim()) || Object.values(filtrosValores).some((s) => s.size > 0);
   const linhasFiltradas = (entradasQuery.data ?? []).filter((e) => {
     if (!algumFiltroAtivo) return !e.ordem_servico_id;
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(e, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
+    return COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(e, chave), chave));
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
@@ -833,19 +834,29 @@ export function EntradaEquipamento() {
           </tr>
           <tr>
             <th></th>
-            {['codigo_entrada', 'cliente', 'equipamento_desc', 'equipamento_sn', 'nf_remessa', 'status', 'data_entrada'].map(
-              (chave) => (
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((entradasQuery.data ?? []).map((e) => String(valorColuna(e, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
                 <th key={chave} style={{ padding: '2px 6px' }}>
-                  <input
-                    type="text"
-                    className="campo-filtro-coluna"
-                    placeholder="Filtrar..."
-                    value={filtrosColuna[chave] ?? ''}
-                    onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
                 </th>
-              ),
-            )}
+              );
+            })}
             <th></th>
           </tr>
         </thead>

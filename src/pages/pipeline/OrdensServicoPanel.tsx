@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -26,6 +27,8 @@ const STATUS_EXCLUIVEIS = [
   '2B. AGUARDANDO PRECIFICAÇÃO',
   '3. AGUARDANDO APROVAÇÃO DO CLIENTE',
 ];
+
+const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'optica_desc', 'optica_sn', 'status_os', 'data_abertura'];
 
 interface OrdemServico {
   id: number;
@@ -53,7 +56,7 @@ export function OrdensServicoPanel() {
   const qc = useQueryClient();
   const { funcionario } = useAuth();
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
   const avariasTriagemQuery = useAvariasTriagem();
   const [excluindo, setExcluindo] = useState<number | null>(null);
@@ -105,15 +108,13 @@ export function OrdensServicoPanel() {
   // devolvida sem reparo) - senão o painel vira um histórico infinito.
   // Assim que alguma coluna é filtrada, passa a buscar em todos os status
   // (inclusive as finalizadas), pra continuar achável.
-  const algumFiltroAtivo = Object.values(filtrosColuna).some((v) => v.trim());
+  const algumFiltroAtivo =
+    Object.values(filtrosColuna).some((v) => v.trim()) || Object.values(filtrosValores).some((s) => s.size > 0);
   const linhasFiltradas = (query.data ?? []).filter((os) => {
     if (!algumFiltroAtivo) {
       return os.status_os !== STATUS_ENTREGUE && os.status_os !== STATUS_DEVOLUCAO_SEM_REPARO;
     }
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(os, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
+    return COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(os, chave), chave));
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
@@ -147,17 +148,29 @@ export function OrdensServicoPanel() {
             <th></th>
           </tr>
           <tr>
-            {['numero_os', 'cliente_nome', 'optica_desc', 'optica_sn', 'status_os', 'data_abertura'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((query.data ?? []).map((os) => String(valorColuna(os, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
             <th></th>
           </tr>
         </thead>

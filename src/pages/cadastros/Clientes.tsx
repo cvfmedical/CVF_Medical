@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -63,12 +64,14 @@ const formVazio = {
   porte: '',
 };
 
+const COLUNAS_FILTRAVEIS = ['razao_social', 'eh_terceirizado', 'nome_fantasia', 'cnpj', 'cidade', 'telefone', 'email'];
+
 export function Clientes() {
   const qc = useQueryClient();
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Cliente | null>(null);
   const [form, setForm] = useState(formVazio);
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [consultando, setConsultando] = useState(false);
@@ -104,12 +107,9 @@ export function Clientes() {
     return (c as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (query.data ?? []).filter((c) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(c, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = (query.data ?? []).filter((c) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(c, chave), chave)),
+  );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   function abrirNovo() {
@@ -280,17 +280,29 @@ export function Clientes() {
             <th></th>
           </tr>
           <tr>
-            {['razao_social', 'eh_terceirizado', 'nome_fantasia', 'cnpj', 'cidade', 'telefone', 'email'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((query.data ?? []).map((c) => String(valorColuna(c, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
             <th></th>
           </tr>
         </thead>

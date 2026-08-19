@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
@@ -78,13 +79,15 @@ function liberada(statusOS: string | null): boolean {
   return statusOS === STATUS_PRONTO_ENTREGA || statusOS === STATUS_ENTREGUE;
 }
 
+const COLUNAS_FILTRAVEIS = ['numero', 'cliente', 'descricao', 'valor', 'nota_fiscal'];
+
 export function Faturamento() {
   const qc = useQueryClient();
   const [linhaSelecionada, setLinhaSelecionada] = useState<LinhaFaturamento | null>(null);
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
 
   const contasQuery = useQuery({
     queryKey: ['faturamento-contas-receber'],
@@ -196,12 +199,9 @@ export function Faturamento() {
     return (l as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = linhas.filter((l) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(l, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = linhas.filter((l) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(l, chave), chave)),
+  );
   const {
     linhasOrdenadas: linhasOrdenadasFiltradas,
     coluna,
@@ -353,17 +353,29 @@ export function Faturamento() {
             <th></th>
           </tr>
           <tr>
-            {['numero', 'cliente', 'descricao', 'valor', 'nota_fiscal'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set(linhas.map((l) => String(valorColuna(l, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
             <th></th>
           </tr>
         </thead>

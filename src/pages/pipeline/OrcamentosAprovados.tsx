@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useNavigate } from 'react-router-dom';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
@@ -18,7 +18,16 @@ export function OrcamentosAprovados() {
   const { temPermissao } = useAuth();
   const podeVerValor = temPermissao('financeiro');
   const query = useOrcamentosAprovados();
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+
+  const COLUNAS_FILTRAVEIS = [
+    'data_resposta_cliente',
+    'numero_orcamento',
+    'numero_os',
+    'cliente_nome',
+    'equipamento',
+    ...(podeVerValor ? ['valor'] : []),
+  ];
 
   function total(o: OrcamentoAprovado) {
     if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
@@ -43,12 +52,9 @@ export function OrcamentosAprovados() {
     return (o as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (query.data ?? []).filter((o) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(o, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = (query.data ?? []).filter((o) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(o, chave), chave)),
+  );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   if (query.isLoading) return <CarregandoTela />;
@@ -79,24 +85,29 @@ export function OrcamentosAprovados() {
             <th></th>
           </tr>
           <tr>
-            {[
-              'data_resposta_cliente',
-              'numero_orcamento',
-              'numero_os',
-              'cliente_nome',
-              'equipamento',
-              ...(podeVerValor ? ['valor'] : []),
-            ].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((query.data ?? []).map((o) => String(valorColuna(o, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
             <th></th>
           </tr>
         </thead>

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
+import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -38,6 +39,8 @@ interface OSDetalhe {
   defeito_relatado: string | null;
 }
 
+const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'data_inicio', 'data_fim', 'itens_substituidos', 'observacoes'];
+
 export function Manutencao() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -50,7 +53,7 @@ export function Manutencao() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('manutencao', {
     titulo: 'Nova manutenção',
@@ -217,12 +220,9 @@ export function Manutencao() {
     return (m as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (manutencoesQuery.data ?? []).filter((m) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(m, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = (manutencoesQuery.data ?? []).filter((m) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(m, chave), chave)),
+  );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   if (isLoading || manutencoesQuery.isLoading) return <CarregandoTela />;
@@ -253,17 +253,29 @@ export function Manutencao() {
             ))}
           </tr>
           <tr>
-            {['numero_os', 'cliente_nome', 'data_inicio', 'data_fim', 'itens_substituidos', 'observacoes'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set((manutencoesQuery.data ?? []).map((m) => String(valorColuna(m, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
