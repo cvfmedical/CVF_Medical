@@ -1527,6 +1527,14 @@ export function OrcamentoFinanceiro() {
               livremente antes de salvar/enviar. Itens que não estão na OS (ex.: hora técnica) podem ser incluídos
               acima.
             </p>
+
+            {orcamentoSelecionado.observacoes_tecnico && (
+              <div className="campo-form">
+                <label>Defeito identificado (Ordem de Serviço)</label>
+                <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico}</p>
+              </div>
+            )}
+
             <div style={{ marginTop: 8, marginLeft: 'auto', maxWidth: 320 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--ink-600)' }}>
                 <span>Subtotal</span>
@@ -1631,12 +1639,6 @@ export function OrcamentoFinanceiro() {
               </p>
             </div>
 
-            {orcamentoSelecionado.observacoes_tecnico && (
-              <div className="campo-form">
-                <label>Observações do técnico</label>
-                <p style={{ fontSize: 13 }}>{orcamentoSelecionado.observacoes_tecnico}</p>
-              </div>
-            )}
             {orcamentoSelecionado.aprovacao_manual && (
               <div className="campo-form">
                 <label>Aprovação manual (fora do portal/link)</label>
