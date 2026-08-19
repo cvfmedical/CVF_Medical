@@ -28,6 +28,8 @@ interface EntregaRow {
 export function Entrega() {
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   const [imprimindoLote, setImprimindoLote] = useState(false);
+  const [selecionandoEtiquetas, setSelecionandoEtiquetas] = useState(false);
+  const [osSelecionadas, setOsSelecionadas] = useState<Set<number>>(new Set());
   if (isLoading) return <CarregandoTela />;
 
   // Porteira: só entra na entrega quem terminou o fluxo ("Pronto para entrega")
@@ -37,6 +39,15 @@ export function Entrega() {
     return s === STATUS_PRONTO_ENTREGA || s === STATUS_DEVOLUCAO_SEM_REPARO;
   };
   const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)));
+
+  function alternarSelecaoOS(id: number) {
+    setOsSelecionadas((s) => {
+      const nova = new Set(s);
+      if (nova.has(id)) nova.delete(id);
+      else nova.add(id);
+      return nova;
+    });
+  }
 
   async function buscarDadosEtiqueta(ordemServicoId: number): Promise<DadosEtiquetaDespacho | null> {
     const os = porId(ordemServicoId);
@@ -84,15 +95,14 @@ export function Entrega() {
     if (dados) imprimirEtiquetaDespacho(dados);
   }
 
-  // Imprime de uma vez a etiqueta de TODAS as OS liberadas para entrega
-  // (mesmas da lista "Ordem de serviço" do formulário "+ Novo"), 4 por
-  // folha A4 - pra usar numa impressora comum enquanto a térmica não está
-  // disponível, sem precisar clicar OS por OS.
+  // Imprime de uma vez a etiqueta só das OS marcadas no painel de seleção
+  // (abaixo), 4 por folha A4 - pra usar numa impressora comum enquanto a
+  // térmica não está disponível, sem precisar clicar OS por OS.
   async function imprimirEtiquetasLote() {
     setImprimindoLote(true);
     try {
       const lista = (
-        await Promise.all(opcoesEntrega.map((o) => buscarDadosEtiqueta(Number(o.value))))
+        await Promise.all(Array.from(osSelecionadas).map((id) => buscarDadosEtiqueta(id)))
       ).filter((d): d is DadosEtiquetaDespacho => d != null);
       imprimirEtiquetasDespachoLote(lista);
     } finally {
@@ -105,16 +115,67 @@ export function Entrega() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
         <button
           className="botao-secundario"
-          onClick={imprimirEtiquetasLote}
-          disabled={imprimindoLote || opcoesEntrega.length === 0}
-          title="Imprime a etiqueta de todas as OS liberadas para entrega, 4 por folha A4 (impressora comum)"
+          onClick={() => setSelecionandoEtiquetas((v) => !v)}
+          disabled={opcoesEntrega.length === 0}
         >
-          {imprimindoLote ? 'Gerando...' : `Imprimir etiquetas prontas (${opcoesEntrega.length}) - 4 por folha`}
+          Selecionar etiquetas para imprimir{osSelecionadas.size > 0 ? ` (${osSelecionadas.size})` : ''}
         </button>
         <button className="botao-secundario" onClick={imprimirOrientacaoEsterilizacao}>
           Orientação de esterilização (PDF)
         </button>
       </div>
+
+      {selecionandoEtiquetas && (
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 12,
+            background: 'var(--paper-50)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <strong style={{ fontSize: 13 }}>OS liberadas para entrega - marque as que quer imprimir</strong>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="botao-secundario botao-pequeno"
+                onClick={() => setOsSelecionadas(new Set(opcoesEntrega.map((o) => Number(o.value))))}
+              >
+                Selecionar todas
+              </button>
+              <button className="botao-secundario botao-pequeno" onClick={() => setOsSelecionadas(new Set())}>
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {opcoesEntrega.map((o) => (
+              <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={osSelecionadas.has(Number(o.value))}
+                  onChange={() => alternarSelecaoOS(Number(o.value))}
+                />
+                {o.label}
+              </label>
+            ))}
+            {opcoesEntrega.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma OS liberada para entrega no momento.</p>
+            )}
+          </div>
+          <button
+            className="botao-primario botao-pequeno"
+            style={{ marginTop: 10 }}
+            onClick={imprimirEtiquetasLote}
+            disabled={imprimindoLote || osSelecionadas.size === 0}
+          >
+            {imprimindoLote
+              ? 'Gerando...'
+              : `Imprimir ${osSelecionadas.size} etiqueta${osSelecionadas.size === 1 ? '' : 's'} (4 por folha)`}
+          </button>
+        </div>
+      )}
       <CrudPage<EntregaRow>
       titulo="Entrega ao cliente"
       tabela="entregas"
