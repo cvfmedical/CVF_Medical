@@ -1,12 +1,14 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { normalizarBusca } from '../lib/normalizarBusca';
 import { ThOrdenavel } from '../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../lib/useOrdenacao';
+import { useFiltrosColuna } from '../lib/useFiltrosColuna';
+import { FiltroColunaValores } from '../components/FiltroColunaValores';
 import { supabase } from '../lib/supabaseClient';
 import { CarregandoTela } from '../components/CarregandoTela';
 import { Badge } from '../components/Badge';
 import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO } from '../lib/statusOS';
+
+const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'equipamento', 'optica_sn', 'status_os', 'data_abertura'];
 
 interface OrdemServicoResumo {
   id: number;
@@ -25,7 +27,7 @@ interface OrdemServicoResumo {
 const STATUS_FINALIZADOS = [STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO];
 
 export function DashboardHome() {
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
 
   const query = useQuery({
     queryKey: ['os-em-execucao'],
@@ -47,12 +49,9 @@ export function DashboardHome() {
 
   const emExecucao = (query.data ?? []).filter((os) => !STATUS_FINALIZADOS.includes(os.status_os ?? ''));
 
-  const linhasFiltradas = emExecucao.filter((os) => {
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    return ativos.every(([chave, termo]) =>
-      normalizarBusca(String(valorColuna(os, chave) ?? '')).includes(normalizarBusca(termo.trim())),
-    );
-  });
+  const linhasFiltradas = emExecucao.filter((os) =>
+    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(os, chave), chave)),
+  );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   if (query.isLoading) return <CarregandoTela />;
@@ -82,17 +81,29 @@ export function DashboardHome() {
             ))}
           </tr>
           <tr>
-            {['numero_os', 'cliente_nome', 'equipamento', 'optica_sn', 'status_os', 'data_abertura'].map((chave) => (
-              <th key={chave} style={{ padding: '2px 6px' }}>
-                <input
-                  type="text"
-                  className="campo-filtro-coluna"
-                  placeholder="Filtrar..."
-                  value={filtrosColuna[chave] ?? ''}
-                  onChange={(e) => setFiltrosColuna((f) => ({ ...f, [chave]: e.target.value }))}
-                />
-              </th>
-            ))}
+            {COLUNAS_FILTRAVEIS.map((chave) => {
+              const valoresDisponiveis = Array.from(
+                new Set(emExecucao.map((os) => String(valorColuna(os, chave) ?? ''))),
+              ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              return (
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>

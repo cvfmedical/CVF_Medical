@@ -9,7 +9,8 @@ import { CarregandoTela } from './CarregandoTela';
 import { ComboboxBusca } from './ComboboxBusca';
 import { ThOrdenavel } from './ThOrdenavel';
 import { useLinhasOrdenadas } from '../lib/useOrdenacao';
-import { normalizarBusca } from '../lib/normalizarBusca';
+import { useFiltrosColuna } from '../lib/useFiltrosColuna';
+import { FiltroColunaValores } from './FiltroColunaValores';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'combobox' | 'checkbox' | 'date';
 
@@ -83,10 +84,11 @@ export function CrudPage<Row extends { id: number }>({
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
   const { minimizar, rascunhos, pedidoRestauracao, fecharRascunho, limparPedido } = useRascunhos();
-  // Filtro por coluna (um campo de busca embaixo de cada cabeçalho) - substituiu
-  // a busca única genérica; `camposFiltro` não é mais usado pra filtrar, mas
-  // continua aceito na prop por compatibilidade com quem ainda passa.
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, string>>({});
+  // Filtro por coluna (um campo de busca embaixo de cada cabeçalho, mais o
+  // dropdown "estilo Excel" de valores exatos) - substituiu a busca única
+  // genérica; `camposFiltro` não é mais usado pra filtrar, mas continua
+  // aceito na prop por compatibilidade com quem ainda passa.
+  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
   const [editando, setEditando] = useState<Row | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -105,16 +107,11 @@ export function CrudPage<Row extends { id: number }>({
 
   const linhasFiltradas = useMemo(() => {
     const todas = listQuery.data ?? [];
-    const ativos = Object.entries(filtrosColuna).filter(([, v]) => v.trim());
-    if (ativos.length === 0) return todas;
     return todas.filter((linha) =>
-      ativos.every(([chave, termo]) =>
-        normalizarBusca(String((linha as Record<string, unknown>)[chave] ?? '')).includes(
-          normalizarBusca(termo.trim()),
-        ),
-      ),
+      colunas.every((c) => passaFiltro((linha as Record<string, unknown>)[c.chave], c.chave)),
     );
-  }, [listQuery.data, filtrosColuna]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listQuery.data, filtrosColuna, filtrosValores, colunas]);
 
   const { linhasOrdenadas: linhas, coluna: colunaOrdenada, direcao, ordenarPor: ordenarPorColuna } = useLinhasOrdenadas(linhasFiltradas);
 
@@ -224,17 +221,29 @@ export function CrudPage<Row extends { id: number }>({
               <th></th>
             </tr>
             <tr>
-              {colunas.map((c) => (
-                <th key={c.chave} style={{ padding: '2px 6px' }}>
-                  <input
-                    type="text"
-                    className="campo-filtro-coluna"
-                    placeholder="Filtrar..."
-                    value={filtrosColuna[c.chave] ?? ''}
-                    onChange={(e) => setFiltrosColuna((f) => ({ ...f, [c.chave]: e.target.value }))}
-                  />
-                </th>
-              ))}
+              {colunas.map((c) => {
+                const valoresDisponiveis = Array.from(
+                  new Set((listQuery.data ?? []).map((linha) => String((linha as Record<string, unknown>)[c.chave] ?? ''))),
+                ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+                return (
+                  <th key={c.chave} style={{ padding: '2px 6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        className="campo-filtro-coluna"
+                        placeholder="Filtrar..."
+                        value={filtrosColuna[c.chave] ?? ''}
+                        onChange={(e) => setFiltroTexto(c.chave, e.target.value)}
+                      />
+                      <FiltroColunaValores
+                        valores={valoresDisponiveis}
+                        selecionados={filtrosValores[c.chave] ?? new Set()}
+                        onChange={(v) => setValoresColuna(c.chave, v)}
+                      />
+                    </div>
+                  </th>
+                );
+              })}
               <th></th>
             </tr>
           </thead>

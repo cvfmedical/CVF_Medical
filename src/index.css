@@ -675,6 +675,116 @@ button {
   background: var(--copper-500-12);
 }
 
+/* ===================== FiltroColunaValores (estilo Excel) ===================== */
+.filtro-coluna-wrap {
+  position: relative;
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
+.filtro-coluna-seta {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-400);
+  cursor: pointer;
+  padding: 0;
+}
+
+.filtro-coluna-seta:hover {
+  color: var(--copper-800);
+  border-color: var(--copper-500);
+}
+
+.filtro-coluna-seta.ativo {
+  background: var(--copper-500);
+  border-color: var(--copper-500);
+  color: #fff;
+}
+
+.filtro-coluna-painel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 220px;
+  max-width: 80vw;
+  background: var(--paper-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(27, 29, 32, 0.14);
+  padding: 6px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.filtro-coluna-acoes {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.filtro-coluna-acoes button {
+  flex: 1;
+  background: var(--copper-500-12);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--copper-800);
+  cursor: pointer;
+}
+
+.filtro-coluna-acoes button:hover {
+  background: var(--copper-500);
+  color: #fff;
+}
+
+.filtro-coluna-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.filtro-coluna-lista li {
+  padding: 2px 0;
+}
+
+.filtro-coluna-lista label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-900);
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.filtro-coluna-lista label:hover {
+  background: var(--paper-50);
+}
+
+.filtro-coluna-lista input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+
+.filtro-coluna-vazio {
+  color: var(--ink-400);
+  font-size: 12px;
+  padding: 6px 4px;
+}
+
 .modal-acoes {
   display: flex;
   justify-content: flex-end;
