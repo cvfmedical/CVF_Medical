@@ -53,7 +53,15 @@ export function Laudos() {
   const [erro, setErro] = useState<string | null>(null);
   const [tipoLaudo, setTipoLaudo] = useState<TipoLaudo>('diagnostico');
   const [form, setForm] = useState({ ordem_servico_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   // Puxa o defeito relatado e os itens do orçamento (com a observação de
   // defeito que o técnico já registrou ao montar o orçamento) - assim os
@@ -263,9 +271,16 @@ export function Laudos() {
     <div>
       <div className="crud-cabecalho">
         <h1>Laudos e notas técnicas</h1>
-        <button className="botao-primario botao-pequeno" onClick={() => setModalAberto(true)}>
-          Novo laudo
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {algumFiltroAtivo && (
+            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+              Limpar filtros
+            </button>
+          )}
+          <button className="botao-primario botao-pequeno" onClick={() => setModalAberto(true)}>
+            Novo laudo
+          </button>
+        </div>
       </div>
       <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: '0 0 12px', maxWidth: 760 }}>
         Os <strong>laudos de conformidade ISO 8600</strong> (com medições e critérios) são gerados na

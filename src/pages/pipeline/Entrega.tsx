@@ -234,6 +234,21 @@ export function Entrega() {
           <IconPrinter size={16} />
         </button>
       )}
+      acoesFormularioExtras={(formData) => {
+        const osId = formData.ordem_servico_id ? Number(formData.ordem_servico_id) : null;
+        if (!osId) return null;
+        return (
+          <button
+            type="button"
+            className="botao-secundario"
+            title="Imprime a etiqueta antes de salvar - depois de salvar, esta OS sai da lista de pendentes de etiqueta"
+            onClick={() => imprimirEtiqueta(osId)}
+          >
+            <IconPrinter size={16} style={{ marginRight: 4, verticalAlign: 'text-bottom' }} />
+            Imprimir etiqueta
+          </button>
+        );
+      }}
       campos={[
         { name: 'ordem_servico_id', label: 'Ordem de serviço (só liberadas p/ entrega)', type: 'combobox', opcoes: opcoesEntrega, obrigatorio: true },
         {

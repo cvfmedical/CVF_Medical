@@ -34,7 +34,15 @@ const COLUNAS_FILTRAVEIS = ['codigo', 'nome', 'categoria', 'quantidade_estoque',
 export function InventarioEstoque() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
   const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoEstoque | null>(null);
   const [modalMovimento, setModalMovimento] = useState(false);
   const [modalHistorico, setModalHistorico] = useState(false);
@@ -155,7 +163,14 @@ export function InventarioEstoque() {
 
   return (
     <div>
-      <h1>Inventário de peças</h1>
+      <div className="crud-cabecalho">
+        <h1>Inventário de peças</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
 
       <table className="tabela-crud">
         <thead>

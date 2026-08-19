@@ -17,7 +17,15 @@ const COLUNAS_FILTRAVEIS = ['data_envio', 'dias', 'numero_orcamento', 'numero_os
 export function OrcamentosAguardandoAprovacao() {
   const navigate = useNavigate();
   const query = useOrcamentosAguardandoAprovacao();
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   function total(o: OrcamentoAguardandoAprovacao) {
     if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
@@ -54,7 +62,14 @@ export function OrcamentosAguardandoAprovacao() {
 
   return (
     <div>
-      <h1>Orçamentos aguardando aprovação</h1>
+      <div className="crud-cabecalho">
+        <h1>Orçamentos aguardando aprovação</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Já foram enviados ao cliente e ainda não tiveram resposta (nem aprovado, nem recusado). Do mais antigo pro
         mais recente - quem está esperando há mais tempo aparece primeiro. Atualiza sozinha conforme o cliente

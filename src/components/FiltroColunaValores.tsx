@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconChevronDown } from '@tabler/icons-react';
 import { normalizarBusca } from '../lib/normalizarBusca';
+import { formatarValorParaFiltro } from '../lib/useFiltrosColuna';
 
 export interface FiltroColunaValoresProps {
   valores: string[];
@@ -29,7 +30,9 @@ export function FiltroColunaValores({ valores, selecionados, onChange }: FiltroC
   }, [aberto]);
 
   const termo = normalizarBusca(busca.trim());
-  const valoresFiltrados = termo ? valores.filter((v) => normalizarBusca(v).includes(termo)) : valores;
+  const valoresFiltrados = termo
+    ? valores.filter((v) => normalizarBusca(v).includes(termo) || normalizarBusca(formatarValorParaFiltro(v)).includes(termo))
+    : valores;
 
   function alternar(v: string) {
     const novo = new Set(selecionados);
@@ -71,7 +74,7 @@ export function FiltroColunaValores({ valores, selecionados, onChange }: FiltroC
               <li key={v}>
                 <label>
                   <input type="checkbox" checked={selecionados.has(v)} onChange={() => alternar(v)} />
-                  <span>{v || '(vazio)'}</span>
+                  <span>{formatarValorParaFiltro(v) || '(vazio)'}</span>
                 </label>
               </li>
             ))}

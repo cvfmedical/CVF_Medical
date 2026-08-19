@@ -56,7 +56,15 @@ export function OrdensServicoPanel() {
   const qc = useQueryClient();
   const { funcionario } = useAuth();
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
   const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
   const avariasTriagemQuery = useAvariasTriagem();
   const [excluindo, setExcluindo] = useState<number | null>(null);
@@ -108,8 +116,6 @@ export function OrdensServicoPanel() {
   // devolvida sem reparo) - senão o painel vira um histórico infinito.
   // Assim que alguma coluna é filtrada, passa a buscar em todos os status
   // (inclusive as finalizadas), pra continuar achável.
-  const algumFiltroAtivo =
-    Object.values(filtrosColuna).some((v) => v.trim()) || Object.values(filtrosValores).some((s) => s.size > 0);
   const linhasFiltradas = (query.data ?? []).filter((os) => {
     if (!algumFiltroAtivo) {
       return os.status_os !== STATUS_ENTREGUE && os.status_os !== STATUS_DEVOLUCAO_SEM_REPARO;
@@ -122,7 +128,14 @@ export function OrdensServicoPanel() {
 
   return (
     <div>
-      <h1>Ordem de serviço / identificação de peças danificadas</h1>
+      <div className="crud-cabecalho">
+        <h1>Ordem de serviço / identificação de peças danificadas</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
         Mostrando só o que ainda está em andamento. OS já entregues ou devolvidas sem reparo saem desta lista - use
         os filtros das colunas abaixo pra encontrá-las.

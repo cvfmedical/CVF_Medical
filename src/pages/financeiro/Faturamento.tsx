@@ -87,7 +87,15 @@ export function Faturamento() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   const contasQuery = useQuery({
     queryKey: ['faturamento-contas-receber'],
@@ -313,7 +321,14 @@ export function Faturamento() {
 
   return (
     <div>
-      <h1>Faturamento (NF-e / NFS-e)</h1>
+      <div className="crud-cabecalho">
+        <h1>Faturamento (NF-e / NFS-e)</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Controle/registro apenas - a emissão da nota continua sendo feita fora do sistema (Mentora ou o site da
         prefeitura). A conta a receber é criada aqui mesmo, junto com os dados de NF e boleto, no momento do

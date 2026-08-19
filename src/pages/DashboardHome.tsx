@@ -27,7 +27,15 @@ interface OrdemServicoResumo {
 const STATUS_FINALIZADOS = [STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO];
 
 export function DashboardHome() {
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   const query = useQuery({
     queryKey: ['os-em-execucao'],
@@ -58,7 +66,14 @@ export function DashboardHome() {
 
   return (
     <div>
-      <h1>Painel do laboratório & oficina</h1>
+      <div className="crud-cabecalho">
+        <h1>Painel do laboratório & oficina</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Todas as ordens de serviço em execução ({linhas.length}) - já entregues ou devolvidas sem reparo saem
         automaticamente desta lista.

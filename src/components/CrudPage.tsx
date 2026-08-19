@@ -67,6 +67,11 @@ export interface CrudPageProps<Row extends { id: number }> {
   // Botões extras na linha da tabela, antes de Editar/Excluir (ex:
   // "Imprimir etiqueta" em Entrega.tsx).
   acoesExtras?: (row: Row) => React.ReactNode;
+  // Botão(ões) extra(s) no rodapé do formulário (Novo/Editar), antes de
+  // Cancelar/Salvar - ex: "Imprimir etiqueta" em Entrega.tsx, pra imprimir
+  // sem precisar sair do formulário e sem depender de lembrar de fazer
+  // isso antes de salvar (o que muda o status e tira a OS da fila).
+  acoesFormularioExtras?: (formData: Record<string, unknown>) => React.ReactNode;
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -80,6 +85,7 @@ export function CrudPage<Row extends { id: number }>({
   antesDeEnviar,
   aposSalvar,
   acoesExtras,
+  acoesFormularioExtras,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -88,7 +94,15 @@ export function CrudPage<Row extends { id: number }>({
   // dropdown "estilo Excel" de valores exatos) - substituiu a busca única
   // genérica; `camposFiltro` não é mais usado pra filtrar, mas continua
   // aceito na prop por compatibilidade com quem ainda passa.
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
   const [editando, setEditando] = useState<Row | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -201,9 +215,16 @@ export function CrudPage<Row extends { id: number }>({
     <div>
       <div className="crud-cabecalho">
         <h1>{titulo}</h1>
-        <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
-          <IconPlus size={16} /> Novo
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {algumFiltroAtivo && (
+            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+              Limpar filtros
+            </button>
+          )}
+          <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
+            <IconPlus size={16} /> Novo
+          </button>
+        </div>
       </div>
 
       {listQuery.isLoading && <CarregandoTela />}
@@ -333,6 +354,7 @@ export function CrudPage<Row extends { id: number }>({
           {erro && <p className="erro-login">{erro}</p>}
 
           <div className="modal-acoes">
+            {acoesFormularioExtras?.(formData)}
             <button className="botao-secundario" onClick={fechar} disabled={salvando}>
               Cancelar
             </button>

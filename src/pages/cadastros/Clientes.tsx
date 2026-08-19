@@ -71,7 +71,15 @@ export function Clientes() {
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Cliente | null>(null);
   const [form, setForm] = useState(formVazio);
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [consultando, setConsultando] = useState(false);
@@ -256,9 +264,16 @@ export function Clientes() {
     <div>
       <div className="crud-cabecalho">
         <h1>Clientes / hospitais</h1>
-        <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
-          <IconPlus size={16} /> Novo
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {algumFiltroAtivo && (
+            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+              Limpar filtros
+            </button>
+          )}
+          <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
+            <IconPlus size={16} /> Novo
+          </button>
+        </div>
       </div>
 
       <table className="tabela-crud">

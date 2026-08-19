@@ -26,7 +26,15 @@ export function ConfiguracoesUsuarios() {
   const [convidando, setConvidando] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [linkReenvio, setLinkReenvio] = useState<{ nome: string; link: string; codigo: string } | null>(null);
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   const query = useQuery({
     queryKey: ['funcionarios-config'],
@@ -85,7 +93,14 @@ export function ConfiguracoesUsuarios() {
 
   return (
     <div>
-      <h1>Configurações e usuários</h1>
+      <div className="crud-cabecalho">
+        <h1>Configurações e usuários</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Só administradores podem convidar. O convite envia um e-mail com um link para o funcionário definir a
         própria senha - ninguém, nem o administrador, vê ou define a senha por ele. Se o link expirar antes de ser

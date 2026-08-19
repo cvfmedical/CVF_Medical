@@ -151,7 +151,15 @@ export function EntradaEquipamento() {
   const [condicaoParaAdicionar, setCondicaoParaAdicionar] = useState('');
   const [condicoesSelecionadas, setCondicoesSelecionadas] = useState<string[]>([]);
   const [fotosExistentes, setFotosExistentes] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
   // Envio em lote (igual ao Financeiro): manda o e-mail de chegada de
   // várias entradas do mesmo cliente num só e-mail, em vez de um por um.
@@ -343,8 +351,6 @@ export function EntradaEquipamento() {
   // a partir daí quem acompanha o andamento é a tela "Ordem de serviço", não
   // esta. Assim que alguma coluna é filtrada, passa a buscar em tudo
   // (inclusive já convertidas), pra continuar achável.
-  const algumFiltroAtivo =
-    Object.values(filtrosColuna).some((v) => v.trim()) || Object.values(filtrosValores).some((s) => s.size > 0);
   const linhasFiltradas = (entradasQuery.data ?? []).filter((e) => {
     if (!algumFiltroAtivo) return !e.ordem_servico_id;
     return COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(e, chave), chave));
@@ -766,9 +772,16 @@ export function EntradaEquipamento() {
     <div>
       <div className="crud-cabecalho">
         <h1>Recebimento / triagem</h1>
-        <button className="botao-primario botao-pequeno" onClick={abrirNova}>
-          <IconPlus size={16} /> Nova entrada
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {algumFiltroAtivo && (
+            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+              Limpar filtros
+            </button>
+          )}
+          <button className="botao-primario botao-pequeno" onClick={abrirNova}>
+            <IconPlus size={16} /> Nova entrada
+          </button>
+        </div>
       </div>
       <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
         Mostrando só o que ainda não foi convertido em OS. Entradas já convertidas saem desta lista - use os filtros

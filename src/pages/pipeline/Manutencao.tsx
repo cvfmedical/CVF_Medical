@@ -53,7 +53,15 @@ export function Manutencao() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('manutencao', {
     titulo: 'Nova manutenção',
@@ -231,9 +239,16 @@ export function Manutencao() {
     <div>
       <div className="crud-cabecalho">
         <h1>Manutenção / remontagem</h1>
-        <button className="botao-primario botao-pequeno" onClick={abrirNova}>
-          <IconPlus size={16} /> Novo
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {algumFiltroAtivo && (
+            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+              Limpar filtros
+            </button>
+          )}
+          <button className="botao-primario botao-pequeno" onClick={abrirNova}>
+            <IconPlus size={16} /> Novo
+          </button>
+        </div>
       </div>
 
       <table className="tabela-crud">

@@ -18,7 +18,15 @@ export function OrcamentosAprovados() {
   const { temPermissao } = useAuth();
   const podeVerValor = temPermissao('financeiro');
   const query = useOrcamentosAprovados();
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   const COLUNAS_FILTRAVEIS = [
     'data_resposta_cliente',
@@ -61,7 +69,14 @@ export function OrcamentosAprovados() {
 
   return (
     <div>
-      <h1>Orçamentos aprovados</h1>
+      <div className="crud-cabecalho">
+        <h1>Orçamentos aprovados</h1>
+        {algumFiltroAtivo && (
+          <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Ordem de chegada da aprovação do cliente - o primeiro a aprovar aparece primeiro. Atualiza sozinha conforme
         novas aprovações chegam.

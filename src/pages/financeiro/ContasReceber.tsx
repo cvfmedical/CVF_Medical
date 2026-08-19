@@ -50,7 +50,15 @@ export function ContasReceber() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const { textos: filtrosColuna, setTexto: setFiltroTexto, valores: filtrosValores, setValoresColuna, passaFiltro } = useFiltrosColuna();
+  const {
+    textos: filtrosColuna,
+    setTexto: setFiltroTexto,
+    valores: filtrosValores,
+    setValoresColuna,
+    passaFiltro,
+    limparTudo,
+    algumFiltroAtivo,
+  } = useFiltrosColuna();
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('contas-receber', {
     titulo: 'Novo lançamento (conta a receber)',
@@ -187,9 +195,16 @@ export function ContasReceber() {
     <div>
       <div className="crud-cabecalho">
         <h1>Contas a receber</h1>
-        <button className="botao-primario botao-pequeno" onClick={abrirNova}>
-          <IconPlus size={16} /> Novo lançamento
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {algumFiltroAtivo && (
+            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+              Limpar filtros
+            </button>
+          )}
+          <button className="botao-primario botao-pequeno" onClick={abrirNova}>
+            <IconPlus size={16} /> Novo lançamento
+          </button>
+        </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Contas de orçamentos aprovados são lançadas automaticamente aqui. Total em aberto: R$ {totalEmAberto.toFixed(2)}
