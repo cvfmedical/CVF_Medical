@@ -24,6 +24,7 @@ interface OSResumo {
   prazo_entrega: string | null;
   grupo: string | null;
   subgrupo: string | null;
+  eh_otica: boolean | null;
 }
 
 interface EntradaResumo {
@@ -71,7 +72,7 @@ export function RegistroEntrada() {
     queryFn: async (): Promise<OSResumo> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega, grupo, subgrupo')
+        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega, grupo, subgrupo, eh_otica')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
@@ -116,7 +117,10 @@ export function RegistroEntrada() {
   // aqui a OS já tem o grupo salvo (herdado da Entrada), então a lista fica
   // consistente em vez de mostrar avarias de outros tipos de equipamento.
   const checklistFiltrado = (avariasTriagemQuery.data ?? []).filter((item) => {
-    if (!item.grupo) return true;
+    // Itens sem grupo marcado são as avarias genéricas de ótica
+    // (compartilhadas entre Ótica e Mini-Ótica) - só aparecem pra OS de
+    // ótica, senão mostrariam "LENTE DISTAL" etc. pra qualquer equipamento.
+    if (!item.grupo) return osQuery.data?.eh_otica !== false;
     if (!osQuery.data?.grupo) return true;
     if (item.grupo !== osQuery.data.grupo) return false;
     if (item.subgrupo && osQuery.data.subgrupo && item.subgrupo !== osQuery.data.subgrupo) return false;

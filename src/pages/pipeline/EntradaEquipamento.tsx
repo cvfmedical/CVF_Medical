@@ -294,9 +294,13 @@ export function EntradaEquipamento() {
 
   // Filtra o checklist de avarias pelo grupo/subgrupo do equipamento
   // selecionado acima, quando os itens tiverem essa marcação (cadastro
-  // "Avarias de triagem").
+  // "Avarias de triagem"). Itens SEM grupo marcado são as avarias genéricas
+  // de ótica (compartilhadas entre Ótica e Mini-Ótica, por isso não têm um
+  // grupo específico) - só aparecem quando o equipamento selecionado for
+  // ótica; pra equipamento não-ótico (peça de mão, pneumático etc.) ficam
+  // escondidas, senão "LENTE DISTAL"/"OCULAR" apareceriam pra qualquer coisa.
   const checklistFiltrado = (avariasTriagemQuery.data ?? []).filter((item) => {
-    if (!item.grupo) return true;
+    if (!item.grupo) return ehOtica !== false;
     if (!grupoEquipamento) return true;
     if (item.grupo !== grupoEquipamento) return false;
     if (item.subgrupo && subgrupoEquipamento && item.subgrupo !== subgrupoEquipamento) return false;
