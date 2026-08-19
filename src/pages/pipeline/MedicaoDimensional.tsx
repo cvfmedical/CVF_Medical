@@ -47,6 +47,11 @@ export function MedicaoDimensional() {
             mono: true,
             render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
           },
+          {
+            chave: 'cliente_nome',
+            label: 'Cliente',
+            render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          },
           { chave: 'diametro_max_mm', label: 'Diâmetro máx. (mm)' },
           { chave: 'french_size', label: 'French (Fr)' },
           {

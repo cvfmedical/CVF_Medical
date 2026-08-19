@@ -51,6 +51,11 @@ export function TesteLuz() {
             mono: true,
             render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
           },
+          {
+            chave: 'cliente_nome',
+            label: 'Cliente',
+            render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          },
           { chave: 'diametro_mm', label: 'Diâm. (mm)' },
           { chave: 'lux_medido', label: 'Lux medido' },
           { chave: 'lux_baseline', label: 'Baseline' },

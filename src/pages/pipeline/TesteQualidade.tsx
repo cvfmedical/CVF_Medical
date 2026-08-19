@@ -31,6 +31,11 @@ export function TesteQualidade() {
             render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
           },
           {
+            chave: 'cliente_nome',
+            label: 'Cliente',
+            render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          },
+          {
             chave: 'resultado',
             label: 'Resultado',
             render: (r) => <Badge tono={r.resultado === 'Aprovado' ? 'teal' : 'danger'}>{r.resultado}</Badge>,

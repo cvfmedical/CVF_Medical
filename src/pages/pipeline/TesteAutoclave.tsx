@@ -33,6 +33,11 @@ export function TesteAutoclave() {
             mono: true,
             render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
           },
+          {
+            chave: 'cliente_nome',
+            label: 'Cliente',
+            render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          },
           { chave: 'numero_ciclo', label: 'Ciclo' },
           { chave: 'temperatura_celsius', label: 'Temperatura (°C)' },
           { chave: 'tempo_minutos', label: 'Tempo (min)' },

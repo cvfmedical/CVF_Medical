@@ -74,6 +74,11 @@ export function TesteEstanqueidade() {
             mono: true,
             render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
           },
+          {
+            chave: 'cliente_nome',
+            label: 'Cliente',
+            render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          },
           { chave: 'pressao_aplicada_kpa', label: 'Pressão (kPa)' },
           { chave: 'tempo_segundos', label: 'Tempo (s)' },
           { chave: 'temperatura_celsius', label: 'Temp. (°C)' },

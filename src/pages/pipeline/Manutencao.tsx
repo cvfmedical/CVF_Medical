@@ -205,6 +205,7 @@ export function Manutencao() {
   // pode ser chamado condicionalmente.
   function valorColuna(m: ManutencaoRow, chave: string): unknown {
     if (chave === 'numero_os') return porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`;
+    if (chave === 'cliente_nome') return porId(m.ordem_servico_id)?.cliente_nome ?? '';
     if (chave === 'data_inicio') return m.data_inicio;
     if (chave === 'data_fim') return m.data_fim;
     if (chave === 'itens_substituidos')
@@ -240,6 +241,7 @@ export function Manutencao() {
           <tr>
             {[
               ['numero_os', 'OS'],
+              ['cliente_nome', 'Cliente'],
               ['data_inicio', 'Início'],
               ['data_fim', 'Fim'],
               ['itens_substituidos', 'Itens substituídos'],
@@ -251,7 +253,7 @@ export function Manutencao() {
             ))}
           </tr>
           <tr>
-            {['numero_os', 'data_inicio', 'data_fim', 'itens_substituidos', 'observacoes'].map((chave) => (
+            {['numero_os', 'cliente_nome', 'data_inicio', 'data_fim', 'itens_substituidos', 'observacoes'].map((chave) => (
               <th key={chave} style={{ padding: '2px 6px' }}>
                 <input
                   type="text"
@@ -268,6 +270,7 @@ export function Manutencao() {
           {linhas.map((m) => (
             <tr key={m.id}>
               <td className="mono">{porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`}</td>
+              <td>{porId(m.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{m.data_inicio ? new Date(m.data_inicio).toLocaleDateString('pt-BR') : '-'}</td>
               <td>{m.data_fim ? new Date(m.data_fim).toLocaleDateString('pt-BR') : '-'}</td>
               <td>
@@ -281,7 +284,7 @@ export function Manutencao() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={5}>Nenhum registro encontrado.</td>
+              <td colSpan={6}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>

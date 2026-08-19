@@ -69,6 +69,7 @@ export function Laudos() {
 
   function valorColuna(l: Laudo, chave: string): unknown {
     if (chave === 'numero_os') return porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`;
+    if (chave === 'cliente_nome') return porId(l.ordem_servico_id)?.cliente_nome ?? '';
     if (chave === 'data_emissao') return l.data_emissao;
     return (l as unknown as Record<string, unknown>)[chave];
   }
@@ -164,6 +165,7 @@ export function Laudos() {
             {[
               ['numero_laudo', 'Nº laudo'],
               ['numero_os', 'OS'],
+              ['cliente_nome', 'Cliente'],
               ['tecnico_responsavel', 'Técnico'],
               ['resultado', 'Resultado'],
               ['data_emissao', 'Emitido em'],
@@ -175,7 +177,7 @@ export function Laudos() {
             <th></th>
           </tr>
           <tr>
-            {['numero_laudo', 'numero_os', 'tecnico_responsavel', 'resultado', 'data_emissao'].map((chave) => (
+            {['numero_laudo', 'numero_os', 'cliente_nome', 'tecnico_responsavel', 'resultado', 'data_emissao'].map((chave) => (
               <th key={chave} style={{ padding: '2px 6px' }}>
                 <input
                   type="text"
@@ -194,6 +196,7 @@ export function Laudos() {
             <tr key={l.id}>
               <td className="mono">{l.numero_laudo}</td>
               <td className="mono">{porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`}</td>
+              <td>{porId(l.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{l.tecnico_responsavel}</td>
               <td>
                 <Badge tono={l.resultado === 'Aprovado' ? 'teal' : 'danger'}>{l.resultado}</Badge>
@@ -208,7 +211,7 @@ export function Laudos() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhum laudo encontrado.</td>
+              <td colSpan={7}>Nenhum laudo encontrado.</td>
             </tr>
           )}
         </tbody>
