@@ -78,7 +78,13 @@ interface ItemOrcamento {
   observacao: string | null;
   descricao_servico: string | null;
   foto_peca_danificada_path: string | null;
-  produtos_servicos: { nome: string; preco_unitario: number | null } | null;
+  produtos_servicos: {
+    nome: string;
+    preco_unitario: number | null;
+    preco_valor1: number | null;
+    preco_valor2: number | null;
+    preco_valor3: number | null;
+  } | null;
 }
 
 interface Cliente {
@@ -96,12 +102,21 @@ interface Cliente {
   cidade: string | null;
   uf: string | null;
   cep: string | null;
+  // 'Valor 1'/'Valor 2'/'Valor 3' (cadastro de Produtos e serviços) ou null
+  // pra usar o preço de venda padrão - ver ProdutosServicos.tsx.
+  tabela_preco_padrao: string | null;
 }
 
 interface PrecoFixoContrato {
   id: number;
   valor_fixo: number;
   catalogo_oticas: { fabricante: string; modelo: string; tipo: string | null; diametro_mm: number | null; angulo_graus: number | null } | null;
+}
+
+interface PrecoModalidade {
+  id: number;
+  valor_fixo: number;
+  modalidades_manutencao: { nome: string } | null;
 }
 
 const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
@@ -195,6 +210,7 @@ export function OrcamentoFinanceiro() {
   // robusto: funciona mesmo se o usuário for direto no botão).
   const [precos, setPrecos] = useState<Record<number, string>>({});
   const [precoFixoSelecionado, setPrecoFixoSelecionado] = useState('');
+  const [modalidadeSelecionada, setModalidadeSelecionada] = useState('');
   // Valor de contrato aplicado direto no total do orçamento - os itens
   // ficam com preço zerado (só de referência, não somam no total nesse
   // caso). null = precificação normal por item.
@@ -258,7 +274,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario)',
+          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3)',
         )
         .eq('orcamento_id', selecionadoId!);
       if (error) throw error;
@@ -326,7 +342,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('clientes')
         .select(
-          'id, razao_social, telefone, email, emails_adicionais, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep',
+          'id, razao_social, telefone, email, emails_adicionais, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep, tabela_preco_padrao',
         )
         .eq('id', orcamentoSelecionado!.ordens_servico!.cliente_id)
         .single();
@@ -392,6 +408,36 @@ export function OrcamentoFinanceiro() {
     },
   });
 
+  // Preço fixo por modalidade de manutenção (Básica/Intermediária/
+  // Completa etc.) - cadastrado em Clientes.tsx ("Preços por modalidade").
+  // Mesma mecânica do preço fixo por modelo acima: aplica em
+  // valorFixoContrato, os dois são formas alternativas de chegar no
+  // mesmo campo.
+  const precosModalidadeQuery = useQuery({
+    queryKey: ['precos-modalidade-cliente', clienteIdOS, clienteFinalIdOS],
+    enabled: !!clienteIdOS,
+    queryFn: async (): Promise<PrecoModalidade[]> => {
+      const idsCliente = [clienteIdOS!, ...(clienteFinalIdOS ? [clienteFinalIdOS] : [])];
+      const { data, error } = await supabase
+        .from('cliente_modalidade_precos')
+        .select('id, valor_fixo, modalidades_manutencao(nome)')
+        .in('cliente_id', idsCliente);
+      if (error) throw error;
+      return data as unknown as PrecoModalidade[];
+    },
+  });
+
+  function aplicarModalidade() {
+    const preco = precosModalidadeQuery.data?.find((p) => String(p.id) === modalidadeSelecionada);
+    if (!preco || !itensQuery.data?.length) return;
+    const zerados: Record<number, string> = {};
+    for (const item of itensQuery.data) {
+      zerados[item.id] = '0';
+    }
+    setPrecos(zerados);
+    setValorFixoContrato(preco.valor_fixo);
+  }
+
   useEffect(() => {
     if (!itensQuery.data) return;
     // Restaurando um rascunho minimizado: usa os preços salvos, não os do banco.
@@ -400,19 +446,34 @@ export function OrcamentoFinanceiro() {
       precosRestauradosRef.current = null;
       return;
     }
+    // Tabela de preço do cliente (Valor 1/2/3, cadastro de Clientes) - quando
+    // definida, tem prioridade sobre o preço de venda padrão do item, desde
+    // que o item também tenha aquele valor específico cadastrado.
+    const tabela = clienteQuery.data?.tabela_preco_padrao;
+    const precoPorTabela = (p: ItemOrcamento['produtos_servicos']): number | null => {
+      if (!p || !tabela) return null;
+      if (tabela === 'Valor 1') return p.preco_valor1;
+      if (tabela === 'Valor 2') return p.preco_valor2;
+      if (tabela === 'Valor 3') return p.preco_valor3;
+      return null;
+    };
     const iniciais: Record<number, string> = {};
     for (const item of itensQuery.data) {
       // Já precificado -> usa o valor salvo. Ainda não precificado -> sugere o
-      // preço de venda do catálogo (produtos_servicos.preco_unitario), editável.
+      // preço da tabela do cliente (se houver) ou o preço de venda padrão do
+      // catálogo (produtos_servicos.preco_unitario), editável.
+      const precoTabela = precoPorTabela(item.produtos_servicos);
       iniciais[item.id] =
         item.preco_unitario != null
           ? String(item.preco_unitario)
-          : item.produtos_servicos?.preco_unitario != null
-            ? String(item.produtos_servicos.preco_unitario)
-            : '';
+          : precoTabela != null
+            ? String(precoTabela)
+            : item.produtos_servicos?.preco_unitario != null
+              ? String(item.produtos_servicos.preco_unitario)
+              : '';
     }
     setPrecos(iniciais);
-  }, [itensQuery.data]);
+  }, [itensQuery.data, clienteQuery.data?.tabela_preco_padrao]);
 
   // Pré-seleciona automaticamente o preço fixo cujo modelo do catálogo bate com
   // a ótica da OS - assim o financeiro (que nem sempre conhece o material) já
@@ -501,6 +562,7 @@ export function OrcamentoFinanceiro() {
   function removerValorFixo() {
     setValorFixoContrato(null);
     setPrecoFixoSelecionado('');
+    setModalidadeSelecionada('');
   }
 
   async function verFoto(caminho: string | null) {
@@ -946,7 +1008,7 @@ export function OrcamentoFinanceiro() {
       const { data: cliente, error: errCliente } = await supabase
         .from('clientes')
         .select(
-          'id, razao_social, email, emails_adicionais, telefone, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep',
+          'id, razao_social, email, emails_adicionais, telefone, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep, tabela_preco_padrao',
         )
         .eq('id', clienteId)
         .single();
@@ -973,7 +1035,7 @@ export function OrcamentoFinanceiro() {
         const { data: itensData, error: errItens } = await supabase
           .from('orcamento_itens')
           .select(
-            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario)',
+            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3)',
           )
           .eq('orcamento_id', o.id);
         if (errItens) throw errItens;
@@ -1514,6 +1576,42 @@ export function OrcamentoFinanceiro() {
                   </button>
                 ) : (
                   <button className="botao-secundario" onClick={aplicarPrecoFixo} disabled={!precoFixoSelecionado}>
+                    Aplicar ao total
+                  </button>
+                )}
+              </div>
+            )}
+
+            {(precosModalidadeQuery.data ?? []).length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'flex-end',
+                  background: 'var(--paper-50)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Valor fixo do contrato (por modalidade de manutenção)</label>
+                  <select value={modalidadeSelecionada} onChange={(e) => setModalidadeSelecionada(e.target.value)}>
+                    <option value="">Selecione a modalidade...</option>
+                    {(precosModalidadeQuery.data ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.modalidades_manutencao?.nome ?? '-'} - {formatarMoeda(p.valor_fixo)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {valorFixoContrato != null ? (
+                  <button className="botao-secundario perigo" onClick={removerValorFixo}>
+                    Remover valor fixo
+                  </button>
+                ) : (
+                  <button className="botao-secundario" onClick={aplicarModalidade} disabled={!modalidadeSelecionada}>
                     Aplicar ao total
                   </button>
                 )}

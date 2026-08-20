@@ -29,6 +29,7 @@ import { TiposOtica } from './pages/cadastros/TiposOtica';
 import { CondicoesPagamento } from './pages/cadastros/CondicoesPagamento';
 import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
 import { TiposEquipamentoLaudo } from './pages/cadastros/TiposEquipamentoLaudo';
+import { ModalidadesManutencao } from './pages/cadastros/ModalidadesManutencao';
 import { ChecklistLaudoItens } from './pages/cadastros/ChecklistLaudoItens';
 import { EntradaEquipamento } from './pages/pipeline/EntradaEquipamento';
 import { RegistroEntrada } from './pages/pipeline/RegistroEntrada';
@@ -83,6 +84,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/condicoes-pagamento': CondicoesPagamento,
   '/condicoes-chegada': CondicoesChegada,
   '/tipos-equipamento-laudo': TiposEquipamentoLaudo,
+  '/modalidades-manutencao': ModalidadesManutencao,
   '/checklist-laudo-itens': ChecklistLaudoItens,
   '/entrada-equipamento': EntradaEquipamento,
   '/registro-entrada': RegistroEntrada,

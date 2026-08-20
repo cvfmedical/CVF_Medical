@@ -27,6 +27,12 @@ interface ProdutoServico {
   fornecedor_id: number | null;
   preco_custo: number | null;
   preco_unitario: number | null;
+  // Tabela de preços por cliente (Valor 1/2/3) - cada cliente tem uma
+  // tabela padrão (Clientes.tsx); ao adicionar este item num orçamento,
+  // o preço da coluna correspondente entra sozinho.
+  preco_valor1: number | null;
+  preco_valor2: number | null;
+  preco_valor3: number | null;
   unidade: string;
   codigo_barras: string | null;
   observacoes: string | null;
@@ -62,6 +68,9 @@ function formVazioPara(tipos: string[]) {
     codigo_barras: '',
     preco_custo: '',
     preco_unitario: '',
+    preco_valor1: '',
+    preco_valor2: '',
+    preco_valor3: '',
     unidade: 'un',
     observacoes: '',
     status_ativo: true,
@@ -200,6 +209,9 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
       codigo_barras: p.codigo_barras ?? '',
       preco_custo: p.preco_custo != null ? String(p.preco_custo) : '',
       preco_unitario: p.preco_unitario != null ? String(p.preco_unitario) : '',
+      preco_valor1: p.preco_valor1 != null ? String(p.preco_valor1) : '',
+      preco_valor2: p.preco_valor2 != null ? String(p.preco_valor2) : '',
+      preco_valor3: p.preco_valor3 != null ? String(p.preco_valor3) : '',
       unidade: p.unidade ?? 'un',
       observacoes: p.observacoes ?? '',
       status_ativo: p.status_ativo,
@@ -276,6 +288,9 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
         codigo_barras: form.codigo_barras || null,
         preco_custo: form.preco_custo ? Number(form.preco_custo) : null,
         preco_unitario: form.preco_unitario ? Number(form.preco_unitario) : null,
+        preco_valor1: form.preco_valor1 ? Number(form.preco_valor1) : null,
+        preco_valor2: form.preco_valor2 ? Number(form.preco_valor2) : null,
+        preco_valor3: form.preco_valor3 ? Number(form.preco_valor3) : null,
         unidade: form.unidade || 'un',
         observacoes: form.observacoes || null,
         status_ativo: form.status_ativo,
@@ -496,6 +511,39 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
               <div className="campo-form" style={{ flex: 1 }}>
                 <label>Unidade</label>
                 <input type="text" value={form.unidade} onChange={(e) => setForm((f) => ({ ...f, unidade: e.target.value }))} />
+              </div>
+            </div>
+            <div className="campo-form">
+              <label>Tabela de preços por cliente (opcional)</label>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 0, marginBottom: 6 }}>
+                Preenchendo, o item entra no orçamento já com o preço certo pra cada cliente, de acordo com a tabela
+                padrão dele (cadastro de Clientes). Deixe em branco se não varia por cliente.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Valor 1 (R$)</label>
+                  <input
+                    type="number"
+                    value={form.preco_valor1}
+                    onChange={(e) => setForm((f) => ({ ...f, preco_valor1: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Valor 2 (R$)</label>
+                  <input
+                    type="number"
+                    value={form.preco_valor2}
+                    onChange={(e) => setForm((f) => ({ ...f, preco_valor2: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Valor 3 (R$)</label>
+                  <input
+                    type="number"
+                    value={form.preco_valor3}
+                    onChange={(e) => setForm((f) => ({ ...f, preco_valor3: e.target.value }))}
+                  />
+                </div>
               </div>
             </div>
             <div className="campo-form">

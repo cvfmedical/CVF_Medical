@@ -38,6 +38,10 @@ interface Cliente {
   cnae_principal: string | null;
   data_abertura: string | null;
   porte: string | null;
+  // Tabela de preços padrão desse cliente (Valor 1/2/3) - preenche
+  // sozinho o preço de itens que têm tabela cadastrada em Produtos e
+  // serviços, na hora de montar o orçamento.
+  tabela_preco_padrao: string | null;
 }
 
 const formVazio = {
@@ -62,6 +66,7 @@ const formVazio = {
   cnae_principal: '',
   data_abertura: '',
   porte: '',
+  tabela_preco_padrao: '',
 };
 
 const COLUNAS_FILTRAVEIS = ['razao_social', 'eh_terceirizado', 'nome_fantasia', 'cnpj', 'cidade', 'telefone', 'email'];
@@ -83,6 +88,81 @@ export function Clientes() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [consultando, setConsultando] = useState(false);
+
+  // Preço fixo por modalidade de manutenção (ex: Básica/Intermediária/
+  // Completa) - cada cliente paga um valor diferente pra mesma
+  // modalidade, então o preço fica aqui, não no cadastro da modalidade.
+  const [clientePrecos, setClientePrecos] = useState<Cliente | null>(null);
+  const [modalidadeId, setModalidadeId] = useState('');
+  const [valorFixoNovo, setValorFixoNovo] = useState('');
+  const [erroPrecos, setErroPrecos] = useState<string | null>(null);
+
+  const modalidadesQuery = useQuery({
+    queryKey: ['modalidades-manutencao-opcoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('modalidades_manutencao')
+        .select('id, nome')
+        .eq('status_ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return data as { id: number; nome: string }[];
+    },
+  });
+
+  const precosModalidadeQuery = useQuery({
+    queryKey: ['cliente-modalidade-precos', clientePrecos?.id],
+    enabled: !!clientePrecos,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cliente_modalidade_precos')
+        .select('id, modalidade_id, valor_fixo')
+        .eq('cliente_id', clientePrecos!.id);
+      if (error) throw error;
+      return data as { id: number; modalidade_id: number; valor_fixo: number }[];
+    },
+  });
+
+  function nomeModalidade(id: number) {
+    return modalidadesQuery.data?.find((m) => m.id === id)?.nome ?? `#${id}`;
+  }
+
+  function abrirPrecosModalidade(c: Cliente) {
+    setClientePrecos(c);
+    setModalidadeId('');
+    setValorFixoNovo('');
+    setErroPrecos(null);
+  }
+
+  async function adicionarPrecoModalidade() {
+    if (!clientePrecos) return;
+    setErroPrecos(null);
+    if (!modalidadeId || !valorFixoNovo) {
+      setErroPrecos('Selecione a modalidade e informe o valor.');
+      return;
+    }
+    const { error } = await supabase.from('cliente_modalidade_precos').insert({
+      cliente_id: clientePrecos.id,
+      modalidade_id: Number(modalidadeId),
+      valor_fixo: Number(valorFixoNovo),
+    });
+    if (error) {
+      setErroPrecos(mensagemErro(error));
+      return;
+    }
+    setModalidadeId('');
+    setValorFixoNovo('');
+    qc.invalidateQueries({ queryKey: ['cliente-modalidade-precos', clientePrecos.id] });
+  }
+
+  async function excluirPrecoModalidade(id: number) {
+    const { error } = await supabase.from('cliente_modalidade_precos').delete().eq('id', id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['cliente-modalidade-precos', clientePrecos?.id] });
+  }
 
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('clientes', {
     titulo: editando ? 'Editar cliente' : 'Novo cliente',
@@ -151,6 +231,7 @@ export function Clientes() {
       cnae_principal: c.cnae_principal ?? '',
       data_abertura: c.data_abertura ?? '',
       porte: c.porte ?? '',
+      tabela_preco_padrao: c.tabela_preco_padrao ?? '',
     });
     setErro(null);
     setModalAberto(true);
@@ -241,6 +322,7 @@ export function Clientes() {
         cnpj: form.cnpj ? formatarCnpj(form.cnpj) : null,
         data_abertura: form.data_abertura || null,
         representante_id: form.representante_id ? Number(form.representante_id) : null,
+        tabela_preco_padrao: form.tabela_preco_padrao || null,
       };
       if (editando) {
         const { error } = await supabase.from('clientes').update(dados).eq('id', editando.id);
@@ -261,6 +343,7 @@ export function Clientes() {
   if (query.isLoading) return <CarregandoTela />;
 
   return (
+    <>
     <div>
       <div className="crud-cabecalho">
         <h1>Clientes / hospitais</h1>
@@ -332,6 +415,9 @@ export function Clientes() {
               <td>{c.telefone}</td>
               <td>{c.email}</td>
               <td className="acoes-tabela">
+                <button className="botao-secundario botao-pequeno" onClick={() => abrirPrecosModalidade(c)}>
+                  Preços por modalidade
+                </button>
                 <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(c)}>
                   <IconPencil size={16} />
                 </button>
@@ -419,6 +505,23 @@ export function Clientes() {
                 />
               </div>
             )}
+
+            <div className="campo-form">
+              <label>Tabela de preço padrão (opcional)</label>
+              <select
+                value={form.tabela_preco_padrao}
+                onChange={(e) => setForm((f) => ({ ...f, tabela_preco_padrao: e.target.value }))}
+              >
+                <option value="">Sem tabela específica (preço de venda padrão)</option>
+                <option value="Valor 1">Valor 1</option>
+                <option value="Valor 2">Valor 2</option>
+                <option value="Valor 3">Valor 3</option>
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Define qual coluna de preço (cadastro de Produtos e serviços) entra sozinha ao montar orçamento pra
+                este cliente.
+              </p>
+            </div>
 
             <div className="campo-form">
               <label>Telefone</label>
@@ -510,5 +613,72 @@ export function Clientes() {
         </ModalJanela>
       )}
     </div>
+
+    {clientePrecos && (
+      <ModalJanela titulo={`Preços por modalidade - ${clientePrecos.razao_social}`} aoFechar={() => setClientePrecos(null)}>
+        <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+          Preço fechado por modalidade de manutenção pra este cliente (diferente de precificar item por item). O
+          financeiro seleciona a modalidade na hora de precificar um orçamento desse cliente.
+        </p>
+
+        <table className="tabela-crud">
+          <thead>
+            <tr>
+              <th>Modalidade</th>
+              <th>Valor fixo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(precosModalidadeQuery.data ?? []).map((p) => (
+              <tr key={p.id}>
+                <td>{nomeModalidade(p.modalidade_id)}</td>
+                <td>R$ {Number(p.valor_fixo).toFixed(2)}</td>
+                <td className="acoes-tabela">
+                  <button className="botao-icone perigo" title="Remover" onClick={() => excluirPrecoModalidade(p.id)}>
+                    <IconTrash size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {(precosModalidadeQuery.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={3}>Nenhum preço cadastrado ainda.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+          <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+            <label>Modalidade</label>
+            <select value={modalidadeId} onChange={(e) => setModalidadeId(e.target.value)}>
+              <option value="">Selecione...</option>
+              {(modalidadesQuery.data ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="campo-form" style={{ width: 140, marginBottom: 0 }}>
+            <label>Valor fixo (R$)</label>
+            <input type="number" value={valorFixoNovo} onChange={(e) => setValorFixoNovo(e.target.value)} />
+          </div>
+          <button className="botao-secundario" onClick={adicionarPrecoModalidade}>
+            Adicionar
+          </button>
+        </div>
+
+        {erroPrecos && <p className="erro-login">{erroPrecos}</p>}
+
+        <div className="modal-acoes">
+          <button className="botao-primario" onClick={() => setClientePrecos(null)}>
+            Fechar
+          </button>
+        </div>
+      </ModalJanela>
+    )}
+    </>
   );
 }
