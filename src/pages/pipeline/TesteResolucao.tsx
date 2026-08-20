@@ -9,6 +9,7 @@ import { mensagemErro } from '../../lib/erros';
 import { calcularMtfSlantedEdge, paraCiclosPorMm, type ResultadoMtf, type Roi } from '../../lib/esfr';
 import { lerLeituras, estatisticaRepetibilidade } from '../../lib/incerteza';
 import { BancadaVisaoPdf } from './BancadaVisaoPdf';
+import { STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
 
 // Teste de resolução óptica (ISO 8600-5, e-SFR / borda inclinada) integrado à
 // OS e ao laudo. Fluxo: seleciona OS + modelo, carrega a imagem da câmera
@@ -59,9 +60,13 @@ export function TesteResolucao() {
   const osQuery = useQuery({
     queryKey: ['os-resolucao'],
     queryFn: async () => {
+      // Teste de resolução só faz sentido durante a bancada de visão (mesma
+      // janela do Checkpoint A/B) - sem esse filtro o combobox listava OS de
+      // qualquer etapa do pipeline, inclusive já entregues ou em triagem.
       const { data, error } = await supabase
         .from('ordens_servico')
         .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn')
+        .in('status_os', [STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B])
         .order('data_abertura', { ascending: false })
         .limit(200);
       if (error) throw error;

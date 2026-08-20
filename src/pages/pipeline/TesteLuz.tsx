@@ -4,6 +4,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
 
 // Teste de luz / transmissão (interno, NÃO-normativo pela ISO 8600).
 // Mede o lux emitido vs um baseline por diâmetro; corte em 70% -> propor
@@ -22,7 +23,10 @@ interface TesteLuzRow {
 }
 
 export function TesteLuz() {
-  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  // Só faz sentido lançar teste de luz durante a bancada de visão (mesma
+  // janela do Checkpoint A/B) - sem isso o combobox listava OS de qualquer
+  // etapa do pipeline, inclusive já entregues ou ainda em triagem.
+  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B]);
   const padroesQuery = useQuery({
     queryKey: ['padroes-calibracao-ativos-luz'],
     queryFn: async () => {

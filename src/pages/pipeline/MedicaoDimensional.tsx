@@ -4,6 +4,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
+import { STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
 
 // Medição dimensional - largura máxima da parte de inserção (ISO 8600-4).
 // Diâmetro do círculo circunscrito (mm) + French size (Fr = 3 x diâmetro para
@@ -18,7 +19,9 @@ interface MedicaoDimRow {
 }
 
 export function MedicaoDimensional() {
-  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  // Mesma janela do Checkpoint A/B (bancada de visão) - sem isso o
+  // combobox listava OS de qualquer etapa do pipeline.
+  const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B]);
   const padroesQuery = useQuery({
     queryKey: ['padroes-calibracao-ativos-dim'],
     queryFn: async () => {

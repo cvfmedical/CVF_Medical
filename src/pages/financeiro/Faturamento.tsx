@@ -186,7 +186,14 @@ export function Faturamento() {
       }),
   ];
 
-  const liberadas = linhas.filter((l) => !l.nf_numero && (l.contaId == null ? liberada(l.statusOS) : true));
+  // A tela é sobre a AÇÃO de faturar - só faz sentido mostrar o que já é
+  // acionável aqui: contas já lançadas (faturadas ou não) e orçamentos
+  // aprovados cujo equipamento já está pronto/entregue. Orçamentos aprovados
+  // ainda "Aguardando entrega" pertencem a uma etapa anterior do pipeline e
+  // não devem poluir esta tabela.
+  const linhasParaFaturar = linhas.filter((l) => l.contaId != null || liberada(l.statusOS));
+
+  const liberadas = linhasParaFaturar.filter((l) => !l.nf_numero && (l.contaId == null ? liberada(l.statusOS) : true));
 
   function nomeCliente(id: number | null) {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}` : '-';
@@ -207,7 +214,7 @@ export function Faturamento() {
     return (l as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = linhas.filter((l) =>
+  const linhasFiltradas = linhasParaFaturar.filter((l) =>
     COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(l, chave), chave)),
   );
   const {
@@ -371,7 +378,7 @@ export function Faturamento() {
           <tr>
             {COLUNAS_FILTRAVEIS.map((chave) => {
               const valoresDisponiveis = Array.from(
-                new Set(linhas.map((l) => String(valorColuna(l, chave) ?? ''))),
+                new Set(linhasParaFaturar.map((l) => String(valorColuna(l, chave) ?? ''))),
               ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
               return (
                 <th key={chave} style={{ padding: '2px 6px' }}>
