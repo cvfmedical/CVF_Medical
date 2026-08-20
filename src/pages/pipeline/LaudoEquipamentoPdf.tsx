@@ -1,7 +1,10 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import cvfLogoCompleto from '../../assets/cvf-logo-completo.png';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 11, fontFamily: 'Helvetica' },
+  cabecalho: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  logo: { width: 110, height: 40, objectFit: 'contain', marginRight: 12 },
   titulo: { fontSize: 16, marginBottom: 4, color: '#344d95' },
   subtitulo: { fontSize: 10, marginBottom: 20, color: '#5c5a54' },
   linha: { flexDirection: 'row', marginBottom: 8 },
@@ -43,8 +46,13 @@ export function LaudoEquipamentoPdf({ dados: d }: { dados: DadosLaudoEquipamento
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.titulo}>Q-CVF Medical - Laudo Técnico de Equipamento</Text>
-        <Text style={styles.subtitulo}>Manutenção em Equipamentos Cirúrgicos</Text>
+        <View style={styles.cabecalho}>
+          <Image src={cvfLogoCompleto} style={styles.logo} />
+          <View>
+            <Text style={[styles.titulo, { marginBottom: 0 }]}>Laudo Técnico de Equipamento</Text>
+            <Text style={[styles.subtitulo, { marginBottom: 0 }]}>Manutenção em Equipamentos Cirúrgicos</Text>
+          </View>
+        </View>
 
         <Text style={styles.secao}>1 - Dados do solicitante</Text>
         <View style={styles.linha}>

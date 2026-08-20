@@ -1,7 +1,10 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import cvfLogoCompleto from '../../assets/cvf-logo-completo.png';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 11, fontFamily: 'Helvetica' },
+  cabecalho: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  logo: { width: 110, height: 40, objectFit: 'contain', marginRight: 12 },
   titulo: { fontSize: 16, marginBottom: 4, color: '#344d95' },
   subtitulo: { fontSize: 10, marginBottom: 20, color: '#5c5a54' },
   linha: { flexDirection: 'row', marginBottom: 8 },
@@ -28,8 +31,13 @@ export function LaudoPdf({ dados }: { dados: DadosLaudoPdf }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.titulo}>Q-CVF Medical - Nota Técnica Interna</Text>
-        <Text style={styles.subtitulo}>Manutenção em Equipamentos Cirúrgicos</Text>
+        <View style={styles.cabecalho}>
+          <Image src={cvfLogoCompleto} style={styles.logo} />
+          <View>
+            <Text style={[styles.titulo, { marginBottom: 0 }]}>Nota Técnica Interna</Text>
+            <Text style={[styles.subtitulo, { marginBottom: 0 }]}>Manutenção em Equipamentos Cirúrgicos</Text>
+          </View>
+        </View>
         <Text style={{ fontSize: 8.5, color: '#991b1b', marginBottom: 16 }}>
           Documento interno simplificado - NÃO substitui o laudo de conformidade ISO 8600 (gerado na Bancada de
           Visão / Teste de resolução), que contém as medições e critérios normativos.
