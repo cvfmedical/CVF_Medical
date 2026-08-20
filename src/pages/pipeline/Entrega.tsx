@@ -9,7 +9,7 @@ import { imprimirEtiquetaDespacho, imprimirEtiquetasDespachoLote, type DadosEtiq
 import { IconPrinter } from '@tabler/icons-react';
 import { mensagemErro } from '../../lib/erros';
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface EntregaRow {
   id: number;
@@ -32,7 +32,26 @@ export function Entrega() {
   const [imprimindoLote, setImprimindoLote] = useState(false);
   const [selecionandoEtiquetas, setSelecionandoEtiquetas] = useState(false);
   const [osSelecionadas, setOsSelecionadas] = useState<Set<number>>(new Set());
-  if (isLoading) return <CarregandoTela />;
+
+  // Nº do orçamento de cada OS - pra saber a que orçamento essa entrega se
+  // refere, sem precisar abrir a OS. Pega o mais recente quando a OS tem
+  // mais de um orçamento (reversão de precificação etc.).
+  const orcamentosQuery = useQuery({
+    queryKey: ['orcamentos-numero-por-os'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orcamentos')
+        .select('id, numero_orcamento, ordem_servico_id')
+        .order('id', { ascending: false });
+      if (error) throw error;
+      return data as { id: number; numero_orcamento: string; ordem_servico_id: number }[];
+    },
+  });
+  function orcamentoPorOS(osId: number): string | null {
+    return orcamentosQuery.data?.find((o) => o.ordem_servico_id === osId)?.numero_orcamento ?? null;
+  }
+
+  if (isLoading || orcamentosQuery.isLoading) return <CarregandoTela />;
 
   // Porteira: só entra na entrega quem terminou o fluxo ("Pronto para entrega")
   // ou saiu por devolução sem reparo (orçamento recusado).
@@ -201,6 +220,13 @@ export function Entrega() {
           label: 'Cliente',
           render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
           valorFiltro: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+        },
+        {
+          chave: 'orcamento',
+          label: 'Orçamento',
+          mono: true,
+          render: (r) => orcamentoPorOS(r.ordem_servico_id) ?? '-',
+          valorFiltro: (r) => orcamentoPorOS(r.ordem_servico_id) ?? '-',
         },
         {
           chave: 'situacao',
