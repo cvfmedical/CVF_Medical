@@ -278,6 +278,7 @@ export function TesteResolucao() {
       const caminho = `laudo_${os.id}/${numeroLaudo}.pdf`;
       const { error: eUp } = await supabase.storage.from('laudos-pdf').upload(caminho, blob, {
         contentType: 'application/pdf',
+        upsert: true,
       });
       if (eUp) throw eUp;
       const { error: eIns } = await supabase.from('laudos').insert({

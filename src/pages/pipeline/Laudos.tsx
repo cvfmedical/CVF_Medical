@@ -338,8 +338,13 @@ export function Laudos() {
       }
 
       const caminho = `laudo_${form.ordem_servico_id}/${numeroLaudo}.pdf`;
+      // upsert: true - o número pode colidir com um arquivo órfão de um
+      // laudo excluído antes (a exclusão apaga o registro e o arquivo
+      // juntos, mas um número já reaproveitado sem o arquivo remover não
+      // pode travar a geração de um novo laudo com "resource already exists").
       const { error: erroUpload } = await supabase.storage.from('laudos-pdf').upload(caminho, blob, {
         contentType: 'application/pdf',
+        upsert: true,
       });
       if (erroUpload) throw erroUpload;
 

@@ -651,6 +651,7 @@ export function BancadaVisao() {
         const caminho = `laudo_${osSelecionada.id}/${numeroLaudo}.pdf`;
         const { error: erroUpload } = await supabase.storage.from('laudos-pdf').upload(caminho, blob, {
           contentType: 'application/pdf',
+          upsert: true,
         });
         if (erroUpload) throw erroUpload;
 
