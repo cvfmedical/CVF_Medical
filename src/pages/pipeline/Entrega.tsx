@@ -10,6 +10,7 @@ import { IconPrinter } from '@tabler/icons-react';
 import { mensagemErro } from '../../lib/erros';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface EntregaRow {
   id: number;
@@ -24,10 +25,12 @@ interface EntregaRow {
   nf_devolucao_data_emissao: string | null;
   nf_devolucao_valor: number | null;
   confirmado_pelo_cliente_em: string | null;
+  finalizado_manualmente_em: string | null;
 }
 
 export function Entrega() {
   const qc = useQueryClient();
+  const { funcionario } = useAuth();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   const [imprimindoLote, setImprimindoLote] = useState(false);
   const [selecionandoEtiquetas, setSelecionandoEtiquetas] = useState(false);
@@ -75,7 +78,17 @@ export function Entrega() {
   };
   const temEntregaRegistrada = (osId: number) =>
     entregasExistentesQuery.data?.some((e) => e.ordem_servico_id === osId) ?? false;
+  // Combobox do formulário (criar/editar entrega) precisa continuar incluindo
+  // OS já com entrega registrada, senão editar uma entrega já salva mostra o
+  // campo em branco (ver comentário de entregasExistentesQuery acima).
   const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)));
+  // Checklist de impressão de etiqueta é outra coisa: só interessa quem
+  // ainda não teve etiqueta impressa - assim que imprime (em lote, pela
+  // linha da tabela ou pelo formulário), a OS sai daqui e só é encontrável
+  // depois via busca (Histórico do equipamento).
+  const opcoesParaImprimir = opcoes.filter(
+    (o) => podeEntregar(Number(o.value)) && !porId(Number(o.value))?.etiqueta_despacho_impressa_em,
+  );
 
   function alternarSelecaoOS(id: number) {
     setOsSelecionadas((s) => {
@@ -127,9 +140,23 @@ export function Entrega() {
     };
   }
 
+  // Marca a etiqueta como impressa - assim que isso acontece, a OS sai da
+  // lista de pendentes de impressão (opcoesParaImprimir acima).
+  async function marcarEtiquetaImpressa(ordemServicoIds: number[]) {
+    if (ordemServicoIds.length === 0) return;
+    await supabase
+      .from('ordens_servico')
+      .update({ etiqueta_despacho_impressa_em: new Date().toISOString() })
+      .in('id', ordemServicoIds);
+    qc.invalidateQueries({ queryKey: ['ordens-servico-opcoes'] });
+  }
+
   async function imprimirEtiqueta(ordemServicoId: number) {
     const dados = await buscarDadosEtiqueta(ordemServicoId);
-    if (dados) imprimirEtiquetaDespacho(dados);
+    if (dados) {
+      imprimirEtiquetaDespacho(dados);
+      await marcarEtiquetaImpressa([ordemServicoId]);
+    }
   }
 
   // Imprime de uma vez a etiqueta só das OS marcadas no painel de seleção
@@ -138,13 +165,37 @@ export function Entrega() {
   async function imprimirEtiquetasLote() {
     setImprimindoLote(true);
     try {
-      const lista = (
-        await Promise.all(Array.from(osSelecionadas).map((id) => buscarDadosEtiqueta(id)))
-      ).filter((d): d is DadosEtiquetaDespacho => d != null);
+      const ids = Array.from(osSelecionadas);
+      const lista = (await Promise.all(ids.map((id) => buscarDadosEtiqueta(id)))).filter(
+        (d): d is DadosEtiquetaDespacho => d != null,
+      );
       imprimirEtiquetasDespachoLote(lista);
+      await marcarEtiquetaImpressa(ids);
+      setOsSelecionadas(new Set());
     } finally {
       setImprimindoLote(false);
     }
+  }
+
+  // Quando o cliente não confirma o recebimento pelo portal (esquece, não
+  // tem acesso, etc.), a equipe pode dar baixa manual - fica registrado
+  // separado da confirmação eletrônica (quem/quando), pra não parecer que
+  // foi o próprio cliente que confirmou.
+  async function finalizarManualmente(row: EntregaRow) {
+    if (!confirm('Confirma que o equipamento foi entregue e o cliente não vai confirmar pelo portal? Isso finaliza a entrega manualmente.'))
+      return;
+    const { error } = await supabase
+      .from('entregas')
+      .update({
+        finalizado_manualmente_em: new Date().toISOString(),
+        finalizado_manualmente_por: funcionario?.id ?? null,
+      })
+      .eq('id', row.id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['entregas'] });
   }
 
   return (
@@ -153,7 +204,7 @@ export function Entrega() {
         <button
           className="botao-secundario"
           onClick={() => setSelecionandoEtiquetas((v) => !v)}
-          disabled={opcoesEntrega.length === 0}
+          disabled={opcoesParaImprimir.length === 0}
         >
           Selecionar etiquetas para imprimir{osSelecionadas.size > 0 ? ` (${osSelecionadas.size})` : ''}
         </button>
@@ -177,7 +228,7 @@ export function Entrega() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 className="botao-secundario botao-pequeno"
-                onClick={() => setOsSelecionadas(new Set(opcoesEntrega.map((o) => Number(o.value))))}
+                onClick={() => setOsSelecionadas(new Set(opcoesParaImprimir.map((o) => Number(o.value))))}
               >
                 Selecionar todas
               </button>
@@ -187,7 +238,7 @@ export function Entrega() {
             </div>
           </div>
           <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {opcoesEntrega.map((o) => (
+            {opcoesParaImprimir.map((o) => (
               <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -197,7 +248,7 @@ export function Entrega() {
                 {o.label}
               </label>
             ))}
-            {opcoesEntrega.length === 0 && (
+            {opcoesParaImprimir.length === 0 && (
               <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma OS liberada para entrega no momento.</p>
             )}
           </div>
@@ -273,22 +324,39 @@ export function Entrega() {
           render: (r) =>
             r.confirmado_pelo_cliente_em ? (
               <Badge tono="teal">{new Date(r.confirmado_pelo_cliente_em).toLocaleString('pt-BR')}</Badge>
+            ) : r.finalizado_manualmente_em ? (
+              <Badge tono="copper">Finalizado manualmente {new Date(r.finalizado_manualmente_em).toLocaleString('pt-BR')}</Badge>
             ) : (
               <Badge tono="neutro">Aguardando</Badge>
             ),
           rotuloFiltro: (r) =>
-            r.confirmado_pelo_cliente_em ? new Date(r.confirmado_pelo_cliente_em).toLocaleString('pt-BR') : 'Aguardando',
+            r.confirmado_pelo_cliente_em
+              ? new Date(r.confirmado_pelo_cliente_em).toLocaleString('pt-BR')
+              : r.finalizado_manualmente_em
+                ? `Finalizado manualmente ${new Date(r.finalizado_manualmente_em).toLocaleString('pt-BR')}`
+                : 'Aguardando',
         },
         { chave: 'detalhes', label: 'Detalhes' },
       ]}
       acoesExtras={(row) => (
-        <button
-          className="botao-icone"
-          title="Imprimir etiqueta de despacho"
-          onClick={() => imprimirEtiqueta(row.ordem_servico_id)}
-        >
-          <IconPrinter size={16} />
-        </button>
+        <>
+          <button
+            className="botao-icone"
+            title="Imprimir etiqueta de despacho"
+            onClick={() => imprimirEtiqueta(row.ordem_servico_id)}
+          >
+            <IconPrinter size={16} />
+          </button>
+          {!row.confirmado_pelo_cliente_em && !row.finalizado_manualmente_em && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Dar baixa manual quando o cliente não confirma pelo portal"
+              onClick={() => finalizarManualmente(row)}
+            >
+              Finalizar
+            </button>
+          )}
+        </>
       )}
       acoesFormularioExtras={(formData) => {
         const osId = formData.ordem_servico_id ? Number(formData.ordem_servico_id) : null;

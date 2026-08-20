@@ -319,6 +319,11 @@ export function HistoricoEquipamento() {
                   valor={
                     d.entrega.confirmado_pelo_cliente_em ? (
                       <Badge tono="teal">{new Date(d.entrega.confirmado_pelo_cliente_em).toLocaleString('pt-BR')}</Badge>
+                    ) : d.entrega.finalizado_manualmente_em ? (
+                      <Badge tono="copper">
+                        Finalizado manualmente {new Date(d.entrega.finalizado_manualmente_em).toLocaleString('pt-BR')}
+                        {nomeFunc(d.entrega.finalizado_manualmente_por) ? ` (${nomeFunc(d.entrega.finalizado_manualmente_por)})` : ''}
+                      </Badge>
                     ) : (
                       <Badge tono="neutro">Aguardando confirmação</Badge>
                     )

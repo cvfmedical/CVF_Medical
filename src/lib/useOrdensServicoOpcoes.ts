@@ -10,6 +10,7 @@ export interface OrdemServicoResumo {
   optica_desc: string | null;
   optica_fab: string | null;
   catalogo_otica_id: number | null;
+  etiqueta_despacho_impressa_em: string | null;
 }
 
 // Lista de OS pra popular selects (Manutenção, Estanqueidade, Autoclave,
@@ -26,7 +27,9 @@ export function useOrdensServicoOpcoes(statusPermitidos?: string[]) {
     queryFn: async (): Promise<OrdemServicoResumo[]> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_nome, status_os, cliente_id, optica_desc, optica_fab, catalogo_otica_id')
+        .select(
+          'id, numero_os, cliente_nome, status_os, cliente_id, optica_desc, optica_fab, catalogo_otica_id, etiqueta_despacho_impressa_em',
+        )
         .order('data_abertura', { ascending: false });
       if (error) throw error;
       return data as OrdemServicoResumo[];
