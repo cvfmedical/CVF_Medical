@@ -7,7 +7,7 @@ import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
-import { IconCamera, IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
@@ -477,20 +477,14 @@ export function OrcamentoTecnico() {
                         <IconPhoto size={16} />
                       </button>
                     )}
-                    <label
-                      className="botao-icone"
+                    <input
+                      type="file"
+                      accept="image/*"
                       title={item.foto_peca_danificada_path ? 'Trocar foto' : 'Adicionar foto'}
-                      style={{ cursor: itemEnviandoFoto === item.id ? 'wait' : 'pointer', display: 'inline-flex' }}
-                    >
-                      <IconCamera size={16} />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        disabled={itemEnviandoFoto === item.id}
-                        onChange={(e) => aoEscolherFotoItem(item.id, e)}
-                      />
-                    </label>
+                      disabled={itemEnviandoFoto === item.id}
+                      style={{ width: 130, fontSize: 11 }}
+                      onChange={(e) => aoEscolherFotoItem(item.id, e)}
+                    />
                     <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)} disabled={travado}>
                       <IconTrash size={16} />
                     </button>
