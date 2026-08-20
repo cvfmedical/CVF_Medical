@@ -113,7 +113,11 @@ export function escreverImpressao(
           --paper-50: #f5f3ee;
           --border: #e4e1d8;
         }
-        * { box-sizing: border-box; }
+        /* Sem isso, o Chrome remove cor de fundo (faixas azuis, cabeçalho
+           preto das tabelas) ao salvar como PDF, a menos que o usuário
+           marque "Gráficos de fundo" manualmente em "Mais definições" -
+           a maioria não marca, e o PDF salvo sai sem as cores. */
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         body {
           font-family: 'IBM Plex Sans', Helvetica, Arial, sans-serif;
           color: var(--ink-900);
