@@ -74,6 +74,7 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Abrir nova OS', path: '/ordens-servico/nova', categoria: 'recepcao_os', implementado: false },
       { label: 'Ordem de serviço / identificação de peças danificadas', path: '/ordens-servico', categoria: 'recepcao_os', implementado: false },
       { label: 'Entrega ao cliente', path: '/entrega', categoria: 'recepcao_os', implementado: false },
+      { label: 'Histórico do equipamento', path: '/historico-equipamento', categoria: 'recepcao_os', implementado: false },
     ],
   },
   {

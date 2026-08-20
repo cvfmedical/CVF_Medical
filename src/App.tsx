@@ -45,6 +45,7 @@ import { TesteEstanqueidade } from './pages/pipeline/TesteEstanqueidade';
 import { TesteAutoclave } from './pages/pipeline/TesteAutoclave';
 import { TesteQualidade } from './pages/pipeline/TesteQualidade';
 import { Entrega } from './pages/pipeline/Entrega';
+import { HistoricoEquipamento } from './pages/pipeline/HistoricoEquipamento';
 import { Laudos } from './pages/pipeline/Laudos';
 import { BancadaVisao } from './pages/pipeline/BancadaVisao';
 import { InventarioEstoque } from './pages/estoque/InventarioEstoque';
@@ -98,6 +99,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/teste-autoclave': TesteAutoclave,
   '/teste-qualidade': TesteQualidade,
   '/entrega': Entrega,
+  '/historico-equipamento': HistoricoEquipamento,
   '/laudos': Laudos,
   '/bancada-visao': BancadaVisao,
   '/estoque': InventarioEstoque,
