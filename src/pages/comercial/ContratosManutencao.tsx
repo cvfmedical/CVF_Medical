@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
@@ -305,14 +306,11 @@ export function ContratosManutencao() {
           <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
             <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
               <label>Modelo de ótica</label>
-              <select value={catalogoOticaId} onChange={(e) => setCatalogoOticaId(e.target.value)}>
-                <option value="">Selecione...</option>
-                {(catalogoOticasQuery.data ?? []).map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {formatarModeloOtica(o)}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca
+                opcoes={(catalogoOticasQuery.data ?? []).map((o) => ({ value: String(o.id), label: formatarModeloOtica(o) }))}
+                valor={catalogoOticaId}
+                onChange={setCatalogoOticaId}
+              />
             </div>
             <div className="campo-form" style={{ width: 140, marginBottom: 0 }}>
               <label>Valor fixo (R$)</label>

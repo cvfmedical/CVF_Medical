@@ -11,6 +11,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { STATUS_VOLTA_MANUTENCAO, STATUS_CHECKPOINT_A } from '../../lib/statusOS';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus } from '@tabler/icons-react';
 
@@ -326,14 +327,7 @@ export function Manutencao() {
         >
             <div className="campo-form">
               <label>Ordem de serviço *</label>
-              <select value={osId} onChange={(e) => selecionarOS(e.target.value)}>
-                <option value="">Selecione...</option>
-                {opcoes.map((op) => (
-                  <option key={op.value} value={op.value}>
-                    {op.label}
-                  </option>
-                ))}
-              </select>
+              <ComboboxBusca opcoes={opcoes} valor={osId} onChange={selecionarOS} />
             </div>
 
             {osId && osDetalheQuery.data && (

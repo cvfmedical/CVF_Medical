@@ -85,7 +85,7 @@ export function EquipamentosClientes() {
         {
           name: '_catalogo',
           label: 'Puxar do catálogo de óticas (preenche os campos abaixo)',
-          type: 'select',
+          type: 'combobox',
           opcoes: opcoesCatalogo,
           aoMudar: (id) => {
             const c = catalogo.find((x) => String(x.id) === id);

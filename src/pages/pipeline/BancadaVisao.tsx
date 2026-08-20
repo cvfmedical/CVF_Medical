@@ -13,6 +13,7 @@ import { conformeFov, conformeDirecao, desvioFovPct } from '../../lib/iso8600';
 import { lerLeituras, estatisticaRepetibilidade } from '../../lib/incerteza';
 import { BancadaVisaoPdf, type DadosBancadaPdf } from './BancadaVisaoPdf';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 import {
   STATUS_CHECKPOINT_A,
   STATUS_CHECKPOINT_B,
@@ -723,14 +724,11 @@ export function BancadaVisao() {
         </div>
         <div className="campo-form" style={{ maxWidth: 420 }}>
           <label>Ordem de serviço</label>
-          <select value={osId} onChange={(e) => setOsId(e.target.value)}>
-            <option value="">Selecione...</option>
-            {(osQuery.data ?? []).map((os) => (
-              <option key={os.id} value={os.id}>
-                {os.numero_os} - {os.cliente_nome}
-              </option>
-            ))}
-          </select>
+          <ComboboxBusca
+            opcoes={(osQuery.data ?? []).map((os) => ({ value: String(os.id), label: `${os.numero_os} - ${os.cliente_nome}` }))}
+            valor={osId}
+            onChange={setOsId}
+          />
           {osQuery.data?.length === 0 && (
             <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 4 }}>
               Nenhuma OS está aguardando esta etapa no momento.
@@ -770,14 +768,12 @@ export function BancadaVisao() {
               <strong style={{ fontSize: 13 }}>Ensaio ISO 8600 (FOV + direção de visão)</strong>
               <div className="campo-form">
                 <label>Modelo da ótica</label>
-                <select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
-                  <option value="">Selecione o modelo...</option>
-                  {(modelosQuery.data ?? []).map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {formatarModeloOtica(m)}
-                    </option>
-                  ))}
-                </select>
+                <ComboboxBusca
+                  opcoes={(modelosQuery.data ?? []).map((m) => ({ value: String(m.id), label: formatarModeloOtica(m) }))}
+                  valor={modeloId}
+                  onChange={setModeloId}
+                  placeholder="Selecione o modelo..."
+                />
               </div>
               {spec && spec.fov_referencia_graus == null && (
                 <p className="erro-login">
@@ -792,14 +788,11 @@ export function BancadaVisao() {
               )}
               <div className="campo-form">
                 <label>Padrão de calibração (alvo)</label>
-                <select value={calibracaoId} onChange={(e) => setCalibracaoId(e.target.value)}>
-                  <option value="">Selecione...</option>
-                  {calibsValidas.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.identificacao}
-                    </option>
-                  ))}
-                </select>
+                <ComboboxBusca
+                  opcoes={calibsValidas.map((c) => ({ value: String(c.id), label: c.identificacao }))}
+                  valor={calibracaoId}
+                  onChange={setCalibracaoId}
+                />
                 {calibsQuery.data && calibsValidas.length === 0 && (
                   <p className="erro-login">
                     Nenhum padrão de calibração válido. Cadastre/renove em "Calibração de padrões".

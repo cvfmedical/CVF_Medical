@@ -1076,20 +1076,15 @@ export function EntradaEquipamento() {
             <div className="campo-form">
               <label>Condição de chegada - pode adicionar mais de uma</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <select
-                  style={{ flex: 1 }}
-                  value={condicaoParaAdicionar}
-                  onChange={(e) => setCondicaoParaAdicionar(e.target.value)}
-                >
-                  <option value="">Selecione...</option>
-                  {(condicoesChegadaQuery.data ?? [])
-                    .filter((c) => !condicoesSelecionadas.includes(c.descricao))
-                    .map((c) => (
-                      <option key={c.id} value={c.descricao}>
-                        {c.descricao}
-                      </option>
-                    ))}
-                </select>
+                <div style={{ flex: 1 }}>
+                  <ComboboxBusca
+                    opcoes={(condicoesChegadaQuery.data ?? [])
+                      .filter((c) => !condicoesSelecionadas.includes(c.descricao))
+                      .map((c) => ({ value: c.descricao, label: c.descricao }))}
+                    valor={condicaoParaAdicionar}
+                    onChange={setCondicaoParaAdicionar}
+                  />
+                </div>
                 <button type="button" className="botao-secundario" onClick={adicionarCondicaoNaLista}>
                   Adicionar
                 </button>

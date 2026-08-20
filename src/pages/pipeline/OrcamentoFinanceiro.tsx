@@ -1561,14 +1561,15 @@ export function OrcamentoFinanceiro() {
               >
                 <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
                   <label>Valor fixo do contrato (por modelo de ótica)</label>
-                  <select value={precoFixoSelecionado} onChange={(e) => setPrecoFixoSelecionado(e.target.value)}>
-                    <option value="">Selecione o modelo...</option>
-                    {(precosFixosQuery.data ?? []).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.catalogo_oticas ? formatarModeloOtica(p.catalogo_oticas) : '-'} - {formatarMoeda(p.valor_fixo)}
-                      </option>
-                    ))}
-                  </select>
+                  <ComboboxBusca
+                    opcoes={(precosFixosQuery.data ?? []).map((p) => ({
+                      value: String(p.id),
+                      label: `${p.catalogo_oticas ? formatarModeloOtica(p.catalogo_oticas) : '-'} - ${formatarMoeda(p.valor_fixo)}`,
+                    }))}
+                    valor={precoFixoSelecionado}
+                    onChange={setPrecoFixoSelecionado}
+                    placeholder="Selecione o modelo..."
+                  />
                 </div>
                 {valorFixoContrato != null ? (
                   <button className="botao-secundario perigo" onClick={removerValorFixo}>

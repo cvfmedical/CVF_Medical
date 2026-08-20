@@ -602,20 +602,15 @@ export function OrcamentoTecnico() {
             <div className="campo-form">
               <label>Observação (defeito identificado) - pode adicionar mais de um</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <select
-                  style={{ flex: 1 }}
-                  value={observacaoParaAdicionar}
-                  onChange={(e) => setObservacaoParaAdicionar(e.target.value)}
-                >
-                  <option value="">Selecione...</option>
-                  {observacoesFiltradas
-                    .filter((o) => !observacoesSelecionadas.includes(o.descricao))
-                    .map((o) => (
-                      <option key={o.id} value={o.descricao}>
-                        {o.descricao}
-                      </option>
-                    ))}
-                </select>
+                <div style={{ flex: 1 }}>
+                  <ComboboxBusca
+                    opcoes={observacoesFiltradas
+                      .filter((o) => !observacoesSelecionadas.includes(o.descricao))
+                      .map((o) => ({ value: o.descricao, label: o.descricao }))}
+                    valor={observacaoParaAdicionar}
+                    onChange={setObservacaoParaAdicionar}
+                  />
+                </div>
                 <button type="button" className="botao-secundario" onClick={adicionarObservacaoNaLista}>
                   Adicionar
                 </button>

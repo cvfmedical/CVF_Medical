@@ -106,7 +106,7 @@ export function CatalogoOticas() {
         {
           name: 'tipo',
           label: 'Tipo',
-          type: 'select',
+          type: 'combobox',
           opcoes: (tiposQuery.data ?? []).map((t) => ({ value: t.descricao, label: t.descricao })),
         },
         { name: 'diametro_mm', label: 'Diâmetro (mm)', type: 'number' },

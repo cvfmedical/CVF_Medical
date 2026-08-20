@@ -10,6 +10,7 @@ import { calcularMtfSlantedEdge, paraCiclosPorMm, type ResultadoMtf, type Roi } 
 import { lerLeituras, estatisticaRepetibilidade } from '../../lib/incerteza';
 import { BancadaVisaoPdf } from './BancadaVisaoPdf';
 import { STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
 
 // Teste de resolução óptica (ISO 8600-5, e-SFR / borda inclinada) integrado à
 // OS e ao laudo. Fluxo: seleciona OS + modelo, carrega a imagem da câmera
@@ -327,25 +328,19 @@ export function TesteResolucao() {
 
       <div className="campo-form" style={{ maxWidth: 420 }}>
         <label>Ordem de serviço</label>
-        <select value={osId} onChange={(e) => setOsId(e.target.value)}>
-          <option value="">Selecione...</option>
-          {(osQuery.data ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.numero_os} - {o.cliente_nome}
-            </option>
-          ))}
-        </select>
+        <ComboboxBusca
+          opcoes={(osQuery.data ?? []).map((o) => ({ value: String(o.id), label: `${o.numero_os} - ${o.cliente_nome}` }))}
+          valor={osId}
+          onChange={setOsId}
+        />
       </div>
       <div className="campo-form" style={{ maxWidth: 420 }}>
         <label>Modelo da ótica</label>
-        <select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
-          <option value="">Selecione...</option>
-          {(modelosQuery.data ?? []).map((m) => (
-            <option key={m.id} value={m.id}>
-              {formatarModeloOtica(m)}
-            </option>
-          ))}
-        </select>
+        <ComboboxBusca
+          opcoes={(modelosQuery.data ?? []).map((m) => ({ value: String(m.id), label: formatarModeloOtica(m) }))}
+          valor={modeloId}
+          onChange={setModeloId}
+        />
         {modelo && modelo.mtf50_referencia_ciclos_px == null && (
           <p className="erro-login">
             Modelo sem MTF50 de referência. Cadastre no "Catálogo de óticas" antes de emitir laudo de resolução.
