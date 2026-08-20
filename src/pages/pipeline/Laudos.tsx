@@ -17,6 +17,7 @@ import { Badge } from '../../components/Badge';
 import { LaudoPdf } from './LaudoPdf';
 import { LaudoEquipamentoPdf } from './LaudoEquipamentoPdf';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { IconTrash } from '@tabler/icons-react';
 
 interface Laudo {
   id: number;
@@ -213,6 +214,20 @@ export function Laudos() {
     window.open(data.signedUrl, '_blank');
   }
 
+  async function excluirLaudo(l: Laudo) {
+    if (!confirm(`Confirma excluir o laudo ${l.numero_laudo}? Essa ação não pode ser desfeita.`)) return;
+    try {
+      if (l.storage_path) {
+        await supabase.storage.from('laudos-pdf').remove([l.storage_path]);
+      }
+      const { error } = await supabase.from('laudos').delete().eq('id', l.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['laudos'] });
+    } catch (e) {
+      alert(mensagemErro(e));
+    }
+  }
+
   async function gerarLaudo() {
     setErro(null);
     if (!form.ordem_servico_id) {
@@ -397,6 +412,9 @@ export function Laudos() {
               <td className="acoes-tabela">
                 <button className="botao-secundario" onClick={() => baixarPdf(l.storage_path)}>
                   Baixar PDF
+                </button>
+                <button className="botao-icone perigo" title="Excluir laudo" onClick={() => excluirLaudo(l)}>
+                  <IconTrash size={16} />
                 </button>
               </td>
             </tr>
