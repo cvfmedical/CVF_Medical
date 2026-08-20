@@ -63,6 +63,22 @@ function Cabecalho({ titulo, subtitulo }: { titulo: string; subtitulo?: string }
   );
 }
 
+// Identificação completa do cliente (CNPJ, endereço, telefone, e-mail) -
+// mesmos campos usados no Laudo de equipamento e nos relatórios impressos,
+// pra todo documento do sistema ter a mesma completude.
+function LinhaCliente({ d }: { d: DadosClientePdf }) {
+  if (!d.cnpj && !d.endereco && !d.cidade && !d.telefone && !d.email) return null;
+  return (
+    <Text style={{ fontSize: 8.5, color: cinza, marginBottom: 6 }}>
+      {d.cnpj ? `CNPJ/CPF: ${d.cnpj}` : ''}
+      {d.endereco ? `${d.cnpj ? ' · ' : ''}${d.endereco}` : ''}
+      {d.cidade ? `${d.cnpj || d.endereco ? ' · ' : ''}${d.cidade}${d.uf ? '/' + d.uf : ''}` : ''}
+      {d.telefone ? `${d.cnpj || d.endereco || d.cidade ? ' · ' : ''}Tel: ${d.telefone}` : ''}
+      {d.email ? `${d.cnpj || d.endereco || d.cidade || d.telefone ? ' · ' : ''}${d.email}` : ''}
+    </Text>
+  );
+}
+
 function Rodape() {
   return (
     <View style={s.rodape} fixed>
@@ -80,7 +96,16 @@ export interface ItemOrcamentoPdf {
   observacao?: string | null;
 }
 
-export interface DadosOrcamentoPdf {
+export interface DadosClientePdf {
+  cnpj?: string | null;
+  endereco?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  telefone?: string | null;
+  email?: string | null;
+}
+
+export interface DadosOrcamentoPdf extends DadosClientePdf {
   numeroOrcamento: string;
   numeroOS: string;
   clienteNome: string;
@@ -107,6 +132,7 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
     <Document>
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Orçamento de Manutenção" subtitulo={`Nº ${d.numeroOrcamento} · OS ${d.numeroOS} · ${d.clienteNome}`} />
+        <LinhaCliente d={d} />
         {d.clienteFinalNome && (
           <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
         )}
@@ -184,7 +210,7 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
   );
 }
 
-export interface DadosEntradaPdf {
+export interface DadosEntradaPdf extends DadosClientePdf {
   codigo: string;
   clienteNome: string;
   equipamento: string;
@@ -203,6 +229,7 @@ function DocEntrada({ d }: { d: DadosEntradaPdf }) {
     <Document>
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Registro de Entrada" subtitulo={`${d.codigo} · ${d.clienteNome}`} />
+        <LinhaCliente d={d} />
         <View style={s.linha}><Text style={s.rotulo}>Equipamento</Text><Text style={s.valor}>{d.equipamento || '-'}</Text></View>
         <View style={s.linha}><Text style={s.rotulo}>Fabricante</Text><Text style={s.valor}>{d.fabricante || '-'}</Text></View>
         <View style={s.linha}><Text style={s.rotulo}>Nº de série</Text><Text style={s.valor}>{d.numeroSerie || '-'}</Text></View>
@@ -239,7 +266,7 @@ export interface ItemOSPdf {
   fotoDataUri?: string; // foto da peça danificada (base64)
 }
 
-export interface DadosOSPdf {
+export interface DadosOSPdf extends DadosClientePdf {
   numeroOS: string;
   clienteNome: string;
   clienteFinalNome?: string | null;
@@ -254,6 +281,7 @@ function DocOS({ d }: { d: DadosOSPdf }) {
     <Document>
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Ordem de Serviço" subtitulo={`${d.numeroOS} · ${d.clienteNome}`} />
+        <LinhaCliente d={d} />
         {d.clienteFinalNome && (
           <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
         )}

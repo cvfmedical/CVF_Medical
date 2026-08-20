@@ -34,6 +34,7 @@ import {
   type DadosOrcamentoPdf,
   type DadosEntradaPdf,
   type DadosOSPdf,
+  type DadosClientePdf,
 } from '../../lib/pdfsOrcamento';
 import { montarCorpoOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { registrarEmailEnviado } from '../../lib/emailsEnviados';
@@ -86,6 +87,15 @@ interface Cliente {
   telefone: string | null;
   email: string | null;
   emails_adicionais: string | null;
+  cnpj: string | null;
+  nome_fantasia: string | null;
+  logradouro: string | null;
+  numero_endereco: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
 }
 
 interface PrecoFixoContrato {
@@ -315,7 +325,9 @@ export function OrcamentoFinanceiro() {
     queryFn: async (): Promise<Cliente> => {
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, razao_social, telefone, email, emails_adicionais')
+        .select(
+          'id, razao_social, telefone, email, emails_adicionais, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep',
+        )
         .eq('id', orcamentoSelecionado!.ordens_servico!.cliente_id)
         .single();
       if (error) throw error;
@@ -497,6 +509,24 @@ export function OrcamentoFinanceiro() {
     if (url) window.open(url, '_blank');
   }
 
+  function enderecoCompletoCliente(c: Cliente | undefined): string | null {
+    if (!c) return null;
+    const partes = [[c.logradouro, c.numero_endereco].filter(Boolean).join(', '), c.complemento, c.bairro, c.cep ? `CEP ${c.cep}` : null];
+    const texto = partes.filter(Boolean).join(' - ');
+    return texto || null;
+  }
+
+  function clienteParaPdf(c: Cliente | undefined): DadosClientePdf {
+    return {
+      cnpj: c?.cnpj ?? null,
+      endereco: enderecoCompletoCliente(c),
+      cidade: c?.cidade ?? null,
+      uf: c?.uf ?? null,
+      telefone: c?.telefone ?? null,
+      email: c?.email ?? null,
+    };
+  }
+
   function mensagemCompartilhar() {
     return `Olá! Segue o orçamento ${orcamentoSelecionado?.numero_orcamento} (OS ${orcamentoSelecionado?.ordens_servico?.numero_os}) no valor de ${formatarMoeda(total)}. Acompanhe e aprove pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
   }
@@ -529,7 +559,18 @@ export function OrcamentoFinanceiro() {
       defeito_relatado: null,
     };
     return montarCorpoRegistroEntrada(
-      clienteQuery.data ? { razao_social: clienteQuery.data.razao_social } : undefined,
+      clienteQuery.data
+        ? {
+            razao_social: clienteQuery.data.razao_social,
+            telefone: clienteQuery.data.telefone,
+            email: clienteQuery.data.email,
+            cnpj: clienteQuery.data.cnpj,
+            nome_fantasia: clienteQuery.data.nome_fantasia,
+            endereco: enderecoCompletoCliente(clienteQuery.data),
+            cidade: clienteQuery.data.cidade,
+            uf: clienteQuery.data.uf,
+          }
+        : undefined,
       dados,
       urls,
       undefined,
@@ -555,6 +596,13 @@ export function OrcamentoFinanceiro() {
         numero_os: orcamentoSelecionado.ordens_servico.numero_os,
         cliente_nome: orcamentoSelecionado.ordens_servico.cliente_nome,
         cliente_final_nome: clienteFinalQuery.data?.razao_social ?? null,
+        cliente_cnpj: clienteQuery.data?.cnpj ?? null,
+        cliente_fantasia: clienteQuery.data?.nome_fantasia ?? null,
+        cliente_endereco: enderecoCompletoCliente(clienteQuery.data),
+        cliente_cidade: clienteQuery.data?.cidade ?? null,
+        cliente_uf: clienteQuery.data?.uf ?? null,
+        cliente_telefone: clienteQuery.data?.telefone ?? null,
+        cliente_email: clienteQuery.data?.email ?? null,
         optica_desc: orcamentoSelecionado.ordens_servico.optica_desc,
         optica_fab: orcamentoSelecionado.ordens_servico.optica_fab,
         optica_sn: orcamentoSelecionado.ordens_servico.optica_sn,
@@ -600,6 +648,18 @@ export function OrcamentoFinanceiro() {
     return `
       <h1>Orçamento de Manutenção</h1>
       <p class="subtitulo">Nº ${orcamentoSelecionado!.numero_orcamento} · OS ${os?.numero_os ?? '-'} · ${os?.cliente_nome ?? '-'}</p>
+      ${(() => {
+        const c = clienteQuery.data;
+        if (!c) return '';
+        const partes = [
+          c.cnpj ? `CNPJ/CPF: ${c.cnpj}` : '',
+          enderecoCompletoCliente(c) ?? '',
+          c.cidade ? `${c.cidade}${c.uf ? '/' + c.uf : ''}` : '',
+          c.telefone ? `Tel: ${c.telefone}` : '',
+          c.email ?? '',
+        ].filter(Boolean);
+        return partes.length ? `<p class="subtitulo">${partes.join(' · ')}</p>` : '';
+      })()}
       ${clienteFinalQuery.data ? `<p class="subtitulo">Unidade atendida: ${clienteFinalQuery.data.razao_social}</p>` : ''}
       <p class="subtitulo">${os?.optica_desc ?? '-'}${os?.optica_fab ? ' (' + os.optica_fab + ')' : ''}${os?.optica_sn ? ' · Nº série ' + os.optica_sn : ''}</p>
       <div class="secao">Itens</div>
@@ -764,7 +824,7 @@ export function OrcamentoFinanceiro() {
   // Busca os dados da entrada (para o PDF do Registro de Entrada), com fotos.
   // Parametrizada por orçamento para poder ser reaproveitada tanto no envio
   // de um único orçamento (modal aberto) quanto no envio em lote.
-  async function buscarEntradaDadosPara(o: Orcamento): Promise<DadosEntradaPdf | null> {
+  async function buscarEntradaDadosPara(o: Orcamento, clienteInfo?: Partial<DadosClientePdf>): Promise<DadosEntradaPdf | null> {
     const { data: entrada } = await supabase
       .from('entradas_equipamento')
       .select('id, codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, triagem_avarias')
@@ -782,6 +842,7 @@ export function OrcamentoFinanceiro() {
       await Promise.all((fotos ?? []).map((f) => fotoParaDataUri(f.storage_path)))
     ).filter((u): u is string => !!u);
 
+    const ci = clienteInfo ?? clienteParaPdf(clienteQuery.data);
     return {
       codigo: entrada.codigo_entrada,
       clienteNome: os?.cliente_nome ?? '',
@@ -794,6 +855,7 @@ export function OrcamentoFinanceiro() {
       nfSerie: entrada.nf_remessa_serie ?? '',
       avarias: (avariasTriagemQuery.data ?? []).filter((it) => triagem[String(it.id)]).map((it) => it.descricao),
       fotos: fotosDataUri,
+      ...ci,
     };
   }
 
@@ -857,11 +919,14 @@ export function OrcamentoFinanceiro() {
     try {
       const { data: cliente, error: errCliente } = await supabase
         .from('clientes')
-        .select('id, razao_social, email, emails_adicionais')
+        .select(
+          'id, razao_social, email, emails_adicionais, telefone, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep',
+        )
         .eq('id', clienteId)
         .single();
       if (errCliente) throw errCliente;
       if (!cliente?.email) throw new Error('Este cliente não tem e-mail cadastrado.');
+      const clientePdfLote = clienteParaPdf(cliente);
 
       const cacheClienteFinal = new Map<number, string>();
       async function nomeClienteFinal(id: number | null): Promise<string | null> {
@@ -895,6 +960,7 @@ export function OrcamentoFinanceiro() {
         const clienteFinalNome = await nomeClienteFinal(os?.cliente_final_id ?? null);
 
         const dadosOrc: DadosOrcamentoPdf = {
+          ...clientePdfLote,
           numeroOrcamento: o.numero_orcamento,
           numeroOS: os?.numero_os ?? '-',
           clienteNome: os?.cliente_nome ?? cliente.razao_social,
@@ -921,6 +987,7 @@ export function OrcamentoFinanceiro() {
           clausulas: CLAUSULAS_GERAIS,
         };
         const dadosOS: DadosOSPdf = {
+          ...clientePdfLote,
           numeroOS: os?.numero_os ?? '-',
           clienteNome: os?.cliente_nome ?? '',
           clienteFinalNome,
@@ -936,7 +1003,7 @@ export function OrcamentoFinanceiro() {
           observacoesTecnico: o.observacoes_tecnico,
           prazoEntrega: os?.prazo_entrega ?? null,
         };
-        const dadosEntrada = await buscarEntradaDadosPara(o);
+        const dadosEntrada = await buscarEntradaDadosPara(o, clientePdfLote);
         const anexosItem = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, false, i === lista.length - 1);
         anexos = anexos.concat(anexosItem);
         resumo.push({ numero: o.numero_orcamento, numeroOS: os?.numero_os ?? '-', total: totalCalc });
@@ -1023,6 +1090,7 @@ export function OrcamentoFinanceiro() {
       const itens = itensQuery.data ?? [];
 
       const dadosOrc: DadosOrcamentoPdf = {
+        ...clienteParaPdf(clienteQuery.data),
         numeroOrcamento: orcamentoSelecionado.numero_orcamento,
         numeroOS: os?.numero_os ?? '-',
         clienteNome: os?.cliente_nome ?? clienteQuery.data.razao_social,
@@ -1049,6 +1117,7 @@ export function OrcamentoFinanceiro() {
         clausulas: CLAUSULAS_GERAIS,
       };
       const dadosOS: DadosOSPdf = {
+        ...clienteParaPdf(clienteQuery.data),
         numeroOS: os?.numero_os ?? '-',
         clienteNome: os?.cliente_nome ?? '',
         clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,

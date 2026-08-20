@@ -133,11 +133,27 @@ export function RegistroEntrada() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, razao_social, telefone, email')
+        .select(
+          'id, razao_social, telefone, email, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep',
+        )
         .eq('id', osQuery.data!.cliente_id)
         .single();
       if (error) throw error;
-      return data as { id: number; razao_social: string; telefone: string | null; email: string | null };
+      return data as {
+        id: number;
+        razao_social: string;
+        telefone: string | null;
+        email: string | null;
+        cnpj: string | null;
+        nome_fantasia: string | null;
+        logradouro: string | null;
+        numero_endereco: string | null;
+        complemento: string | null;
+        bairro: string | null;
+        cidade: string | null;
+        uf: string | null;
+        cep: string | null;
+      };
     },
   });
 
@@ -237,7 +253,29 @@ export function RegistroEntrada() {
         };
     const fotosFrescas = entradaQuery.data ? await carregarFotos(entradaQuery.data.id) : [];
     const urls = fotosFrescas.map((f) => f.url).filter((u): u is string => !!u);
-    imprimirRegistroEntrada(clienteQuery.data, dados, urls, avariasTriagemQuery.data ?? []);
+    const c = clienteQuery.data;
+    const clienteEndereco = c
+      ? [[c.logradouro, c.numero_endereco].filter(Boolean).join(', '), c.complemento, c.bairro, c.cep ? `CEP ${c.cep}` : null]
+          .filter(Boolean)
+          .join(' - ')
+      : null;
+    imprimirRegistroEntrada(
+      c
+        ? {
+            razao_social: c.razao_social,
+            telefone: c.telefone,
+            email: c.email,
+            cnpj: c.cnpj,
+            nome_fantasia: c.nome_fantasia,
+            endereco: clienteEndereco,
+            cidade: c.cidade,
+            uf: c.uf,
+          }
+        : undefined,
+      dados,
+      urls,
+      avariasTriagemQuery.data ?? [],
+    );
   }
 
   function continuarParaOrcamento() {

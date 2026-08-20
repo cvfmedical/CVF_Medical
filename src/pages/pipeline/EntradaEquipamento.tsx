@@ -90,6 +90,15 @@ interface Cliente {
   email: string | null;
   eh_terceirizado: boolean;
   representante_id: number | null;
+  cnpj: string | null;
+  nome_fantasia: string | null;
+  logradouro: string | null;
+  numero_endereco: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
 }
 
 async function gerarCodigoEntrada(): Promise<string> {
@@ -228,7 +237,9 @@ export function EntradaEquipamento() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, razao_social, telefone, email, eh_terceirizado, representante_id')
+        .select(
+          'id, razao_social, telefone, email, eh_terceirizado, representante_id, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep',
+        )
         .order('razao_social');
       if (error) throw error;
       return data as Cliente[];
@@ -337,6 +348,12 @@ export function EntradaEquipamento() {
 
   function cliente(id: number) {
     return clientesQuery.data?.find((c) => c.id === id);
+  }
+
+  function enderecoCompleto(c: Cliente): string | null {
+    const partes = [[c.logradouro, c.numero_endereco].filter(Boolean).join(', '), c.complemento, c.bairro, c.cep ? `CEP ${c.cep}` : null];
+    const texto = partes.filter(Boolean).join(' - ');
+    return texto || null;
   }
 
   function valorColuna(e: Entrada, chave: string): unknown {
@@ -622,7 +639,23 @@ export function EntradaEquipamento() {
       urls = urlsBrutas.filter((u): u is string => !!u);
     }
 
-    imprimirRegistroEntrada(c, entrada, urls, avariasTriagemQuery.data ?? []);
+    imprimirRegistroEntrada(
+      c
+        ? {
+            razao_social: c.razao_social,
+            telefone: c.telefone,
+            email: c.email,
+            cnpj: c.cnpj,
+            nome_fantasia: c.nome_fantasia,
+            endereco: enderecoCompleto(c),
+            cidade: c.cidade,
+            uf: c.uf,
+          }
+        : undefined,
+      entrada,
+      urls,
+      avariasTriagemQuery.data ?? [],
+    );
   }
 
   // E-mail automático (via Resend, servidor) avisando o cliente que o

@@ -40,6 +40,15 @@ interface Cliente {
   razao_social: string;
   telefone: string | null;
   email: string | null;
+  cnpj: string | null;
+  nome_fantasia: string | null;
+  logradouro: string | null;
+  numero_endereco: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
 }
 
 interface ItemOrcamento {
@@ -144,7 +153,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<Cliente> => {
       const { data, error } = await supabase
         .from('clientes')
-        .select('razao_social, telefone, email')
+        .select('razao_social, telefone, email, cnpj, nome_fantasia, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
         .eq('id', osDetalheQuery.data!.cliente_id)
         .single();
       if (error) throw error;
@@ -400,9 +409,25 @@ export function OrcamentoTecnico() {
         fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
       })),
     );
+    const c = clienteQuery.data;
+    const clienteEndereco = c
+      ? [[c.logradouro, c.numero_endereco].filter(Boolean).join(', '), c.complemento, c.bairro, c.cep ? `CEP ${c.cep}` : null]
+          .filter(Boolean)
+          .join(' - ')
+      : '';
     imprimirRelatorioOS(
       clienteQuery.data,
-      { ...osDetalheQuery.data, observacoes_tecnico: observacoesGerais.trim() || null },
+      {
+        ...osDetalheQuery.data,
+        observacoes_tecnico: observacoesGerais.trim() || null,
+        cliente_cnpj: c?.cnpj ?? null,
+        cliente_fantasia: c?.nome_fantasia ?? null,
+        cliente_endereco: clienteEndereco || null,
+        cliente_cidade: c?.cidade ?? null,
+        cliente_uf: c?.uf ?? null,
+        cliente_telefone: c?.telefone ?? null,
+        cliente_email: c?.email ?? null,
+      },
       itens,
     );
   }

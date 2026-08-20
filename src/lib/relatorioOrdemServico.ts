@@ -17,6 +17,15 @@ export interface DadosOSParaRelatorio {
   numero_os: string;
   cliente_nome: string;
   cliente_final_nome?: string | null;
+  // Identificação completa do cliente - mesmo padrão usado no Laudo de
+  // equipamento (Laudos.tsx): CNPJ, endereço, cidade/UF, telefone, e-mail.
+  cliente_cnpj?: string | null;
+  cliente_fantasia?: string | null;
+  cliente_endereco?: string | null;
+  cliente_cidade?: string | null;
+  cliente_uf?: string | null;
+  cliente_telefone?: string | null;
+  cliente_email?: string | null;
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
@@ -54,8 +63,22 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
 
     <div class="laudo-secao">1. Identificação do cliente</div>
     <div class="laudo-caixa">
-      <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
-      ${os.cliente_final_nome ? `<div style="margin-top:6px;"><strong>Unidade atendida:</strong> ${os.cliente_final_nome}</div>` : ''}
+      <div class="laudo-linha-dupla">
+        <div><strong>Razão social:</strong> ${os.cliente_nome}</div>
+        <div><strong>CNPJ/CPF:</strong> ${os.cliente_cnpj ?? '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Nome fantasia:</strong> ${os.cliente_fantasia ?? '-'}</div>
+        <div><strong>Cidade/UF:</strong> ${os.cliente_cidade ? `${os.cliente_cidade}${os.cliente_uf ? '/' + os.cliente_uf : ''}` : '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Endereço:</strong> ${os.cliente_endereco ?? '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Telefone:</strong> ${os.cliente_telefone ?? '-'}</div>
+        <div><strong>E-mail:</strong> ${os.cliente_email ?? '-'}</div>
+      </div>
+      ${os.cliente_final_nome ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${os.cliente_final_nome}</div></div>` : ''}
     </div>
 
     <div class="laudo-secao">2. Identificação do equipamento</div>

@@ -26,11 +26,22 @@ export interface DadosEntradaParaRelatorio {
   nf_remessa_valor: number | null;
 }
 
+export interface ClienteParaRelatorio {
+  razao_social: string;
+  telefone?: string | null;
+  email?: string | null;
+  cnpj?: string | null;
+  nome_fantasia?: string | null;
+  endereco?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+}
+
 // Só o fragmento HTML (sem abrir janela) - usado sozinho pela tela de
 // Registro de Entrada, e embutido dentro do orçamento pelo Orçamento
 // Financeiro no momento do envio ao cliente.
 export function montarCorpoRegistroEntrada(
-  cliente: { razao_social: string } | undefined,
+  cliente: ClienteParaRelatorio | undefined,
   entrada: DadosEntradaParaRelatorio,
   fotosUrls: string[],
   clienteFinal?: { razao_social: string } | null,
@@ -46,9 +57,29 @@ export function montarCorpoRegistroEntrada(
   return `
     <h1>Registro de Entrada</h1>
     <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
-    <div class="linha"><div class="rotulo">Código</div><div class="valor mono">${entrada.codigo_entrada}</div></div>
-    <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${cliente?.razao_social ?? ''}</div></div>
-    ${clienteFinal ? `<div class="linha"><div class="rotulo">Unidade atendida</div><div class="valor">${clienteFinal.razao_social}</div></div>` : ''}
+    <div class="laudo-caixa">
+      <div><strong>Código:</strong> <span class="mono">${entrada.codigo_entrada}</span></div>
+    </div>
+
+    <div class="laudo-secao">Identificação do cliente</div>
+    <div class="laudo-caixa">
+      <div class="laudo-linha-dupla">
+        <div><strong>Razão social:</strong> ${cliente?.razao_social ?? '-'}</div>
+        <div><strong>CNPJ/CPF:</strong> ${cliente?.cnpj ?? '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Nome fantasia:</strong> ${cliente?.nome_fantasia ?? '-'}</div>
+        <div><strong>Cidade/UF:</strong> ${cliente?.cidade ? `${cliente.cidade}${cliente.uf ? '/' + cliente.uf : ''}` : '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Endereço:</strong> ${cliente?.endereco ?? '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Telefone:</strong> ${cliente?.telefone ?? '-'}</div>
+        <div><strong>E-mail:</strong> ${cliente?.email ?? '-'}</div>
+      </div>
+      ${clienteFinal ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${clienteFinal.razao_social}</div></div>` : ''}
+    </div>
     <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${entrada.equipamento_desc ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Fabricante</div><div class="valor">${entrada.equipamento_fab ?? '-'}</div></div>
     <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${entrada.equipamento_sn ?? '-'}</div></div>
@@ -70,7 +101,7 @@ export function montarCorpoRegistroEntrada(
 // Abre a janela de impressão sozinha (Entrada / Registro de Entrada,
 // quando impresso isoladamente - não embutido no orçamento).
 export function imprimirRegistroEntrada(
-  cliente: { razao_social: string; telefone?: string | null; email?: string | null } | undefined,
+  cliente: ClienteParaRelatorio | undefined,
   entrada: DadosEntradaParaRelatorio,
   fotosUrls: string[],
   avariasDisponiveis: AvariaTriagem[] = [],
