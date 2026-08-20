@@ -1,5 +1,5 @@
 import { abrirImpressao } from './imprimir';
-import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from './compartilhar';
+import { linkEmail, linkWhatsApp } from './compartilhar';
 
 // Relatório da Ordem de Serviço: peças/serviços identificados como
 // danificados pelo técnico (Orçamento Técnico), com foto e observação
@@ -116,7 +116,7 @@ export function imprimirRelatorioOS(
   itens: ItemRelatorioOS[],
 ) {
   const corpo = montarCorpoRelatorioOS(os, itens);
-  const mensagem = `Olá! Identificamos as avarias abaixo no equipamento ${os.optica_desc ?? ''} (OS ${os.numero_os}). O orçamento será enviado em seguida. Acompanhe pelo portal do cliente: ${PORTAL_CLIENTE_URL}`;
+  const mensagem = `Olá! Segue em anexo o laudo técnico com as avarias identificadas no equipamento ${os.optica_desc ?? ''} (OS ${os.numero_os}). O orçamento será enviado em seguida.`;
   abrirImpressao(
     `Ordem de Serviços - Laudo Técnico ${os.numero_os}`,
     corpo,

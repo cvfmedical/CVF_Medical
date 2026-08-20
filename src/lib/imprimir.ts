@@ -75,8 +75,13 @@ export function escreverImpressao(
   const semAssinaturas = opcoes?.semAssinaturas ?? false;
   const anexoHtml = opcoes?.anexoHtml ?? '';
 
+  // "Enviar por WhatsApp" não consegue anexar o PDF sozinho (o link
+  // wa.me só abre com texto pré-preenchido, WhatsApp não permite anexar
+  // arquivo por URL) - por isso primeiro aciona o diálogo de impressão
+  // (o técnico salva o PDF) e só depois abre o WhatsApp já com a
+  // mensagem pronta, pra ele anexar o PDF salvo na conversa.
   const botoesCompartilhar = `
-    ${links?.whatsapp ? `<a class="botao-acao" href="${links.whatsapp}" target="_blank" rel="noopener">Enviar por WhatsApp</a>` : ''}
+    ${links?.whatsapp ? `<button type="button" class="botao-acao" onclick="window.print(); window.open('${links.whatsapp}', '_blank');">Enviar por WhatsApp</button>` : ''}
     ${links?.email ? `<a class="botao-acao" href="${links.email}" target="_blank" rel="noopener">Enviar por e-mail</a>` : ''}
   `;
 
