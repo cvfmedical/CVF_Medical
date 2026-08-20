@@ -614,50 +614,58 @@ export function BancadaVisao() {
           : resultadoManual;
       }
 
-      const numeroLaudo = await gerarNumeroLaudo();
-      const blob = await pdf(
-        <BancadaVisaoPdf
-          dados={{
-            codLaudo: numeroLaudo,
-            numeroOS: osSelecionada.numero_os,
-            dataEmissao: new Date().toLocaleDateString('pt-BR'),
-            dataEnsaio: new Date().toLocaleString('pt-BR'),
-            etapa,
-            clienteNome: osSelecionada.cliente_nome,
-            clienteCnpj: clienteQuery.data?.cnpj ?? '',
-            clienteFantasia: clienteQuery.data?.nome_fantasia ?? '',
-            clienteCidade: clienteQuery.data?.cidade ?? '',
-            clienteEmail: clienteQuery.data?.email ?? '',
-            equipamentoDesc: osSelecionada.optica_desc ?? '',
-            equipamentoFab: osSelecionada.optica_fab ?? '',
-            equipamentoSn: osSelecionada.optica_sn ?? '',
-            metricas: metricasFinal,
-            resultado,
-            imagemDataUrl,
-            tecnicoResponsavel: funcionario?.nome ?? '',
-            observacoes,
-            iso: isoProp,
-          }}
-        />,
-      ).toBlob();
+      // Equipamento não-ótico não passa pelo ensaio ISO 8600 - não faz sentido
+      // gerar o laudo óptico (LAUDO DE INSPEÇÃO E ENSAIO DE DESEMPENHO ÓPTICO)
+      // pra ele. Esta etapa só serve de porteira (aprova/reprova pra liberar
+      // pra entrega); o laudo de verdade desse equipamento é o "Laudo de
+      // equipamento" (checklist), gerado em Laudos e Metrologia.
+      let numeroLaudo: string | null = null;
+      if (!naoOtica) {
+        numeroLaudo = await gerarNumeroLaudo();
+        const blob = await pdf(
+          <BancadaVisaoPdf
+            dados={{
+              codLaudo: numeroLaudo,
+              numeroOS: osSelecionada.numero_os,
+              dataEmissao: new Date().toLocaleDateString('pt-BR'),
+              dataEnsaio: new Date().toLocaleString('pt-BR'),
+              etapa,
+              clienteNome: osSelecionada.cliente_nome,
+              clienteCnpj: clienteQuery.data?.cnpj ?? '',
+              clienteFantasia: clienteQuery.data?.nome_fantasia ?? '',
+              clienteCidade: clienteQuery.data?.cidade ?? '',
+              clienteEmail: clienteQuery.data?.email ?? '',
+              equipamentoDesc: osSelecionada.optica_desc ?? '',
+              equipamentoFab: osSelecionada.optica_fab ?? '',
+              equipamentoSn: osSelecionada.optica_sn ?? '',
+              metricas: metricasFinal,
+              resultado,
+              imagemDataUrl,
+              tecnicoResponsavel: funcionario?.nome ?? '',
+              observacoes,
+              iso: isoProp,
+            }}
+          />,
+        ).toBlob();
 
-      const caminho = `laudo_${osSelecionada.id}/${numeroLaudo}.pdf`;
-      const { error: erroUpload } = await supabase.storage.from('laudos-pdf').upload(caminho, blob, {
-        contentType: 'application/pdf',
-      });
-      if (erroUpload) throw erroUpload;
+        const caminho = `laudo_${osSelecionada.id}/${numeroLaudo}.pdf`;
+        const { error: erroUpload } = await supabase.storage.from('laudos-pdf').upload(caminho, blob, {
+          contentType: 'application/pdf',
+        });
+        if (erroUpload) throw erroUpload;
 
-      const { error: erroInsert } = await supabase.from('laudos').insert({
-        numero_laudo: numeroLaudo,
-        ordem_servico_id: osSelecionada.id,
-        tecnico_responsavel: funcionario?.nome ?? null,
-        resultado,
-        observacoes_tecnicas: observacoes || null,
-        storage_path: caminho,
-        etapa,
-        ...isoCampos,
-      });
-      if (erroInsert) throw erroInsert;
+        const { error: erroInsert } = await supabase.from('laudos').insert({
+          numero_laudo: numeroLaudo,
+          ordem_servico_id: osSelecionada.id,
+          tecnico_responsavel: funcionario?.nome ?? null,
+          resultado,
+          observacoes_tecnicas: observacoes || null,
+          storage_path: caminho,
+          etapa,
+          ...isoCampos,
+        });
+        if (erroInsert) throw erroInsert;
+      }
 
       // Equipamento não-ótico: aprovado vai direto pra "Pronto para entrega",
       // sem passar pelos ensaios ópticos/estanqueidade/autoclave (não fazem
@@ -675,7 +683,11 @@ export function BancadaVisao() {
       pararCamera();
       setPrecisaSelagem(true);
       qc.invalidateQueries({ queryKey: ['os-bancada-visao'] });
-      alert(`Laudo ${numeroLaudo} gerado com sucesso - resultado: ${resultado}.`);
+      alert(
+        numeroLaudo
+          ? `Laudo ${numeroLaudo} gerado com sucesso - resultado: ${resultado}.`
+          : `Resultado registrado: ${resultado}. Gere o laudo desse equipamento em Laudos e Metrologia (Laudo de equipamento).`,
+      );
       navigate('/ordens-servico');
     } catch (e) {
       setErro(mensagemErro(e));
