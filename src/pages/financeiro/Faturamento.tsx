@@ -39,6 +39,11 @@ interface OrcamentoAprovado {
   ordem_servico_id: number;
   ordens_servico: { numero_os: string; cliente_id: number; cliente_nome: string; status_os: string | null } | null;
   orcamento_itens: { preco_unitario: number | null; quantidade: number }[];
+  // Quando precificado por valor fixo (por modelo de ótica ou por
+  // modalidade de manutenção - OrcamentoFinanceiro.tsx), os itens ficam
+  // com preço zerado de propósito (só de referência) e o valor de verdade
+  // vem daqui, não da soma dos itens.
+  valor_fixo_contrato: number | null;
 }
 
 // Linha unificada da tabela: ou já existe uma conta a receber lançada
@@ -121,7 +126,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, status_os), orcamento_itens(preco_unitario, quantidade)',
+          'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, ordens_servico(numero_os, cliente_id, cliente_nome, status_os), orcamento_itens(preco_unitario, quantidade)',
         )
         .eq('status', 'Aprovado');
       if (error) throw error;
@@ -164,7 +169,8 @@ export function Faturamento() {
     ...(orcamentosQuery.data ?? [])
       .filter((o) => !orcamentosComConta.has(o.id))
       .map((o): LinhaFaturamento => {
-        const valor = (o.orcamento_itens ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
+        const valor =
+          o.valor_fixo_contrato ?? (o.orcamento_itens ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
         return {
           chave: `orc-${o.id}`,
           contaId: null,

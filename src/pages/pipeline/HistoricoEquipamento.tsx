@@ -128,7 +128,13 @@ export function HistoricoEquipamento() {
   }
 
   const d = detalheQuery.data;
-  const valorTotalOrcamento = d?.itensOrcamento.reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0) ?? 0;
+  // Quando precificado por valor fixo (por modelo de ótica ou por
+  // modalidade de manutenção), os itens ficam com preço zerado de
+  // propósito e o valor de verdade vem de orcamentos.valor_fixo_contrato.
+  const valorTotalOrcamento =
+    (d?.orcamento as { valor_fixo_contrato?: number | null } | null | undefined)?.valor_fixo_contrato ??
+    d?.itensOrcamento.reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0) ??
+    0;
   const eventoFinalizacao = d?.statusHist.find((h) => h.status_novo === STATUS_PRONTO_ENTREGA);
 
   return (

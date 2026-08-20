@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import type { Categoria } from '../lib/permissions';
 import { temPermissao } from '../lib/permissions';
@@ -78,7 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setErro(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
     if (error) {
-      const msg = 'E-mail ou senha incorretos.';
+      // Falha de rede/servidor (ex: instabilidade da Supabase) não é a
+      // mesma coisa que senha errada - sem essa distinção, qualquer
+      // indisponibilidade do servidor aparecia como "senha incorreta" e
+      // confundia quem está tentando entrar.
+      const msg = isAuthRetryableFetchError(error)
+        ? 'Não foi possível conectar ao servidor. Verifique sua internet ou tente novamente em alguns instantes.'
+        : 'E-mail ou senha incorretos.';
       setErro(msg);
       return { error: msg };
     }
