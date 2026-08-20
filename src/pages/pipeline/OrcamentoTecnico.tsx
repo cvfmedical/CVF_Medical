@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
@@ -336,31 +336,26 @@ export function OrcamentoTecnico() {
   // de propósito: é só uma evidência anexada, não muda preço/descrição/
   // quantidade, então continua permitido mesmo em orçamentos já
   // precificados/entregues (ex.: complementar fotos depois da entrega).
-  const fotoItemInputRef = useRef<HTMLInputElement>(null);
-  const [itemParaFoto, setItemParaFoto] = useState<number | null>(null);
-  const [enviandoFotoItem, setEnviandoFotoItem] = useState(false);
+  // Input por item, dentro de um <label> (mesmo padrão já usado em
+  // TesteResolucao.tsx) - mais confiável entre navegadores do que abrir o
+  // seletor de arquivo via ref + .click() programático.
+  const [itemEnviandoFoto, setItemEnviandoFoto] = useState<number | null>(null);
 
-  function pedirFotoItem(itemId: number) {
-    setItemParaFoto(itemId);
-    fotoItemInputRef.current?.click();
-  }
-
-  async function aoEscolherFotoItem(e: React.ChangeEvent<HTMLInputElement>) {
+  async function aoEscolherFotoItem(itemId: number, e: React.ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0];
     e.target.value = '';
-    if (!arquivo || !itemParaFoto || !orcamentoQuery.data) return;
-    setEnviandoFotoItem(true);
+    if (!arquivo || !orcamentoQuery.data) return;
+    setItemEnviandoFoto(itemId);
     setErro(null);
     try {
       const caminho = await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, arquivo);
-      const { error } = await supabase.from('orcamento_itens').update({ foto_peca_danificada_path: caminho }).eq('id', itemParaFoto);
+      const { error } = await supabase.from('orcamento_itens').update({ foto_peca_danificada_path: caminho }).eq('id', itemId);
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data.id] });
     } catch (err) {
       setErro(mensagemErro(err));
     } finally {
-      setEnviandoFotoItem(false);
-      setItemParaFoto(null);
+      setItemEnviandoFoto(null);
     }
   }
 
@@ -482,14 +477,20 @@ export function OrcamentoTecnico() {
                         <IconPhoto size={16} />
                       </button>
                     )}
-                    <button
+                    <label
                       className="botao-icone"
                       title={item.foto_peca_danificada_path ? 'Trocar foto' : 'Adicionar foto'}
-                      onClick={() => pedirFotoItem(item.id)}
-                      disabled={enviandoFotoItem}
+                      style={{ cursor: itemEnviandoFoto === item.id ? 'wait' : 'pointer', display: 'inline-flex' }}
                     >
                       <IconCamera size={16} />
-                    </button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        disabled={itemEnviandoFoto === item.id}
+                        onChange={(e) => aoEscolherFotoItem(item.id, e)}
+                      />
+                    </label>
                     <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)} disabled={travado}>
                       <IconTrash size={16} />
                     </button>
@@ -503,14 +504,7 @@ export function OrcamentoTecnico() {
               )}
             </tbody>
           </table>
-          <input
-            type="file"
-            accept="image/*"
-            ref={fotoItemInputRef}
-            style={{ display: 'none' }}
-            onChange={aoEscolherFotoItem}
-          />
-          {enviandoFotoItem && <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Enviando foto...</p>}
+          {itemEnviandoFoto != null && <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Enviando foto...</p>}
 
           <div className="campo-form" style={{ marginTop: 16 }}>
             <label>Observações técnicas gerais (defeito/serviço quando não há troca de peça)</label>
