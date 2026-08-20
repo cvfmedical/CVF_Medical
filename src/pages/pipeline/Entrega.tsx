@@ -51,7 +51,21 @@ export function Entrega() {
     return orcamentosQuery.data?.find((o) => o.ordem_servico_id === osId)?.numero_orcamento ?? null;
   }
 
-  if (isLoading || orcamentosQuery.isLoading) return <CarregandoTela />;
+  // OS's que já têm entrega registrada - precisam continuar selecionáveis
+  // no combobox e passar na validação ao EDITAR essa entrega, mesmo que o
+  // status já tenha avançado pra "Entregue" (efeito esperado de já ter
+  // sido entregue antes). Sem isso, editar uma entrega já salva mostrava
+  // o campo "Ordem de serviço" em branco e travava com "OS não liberada".
+  const entregasExistentesQuery = useQuery({
+    queryKey: ['entregas-os-ids'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('entregas').select('ordem_servico_id');
+      if (error) throw error;
+      return data as { ordem_servico_id: number }[];
+    },
+  });
+
+  if (isLoading || orcamentosQuery.isLoading || entregasExistentesQuery.isLoading) return <CarregandoTela />;
 
   // Porteira: só entra na entrega quem terminou o fluxo ("Pronto para entrega")
   // ou saiu por devolução sem reparo (orçamento recusado).
@@ -59,7 +73,9 @@ export function Entrega() {
     const s = porId(osId)?.status_os;
     return s === STATUS_PRONTO_ENTREGA || s === STATUS_DEVOLUCAO_SEM_REPARO;
   };
-  const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)));
+  const temEntregaRegistrada = (osId: number) =>
+    entregasExistentesQuery.data?.some((e) => e.ordem_servico_id === osId) ?? false;
+  const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)));
 
   function alternarSelecaoOS(id: number) {
     setOsSelecionadas((s) => {
@@ -308,7 +324,11 @@ export function Entrega() {
       ]}
       validar={(d) => {
         if (!d.ordem_servico_id) return 'Selecione a ordem de serviço.';
-        if (!podeEntregar(Number(d.ordem_servico_id)))
+        // Editando uma entrega já existente (tem id) - não reexige a
+        // porteira "liberada pra entrega", já que o status naturalmente
+        // avança pra "Entregue" assim que a entrega é criada pela 1ª vez.
+        const editando = !!d.id;
+        if (!editando && !podeEntregar(Number(d.ordem_servico_id)))
           return 'Esta OS ainda não está liberada para entrega (precisa estar em "Pronto para entrega" ou "Devolução sem reparo").';
         if (!d.forma_devolucao) return 'Selecione a forma de devolução.';
         return null;
