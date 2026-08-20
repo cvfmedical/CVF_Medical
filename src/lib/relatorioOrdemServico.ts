@@ -87,7 +87,9 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
         <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'} (${os.optica_fab ?? '-'})</div>
         <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>
       </div>
-      <div><strong>Defeito relatado:</strong> ${os.defeito_relatado ?? '-'}</div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Defeito relatado:</strong> ${os.defeito_relatado ?? '-'}</div>
+      </div>
     </div>
 
     ${itens.length > 0 ? `

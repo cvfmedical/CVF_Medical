@@ -645,24 +645,40 @@ export function OrcamentoFinanceiro() {
       )
       .join('');
 
+    const c = clienteQuery.data;
     return `
       <h1>Orçamento de Manutenção</h1>
-      <p class="subtitulo">Nº ${orcamentoSelecionado!.numero_orcamento} · OS ${os?.numero_os ?? '-'} · ${os?.cliente_nome ?? '-'}</p>
-      ${(() => {
-        const c = clienteQuery.data;
-        if (!c) return '';
-        const partes = [
-          c.cnpj ? `CNPJ/CPF: ${c.cnpj}` : '',
-          enderecoCompletoCliente(c) ?? '',
-          c.cidade ? `${c.cidade}${c.uf ? '/' + c.uf : ''}` : '',
-          c.telefone ? `Tel: ${c.telefone}` : '',
-          c.email ?? '',
-        ].filter(Boolean);
-        return partes.length ? `<p class="subtitulo">${partes.join(' · ')}</p>` : '';
-      })()}
-      ${clienteFinalQuery.data ? `<p class="subtitulo">Unidade atendida: ${clienteFinalQuery.data.razao_social}</p>` : ''}
-      <p class="subtitulo">${os?.optica_desc ?? '-'}${os?.optica_fab ? ' (' + os.optica_fab + ')' : ''}${os?.optica_sn ? ' · Nº série ' + os.optica_sn : ''}</p>
-      <div class="secao">Itens</div>
+      <p class="subtitulo">Nº ${orcamentoSelecionado!.numero_orcamento} · OS ${os?.numero_os ?? '-'}</p>
+
+      <div class="laudo-secao">1. Identificação do cliente</div>
+      <div class="laudo-caixa">
+        <div class="laudo-linha-dupla">
+          <div><strong>Razão social:</strong> ${os?.cliente_nome ?? c?.razao_social ?? '-'}</div>
+          <div><strong>CNPJ/CPF:</strong> ${c?.cnpj ?? '-'}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Nome fantasia:</strong> ${c?.nome_fantasia ?? '-'}</div>
+          <div><strong>Cidade/UF:</strong> ${c?.cidade ? `${c.cidade}${c.uf ? '/' + c.uf : ''}` : '-'}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Endereço:</strong> ${enderecoCompletoCliente(c) ?? '-'}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Telefone:</strong> ${c?.telefone ?? '-'}</div>
+          <div><strong>E-mail:</strong> ${c?.email ?? '-'}</div>
+        </div>
+        ${clienteFinalQuery.data ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${clienteFinalQuery.data.razao_social}</div></div>` : ''}
+      </div>
+
+      <div class="laudo-secao">2. Identificação do equipamento</div>
+      <div class="laudo-caixa">
+        <div class="laudo-linha-dupla">
+          <div><strong>Equipamento:</strong> ${os?.optica_desc ?? '-'} ${os?.optica_fab ? '(' + os.optica_fab + ')' : ''}</div>
+          <div><strong>Nº de série:</strong> <span class="mono">${os?.optica_sn ?? '-'}</span></div>
+        </div>
+      </div>
+
+      <div class="laudo-secao">3. Itens</div>
       <table class="dados">
         <thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead>
         <tbody>${linhas}</tbody>
@@ -676,25 +692,35 @@ export function OrcamentoFinanceiro() {
           : ''}
       <p class="total-linha">Total: ${formatarMoeda(total)}</p>
       ${os?.eh_otica ? `
-      <div class="secao">Procedimentos de manutenção incluídos</div>
+      <div class="laudo-secao">Procedimentos de manutenção incluídos</div>
+      <div class="laudo-caixa">
       <ul class="check">
         ${CHECKLIST_OTICA.map((item) => `<li>${item}</li>`).join('')}
       </ul>
-      <p class="alerta">${AVISO_MANUTENCAO}</p>` : ''}
-      <div class="secao">Condições comerciais</div>
-      <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${validadeProposta || '-'}</div></div>
-      <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${condicoesPagamento || '-'}</div></div>
-      <div style="page-break-inside:avoid;font-size:10px;line-height:1.32;color:var(--ink-600);margin-top:8px;">
-        <div class="secao" style="margin-bottom:4px;">Garantia</div>
-        <div style="font-size:11px;color:var(--ink-900);margin-bottom:2px;">${GARANTIA_CVF.resumo}</div>
-        <p style="margin:3px 0;">${GARANTIA_CVF.intro}</p>
-        <ol style="margin:0;padding-left:16px;">
-          ${GARANTIA_CVF.itens.map((i) => `<li>${i}</li>`).join('')}
-        </ol>
-        <div class="secao" style="margin:8px 0 4px;">Condições gerais</div>
-        ${CLAUSULAS_GERAIS.map((c) => `<p style="margin:0 0 4px;"><strong>${c.titulo}.</strong> ${c.texto}</p>`).join('')}
-        <div class="secao" style="margin:8px 0 4px;">Observações</div>
-        <div>${observacoesFinanceiro || '-'}</div>
+      <p class="alerta">${AVISO_MANUTENCAO}</p>
+      </div>` : ''}
+      <div class="laudo-secao">4. Condições comerciais</div>
+      <div class="laudo-caixa">
+        <div class="laudo-linha-dupla">
+          <div><strong>Validade da proposta:</strong> ${validadeProposta || '-'}</div>
+          <div><strong>Condições de pagamento:</strong> ${condicoesPagamento || '-'}</div>
+        </div>
+      </div>
+      <div style="page-break-inside:avoid;font-size:10px;line-height:1.32;color:var(--ink-600);">
+        <div class="laudo-secao">5. Garantia</div>
+        <div class="laudo-caixa">
+          <div style="font-size:11px;color:var(--ink-900);margin-bottom:2px;">${GARANTIA_CVF.resumo}</div>
+          <p style="margin:3px 0;">${GARANTIA_CVF.intro}</p>
+          <ol style="margin:0;padding-left:16px;">
+            ${GARANTIA_CVF.itens.map((i) => `<li>${i}</li>`).join('')}
+          </ol>
+        </div>
+        <div class="laudo-secao">6. Condições gerais</div>
+        <div class="laudo-caixa">
+          ${CLAUSULAS_GERAIS.map((cl) => `<p style="margin:0 0 4px;"><strong>${cl.titulo}.</strong> ${cl.texto}</p>`).join('')}
+        </div>
+        <div class="laudo-secao">7. Observações</div>
+        <div class="laudo-caixa">${observacoesFinanceiro || '-'}</div>
       </div>`;
   }
 
