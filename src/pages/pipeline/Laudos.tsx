@@ -29,9 +29,12 @@ interface Laudo {
   data_emissao: string;
   tipo_laudo: string | null;
   tipo_equipamento_laudo_id: number | null;
+  tipo_manutencao: string | null;
+  data_validade: string | null;
 }
 
 type TipoLaudo = 'equipamento' | 'nota';
+type TipoManutencao = 'Corretiva' | 'Preventiva';
 
 // 'diagnostico'/'servico' não são mais gerados (o defeito identificado
 // agora sai direto da Ordem de Serviço, botão "Ordem de Serviços - Laudo
@@ -54,6 +57,7 @@ const COLUNAS_FILTRAVEIS = [
   'cliente_nome',
   'tipo_laudo',
   'tipo_equipamento',
+  'tipo_manutencao',
   'tecnico_responsavel',
   'resultado',
   'data_emissao',
@@ -70,6 +74,7 @@ export function Laudos() {
   const [form, setForm] = useState({
     ordem_servico_id: '',
     tipo_equipamento_laudo_id: '',
+    tipo_manutencao: 'Corretiva' as TipoManutencao,
     resultado: 'Aprovado',
     observacoes_tecnicas: '',
   });
@@ -130,8 +135,10 @@ export function Laudos() {
     setRespostas(novo);
   }
 
-  // Puxa os dados de cabeçalho da OS/equipamento pra não precisar redigitar
-  // no laudo (cliente, unidade atendida, equipamento, data de abertura).
+  // Puxa os dados de cabeçalho da OS/equipamento/cliente completo pra não
+  // precisar redigitar no laudo (cliente com CNPJ/endereço, unidade
+  // atendida, equipamento, data de abertura) - laudo formal precisa da
+  // identificação completa do cliente, não só o nome.
   const dadosOSQuery = useQuery({
     queryKey: ['laudo-dados-os', form.ordem_servico_id],
     enabled: !!form.ordem_servico_id && tipoLaudo !== 'nota',
@@ -139,10 +146,16 @@ export function Laudos() {
       const osId = Number(form.ordem_servico_id);
       const { data: os, error: errOS } = await supabase
         .from('ordens_servico')
-        .select('numero_os, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn, data_abertura')
+        .select('numero_os, cliente_id, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn, data_abertura')
         .eq('id', osId)
         .single();
       if (errOS) throw errOS;
+
+      const { data: cliente } = await supabase
+        .from('clientes')
+        .select('razao_social, nome_fantasia, cnpj, telefone, email, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
+        .eq('id', os.cliente_id)
+        .maybeSingle();
 
       let clienteFinalNome: string | null = null;
       if (os.cliente_final_id) {
@@ -150,7 +163,7 @@ export function Laudos() {
         clienteFinalNome = cf?.razao_social ?? null;
       }
 
-      return { os, clienteFinalNome };
+      return { os, cliente, clienteFinalNome };
     },
   });
 
@@ -162,6 +175,7 @@ export function Laudos() {
         (e.form as typeof form) ?? {
           ordem_servico_id: '',
           tipo_equipamento_laudo_id: '',
+          tipo_manutencao: 'Corretiva',
           resultado: 'Aprovado',
           observacoes_tecnicas: '',
         },
@@ -183,7 +197,9 @@ export function Laudos() {
     queryFn: async (): Promise<Laudo[]> => {
       const { data, error } = await supabase
         .from('laudos')
-        .select('id, numero_laudo, ordem_servico_id, tecnico_responsavel, resultado, storage_path, data_emissao, tipo_laudo, tipo_equipamento_laudo_id')
+        .select(
+          'id, numero_laudo, ordem_servico_id, tecnico_responsavel, resultado, storage_path, data_emissao, tipo_laudo, tipo_equipamento_laudo_id, tipo_manutencao, data_validade',
+        )
         .order('data_emissao', { ascending: false });
       if (error) throw error;
       return data as Laudo[];
@@ -195,6 +211,7 @@ export function Laudos() {
     if (chave === 'cliente_nome') return porId(l.ordem_servico_id)?.cliente_nome ?? '';
     if (chave === 'tipo_laudo') return l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : 'ISO 8600 / outro';
     if (chave === 'tipo_equipamento') return nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-';
+    if (chave === 'tipo_manutencao') return l.tipo_manutencao ?? '-';
     if (chave === 'data_emissao') return l.data_emissao;
     return (l as unknown as Record<string, unknown>)[chave];
   }
@@ -242,10 +259,27 @@ export function Laudos() {
     setGerando(true);
     try {
       const numeroLaudo = await gerarNumeroLaudo();
-      const dataEmissao = new Date().toLocaleDateString('pt-BR');
+      const agora = new Date();
+      const dataEmissao = agora.toLocaleDateString('pt-BR');
+      // Válido por 12 meses - padrão de laudo técnico de manutenção
+      // (mesmo horizonte usado na calibração de padrões).
+      const validade = new Date(agora);
+      validade.setFullYear(validade.getFullYear() + 1);
+      const dataValidadeIso = validade.toISOString().slice(0, 10);
       const equipamentoDesc = [dadosOSQuery.data?.os.optica_desc, dadosOSQuery.data?.os.optica_fab].filter(Boolean).join(' - ');
       const numeroSerie = dadosOSQuery.data?.os.optica_sn ?? '';
       const clienteFinalNome = dadosOSQuery.data?.clienteFinalNome ?? null;
+      const cliente = dadosOSQuery.data?.cliente ?? null;
+      const clienteEndereco = cliente
+        ? [
+            [cliente.logradouro, cliente.numero_endereco].filter(Boolean).join(', '),
+            cliente.complemento,
+            cliente.bairro,
+            cliente.cep ? `CEP ${cliente.cep}` : null,
+          ]
+            .filter(Boolean)
+            .join(' - ')
+        : '';
       const dataAbertura = dadosOSQuery.data?.os.data_abertura
         ? new Date(dadosOSQuery.data.os.data_abertura).toLocaleDateString('pt-BR')
         : '';
@@ -263,7 +297,15 @@ export function Laudos() {
             dados={{
               numeroLaudo,
               numeroOS: os?.numero_os ?? '',
-              clienteNome: os?.cliente_nome ?? '',
+              tipoManutencao: form.tipo_manutencao,
+              clienteNome: cliente?.razao_social ?? os?.cliente_nome ?? '',
+              clienteFantasia: cliente?.nome_fantasia ?? '',
+              clienteCnpj: cliente?.cnpj ?? '',
+              clienteEndereco,
+              clienteCidade: cliente?.cidade ?? '',
+              clienteUf: cliente?.uf ?? '',
+              clienteTelefone: cliente?.telefone ?? '',
+              clienteEmail: cliente?.email ?? '',
               clienteFinalNome,
               tipoEquipamento: tipoNome,
               equipamentoDesc,
@@ -274,6 +316,7 @@ export function Laudos() {
               tecnicoResponsavel: funcionario?.nome ?? '',
               dataAbertura,
               dataEmissao,
+              dataValidade: validade.toLocaleDateString('pt-BR'),
             }}
           />,
         ).toBlob();
@@ -310,12 +353,20 @@ export function Laudos() {
         tipo_laudo: tipoLaudo,
         tipo_equipamento_laudo_id: tipoLaudo === 'equipamento' ? Number(form.tipo_equipamento_laudo_id) : null,
         checklist_respostas: tipoLaudo === 'equipamento' ? itensChecklist : null,
+        tipo_manutencao: tipoLaudo === 'equipamento' ? form.tipo_manutencao : null,
+        data_validade: tipoLaudo === 'equipamento' ? dataValidadeIso : null,
       });
       if (erroInsert) throw erroInsert;
 
       setModalAberto(false);
       setTipoLaudo('equipamento');
-      setForm({ ordem_servico_id: '', tipo_equipamento_laudo_id: '', resultado: 'Aprovado', observacoes_tecnicas: '' });
+      setForm({
+        ordem_servico_id: '',
+        tipo_equipamento_laudo_id: '',
+        tipo_manutencao: 'Corretiva',
+        resultado: 'Aprovado',
+        observacoes_tecnicas: '',
+      });
       setRespostas({});
       qc.invalidateQueries({ queryKey: ['laudos'] });
     } catch (e) {
@@ -359,6 +410,7 @@ export function Laudos() {
               ['cliente_nome', 'Cliente'],
               ['tipo_laudo', 'Tipo'],
               ['tipo_equipamento', 'Equipamento'],
+              ['tipo_manutencao', 'Manutenção'],
               ['tecnico_responsavel', 'Técnico'],
               ['resultado', 'Resultado'],
               ['data_emissao', 'Emitido em'],
@@ -404,6 +456,7 @@ export function Laudos() {
               <td>{porId(l.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : <span style={{ color: 'var(--ink-400)' }}>ISO 8600 / outro</span>}</td>
               <td>{nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-'}</td>
+              <td>{l.tipo_manutencao ?? '-'}</td>
               <td>{l.tecnico_responsavel}</td>
               <td>
                 <Badge tono={l.resultado === 'Aprovado' ? 'teal' : 'danger'}>{l.resultado}</Badge>
@@ -421,7 +474,7 @@ export function Laudos() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={9}>Nenhum laudo encontrado.</td>
+              <td colSpan={10}>Nenhum laudo encontrado.</td>
             </tr>
           )}
         </tbody>
@@ -465,7 +518,8 @@ export function Laudos() {
                 ) : (
                   <>
                     <p style={{ margin: 0 }}>
-                      <strong>Cliente:</strong> {dadosOSQuery.data?.os.cliente_nome}
+                      <strong>Cliente:</strong> {dadosOSQuery.data?.cliente?.razao_social ?? dadosOSQuery.data?.os.cliente_nome}
+                      {dadosOSQuery.data?.cliente?.cnpj ? ` · CNPJ ${dadosOSQuery.data.cliente.cnpj}` : ''}
                       {dadosOSQuery.data?.clienteFinalNome ? ` (unidade: ${dadosOSQuery.data.clienteFinalNome})` : ''}
                     </p>
                     <p style={{ margin: 0 }}>
@@ -475,6 +529,17 @@ export function Laudos() {
                     </p>
                   </>
                 )}
+              </div>
+
+              <div className="campo-form">
+                <label>Tipo de manutenção *</label>
+                <select
+                  value={form.tipo_manutencao}
+                  onChange={(e) => setForm((f) => ({ ...f, tipo_manutencao: e.target.value as TipoManutencao }))}
+                >
+                  <option value="Corretiva">Corretiva (reparo de defeito identificado)</option>
+                  <option value="Preventiva">Preventiva (manutenção programada, sem defeito relatado)</option>
+                </select>
               </div>
 
               <div className="campo-form">

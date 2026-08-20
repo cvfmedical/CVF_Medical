@@ -49,7 +49,15 @@ export interface ItemChecklistPdf {
 export interface DadosLaudoEquipamentoPdf {
   numeroLaudo: string;
   numeroOS: string;
+  tipoManutencao: string;
   clienteNome: string;
+  clienteFantasia?: string | null;
+  clienteCnpj?: string | null;
+  clienteEndereco?: string | null;
+  clienteCidade?: string | null;
+  clienteUf?: string | null;
+  clienteTelefone?: string | null;
+  clienteEmail?: string | null;
   clienteFinalNome?: string | null;
   tipoEquipamento: string;
   equipamentoDesc: string;
@@ -60,6 +68,7 @@ export interface DadosLaudoEquipamentoPdf {
   tecnicoResponsavel: string;
   dataAbertura: string;
   dataEmissao: string;
+  dataValidade: string;
 }
 
 export function LaudoEquipamentoPdf({ dados: d }: { dados: DadosLaudoEquipamentoPdf }) {
@@ -71,7 +80,7 @@ export function LaudoEquipamentoPdf({ dados: d }: { dados: DadosLaudoEquipamento
         <View style={styles.cabecalho}>
           <Image src={cvfLogoCompleto} style={styles.logo} />
           <View>
-            <Text style={styles.tituloMain}>LAUDO TÉCNICO DE EQUIPAMENTO</Text>
+            <Text style={styles.tituloMain}>LAUDO TÉCNICO — MANUTENÇÃO CORRETIVA E PREVENTIVA</Text>
             <Text style={styles.subMain}>Manutenção em Equipamentos Cirúrgicos — Sistema Q-CVF</Text>
           </View>
         </View>
@@ -97,19 +106,62 @@ export function LaudoEquipamentoPdf({ dados: d }: { dados: DadosLaudoEquipamento
               {d.dataAbertura || '-'}
             </Text>
           </View>
+          <View style={[styles.linhaDupla, styles.linhaBorda]}>
+            <Text style={[styles.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={styles.bold}>Tipo de manutenção: </Text>
+              {d.tipoManutencao}
+            </Text>
+            <Text style={[styles.colDir, styles.bold, { color: corAzul }]}>
+              Válido até: {d.dataValidade}
+            </Text>
+          </View>
         </View>
 
         <Text style={styles.faixa}>1. IDENTIFICAÇÃO DO CLIENTE</Text>
         <View style={styles.caixa}>
-          <Text>
-            <Text style={styles.bold}>Razão social: </Text>
-            {d.clienteNome || '-'}
-          </Text>
-          {d.clienteFinalNome && (
-            <Text style={{ marginTop: 3 }}>
-              <Text style={styles.bold}>Unidade atendida: </Text>
-              {d.clienteFinalNome}
+          <View style={styles.linhaDupla}>
+            <Text style={[styles.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={styles.bold}>Razão social: </Text>
+              {d.clienteNome || '-'}
             </Text>
+            <Text style={styles.colDir}>
+              <Text style={styles.bold}>CNPJ/CPF: </Text>
+              {d.clienteCnpj || '-'}
+            </Text>
+          </View>
+          <View style={[styles.linhaDupla, styles.linhaBorda, styles.linhaZebra]}>
+            <Text style={[styles.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={styles.bold}>Nome fantasia: </Text>
+              {d.clienteFantasia || '-'}
+            </Text>
+            <Text style={styles.colDir}>
+              <Text style={styles.bold}>Cidade/UF: </Text>
+              {d.clienteCidade ? `${d.clienteCidade}${d.clienteUf ? '/' + d.clienteUf : ''}` : '-'}
+            </Text>
+          </View>
+          <View style={[styles.linhaDupla, styles.linhaBorda]}>
+            <Text style={{ padding: 4 }}>
+              <Text style={styles.bold}>Endereço: </Text>
+              {d.clienteEndereco || '-'}
+            </Text>
+          </View>
+          <View style={[styles.linhaDupla, styles.linhaBorda, styles.linhaZebra]}>
+            <Text style={[styles.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={styles.bold}>Telefone: </Text>
+              {d.clienteTelefone || '-'}
+            </Text>
+            <Text style={styles.colDir}>
+              <Text style={styles.bold}>E-mail: </Text>
+              {d.clienteEmail || '-'}
+            </Text>
+          </View>
+          {d.clienteFinalNome && (
+            <View style={[styles.linhaDupla, styles.linhaBorda]}>
+              <Text style={{ padding: 4 }}>
+                <Text style={styles.bold}>Unidade atendida: </Text>
+                {d.clienteFinalNome}
+              </Text>
+            </View>
           )}
         </View>
 
