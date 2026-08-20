@@ -245,7 +245,8 @@ export function Faturamento() {
         nf_tipo: form.nf_tipo,
         nf_numero: form.nf_numero,
         nf_serie: form.nf_serie || null,
-        nf_chave_acesso: form.nf_chave_acesso || null,
+        // 44 dígitos - remove espaços/pontos coladas como formatação de leitura.
+        nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
         nf_data_emissao: form.nf_data_emissao || null,
         boleto_numero: form.boleto_numero || null,
         boleto_linha_digitavel: form.boleto_linha_digitavel || null,

@@ -222,6 +222,14 @@ export function Entrega() {
           valorFiltro: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
         },
         {
+          chave: 'equipamento',
+          label: 'Equipamento',
+          render: (r) =>
+            [porId(r.ordem_servico_id)?.optica_desc, porId(r.ordem_servico_id)?.optica_fab].filter(Boolean).join(' - ') || '-',
+          valorFiltro: (r) =>
+            [porId(r.ordem_servico_id)?.optica_desc, porId(r.ordem_servico_id)?.optica_fab].filter(Boolean).join(' - ') || '-',
+        },
+        {
           chave: 'orcamento',
           label: 'Orçamento',
           mono: true,
@@ -309,6 +317,12 @@ export function Entrega() {
         ...d,
         ordem_servico_id: Number(d.ordem_servico_id),
         nf_devolucao_valor: d.nf_devolucao_valor ? Number(d.nf_devolucao_valor) : null,
+        // Chave de acesso da NF-e tem exatamente 44 dígitos - cola-se com
+        // espaços/pontos como formatação de leitura (ex: "3526 0846 ...")
+        // mas o campo no banco só aceita os 44 caracteres puros.
+        nf_devolucao_chave_acesso: d.nf_devolucao_chave_acesso
+          ? String(d.nf_devolucao_chave_acesso).replace(/\D/g, '')
+          : d.nf_devolucao_chave_acesso,
       })}
       aposSalvar={async (dados) => {
         await supabase

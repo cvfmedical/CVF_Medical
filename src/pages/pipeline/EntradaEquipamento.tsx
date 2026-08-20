@@ -515,7 +515,8 @@ export function EntradaEquipamento() {
         triagem_avarias: avarias,
         nf_remessa_numero: form.nf_remessa_numero || null,
         nf_remessa_serie: form.nf_remessa_serie || null,
-        nf_remessa_chave_acesso: form.nf_remessa_chave_acesso || null,
+        // 44 dígitos - remove espaços/pontos coladas como formatação de leitura.
+        nf_remessa_chave_acesso: form.nf_remessa_chave_acesso ? form.nf_remessa_chave_acesso.replace(/\D/g, '') : null,
         nf_remessa_cfop: form.nf_remessa_cfop || null,
         nf_remessa_data_emissao: form.nf_remessa_data_emissao || null,
         nf_remessa_valor: form.nf_remessa_valor ? Number(form.nf_remessa_valor) : null,
