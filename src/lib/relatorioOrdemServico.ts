@@ -44,22 +44,38 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
   return `
     <h1>Ordem de Serviços - Laudo Técnico</h1>
     <p class="subtitulo">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
-    <div class="linha"><div class="rotulo">OS</div><div class="valor mono">${os.numero_os}</div></div>
-    <div class="linha"><div class="rotulo">Cliente</div><div class="valor">${os.cliente_nome}</div></div>
-    ${os.cliente_final_nome ? `<div class="linha"><div class="rotulo">Unidade atendida</div><div class="valor">${os.cliente_final_nome}</div></div>` : ''}
-    <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${os.optica_desc ?? '-'} (${os.optica_fab ?? '-'})</div></div>
-    <div class="linha"><div class="rotulo">Nº de série</div><div class="valor mono">${os.optica_sn ?? '-'}</div></div>
-    <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${os.defeito_relatado ?? '-'}</div></div>
-    ${os.prazo_entrega ? `<div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${os.prazo_entrega}</div></div>` : ''}
+
+    <div class="laudo-caixa">
+      <div class="laudo-linha-dupla">
+        <div><strong>Ordem de serviço:</strong> <span class="mono">${os.numero_os}</span></div>
+        <div><strong>Prazo de entrega:</strong> ${os.prazo_entrega ?? '-'}</div>
+      </div>
+    </div>
+
+    <div class="laudo-secao">1. Identificação do cliente</div>
+    <div class="laudo-caixa">
+      <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
+      ${os.cliente_final_nome ? `<div style="margin-top:6px;"><strong>Unidade atendida:</strong> ${os.cliente_final_nome}</div>` : ''}
+    </div>
+
+    <div class="laudo-secao">2. Identificação do equipamento</div>
+    <div class="laudo-caixa">
+      <div class="laudo-linha-dupla">
+        <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'} (${os.optica_fab ?? '-'})</div>
+        <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>
+      </div>
+      <div><strong>Defeito relatado:</strong> ${os.defeito_relatado ?? '-'}</div>
+    </div>
+
     ${itens.length > 0 ? `
-    <div class="secao">Peças/serviços identificados</div>
+    <div class="laudo-secao">3. Peças/serviços identificados</div>
     <table class="itens-os">
       <thead><tr><th>Item</th><th class="col-qtd">Qtd.</th><th>Observação / avaria</th><th class="col-foto">Foto</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>` : ''}
     ${os.observacoes_tecnico ? `
-    <div class="secao">Observações técnicas gerais</div>
-    <p>${os.observacoes_tecnico}</p>` : ''}
+    <div class="laudo-secao">${itens.length > 0 ? '4' : '3'}. Observações técnicas gerais</div>
+    <div class="laudo-caixa"><p style="margin:0;">${os.observacoes_tecnico}</p></div>` : ''}
     ${itens.length === 0 && !os.observacoes_tecnico ? `
     <p style="color:#666;">Nenhuma peça ou observação registrada ainda.</p>` : ''}
     <p style="font-size:12px; color:#666; margin-top:12px;">

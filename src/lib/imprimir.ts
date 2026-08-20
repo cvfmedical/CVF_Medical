@@ -181,6 +181,20 @@ export function escreverImpressao(
           text-transform: uppercase; color: var(--copper-800);
           border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px;
         }
+        /* Faixa numerada + caixa - mesmo padrão visual dos laudos PDF
+           (BancadaVisaoPdf/LaudoEquipamentoPdf), pra laudo impresso ter a
+           mesma cara. */
+        .laudo-secao {
+          background: var(--copper-500); color: #fff; font-weight: 600; font-size: 11.5px;
+          text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 14px;
+          margin-top: 18px; margin-bottom: 8px; border-radius: 4px;
+        }
+        .laudo-caixa {
+          border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; margin-bottom: 8px;
+        }
+        .laudo-linha-dupla { display: flex; gap: 24px; margin-bottom: 6px; }
+        .laudo-linha-dupla:last-child { margin-bottom: 0; }
+        .laudo-linha-dupla > div { flex: 1; }
         .fotos { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
         .fotos img { max-width: 220px; max-height: 220px; border: 1px solid var(--border); border-radius: 4px; }
         table.dados { width: 100%; border-collapse: collapse; margin-top: 8px; }
