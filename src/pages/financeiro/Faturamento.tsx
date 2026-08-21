@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -80,6 +81,17 @@ const formVazio = {
   boleto_vencimento: '',
 };
 
+interface ParcelaForm {
+  valor: string;
+  boleto_numero: string;
+  boleto_linha_digitavel: string;
+  boleto_vencimento: string;
+}
+
+function parcelaVazia(valor = ''): ParcelaForm {
+  return { valor, boleto_numero: '', boleto_linha_digitavel: '', boleto_vencimento: '' };
+}
+
 function liberada(statusOS: string | null): boolean {
   return statusOS === STATUS_PRONTO_ENTREGA || statusOS === STATUS_ENTREGUE;
 }
@@ -88,10 +100,19 @@ const COLUNAS_FILTRAVEIS = ['numero', 'cliente', 'descricao', 'valor', 'nota_fis
 
 export function Faturamento() {
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [linhaSelecionada, setLinhaSelecionada] = useState<LinhaFaturamento | null>(null);
   const [form, setForm] = useState(formVazio);
+  // Parcelamento só é escolhido na hora de lançar a NF (conta nova) - uma
+  // vez lançada, cada parcela vira sua própria conta a receber e é editada
+  // separadamente dali pra frente, como qualquer outra conta.
+  const [parcelado, setParcelado] = useState(false);
+  const [parcelas, setParcelas] = useState<ParcelaForm[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  // Evita reabrir sozinho se o usuário fechar o modal manualmente - só abre
+  // uma vez por chegada vinda do link "Lançar NF" do Orçamento Financeiro.
+  const abriuAutomaticoRef = useRef(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -242,8 +263,34 @@ export function Faturamento() {
       boleto_linha_digitavel: l.boleto_linha_digitavel ?? '',
       boleto_vencimento: l.boleto_vencimento ?? '',
     });
+    setParcelado(false);
+    setParcelas([]);
     setErro(null);
   }
+
+  function adicionarParcela() {
+    setParcelas((p) => [...p, parcelaVazia()]);
+  }
+  function removerParcela(i: number) {
+    setParcelas((p) => p.filter((_, idx) => idx !== i));
+  }
+  function atualizarParcela(i: number, campo: keyof ParcelaForm, valor: string) {
+    setParcelas((p) => p.map((parc, idx) => (idx === i ? { ...parc, [campo]: valor } : parc)));
+  }
+  const somaParcelas = parcelas.reduce((s, p) => s + (Number(p.valor) || 0), 0);
+
+  // Vindo do botão "Lançar NF" do Orçamento Financeiro (?orcamento=ID) - abre
+  // direto o modal já com os dados desse orçamento, só faltando NF/boleto.
+  useEffect(() => {
+    if (abriuAutomaticoRef.current) return;
+    const orcamentoParam = searchParams.get('orcamento');
+    if (!orcamentoParam) return;
+    const linha = linhas.find((l) => l.orcamentoId === Number(orcamentoParam));
+    if (!linha) return;
+    abriuAutomaticoRef.current = true;
+    abrirLancarNota(linha);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, linhas]);
 
   async function salvarNota() {
     if (!linhaSelecionada) return;
@@ -251,6 +298,22 @@ export function Faturamento() {
     if (!form.nf_numero) {
       setErro('Informe o número da nota.');
       return;
+    }
+    if (!linhaSelecionada.contaId && parcelado) {
+      if (parcelas.length === 0) {
+        setErro('Adicione pelo menos uma parcela, ou desmarque "Pagamento parcelado".');
+        return;
+      }
+      if (parcelas.some((p) => !p.valor || !p.boleto_vencimento)) {
+        setErro('Preencha valor e vencimento de todas as parcelas.');
+        return;
+      }
+      if (Math.abs(somaParcelas - linhaSelecionada.valor) > 0.01) {
+        setErro(
+          `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) precisa bater com o valor total (R$ ${linhaSelecionada.valor.toFixed(2)}).`,
+        );
+        return;
+      }
     }
     setSalvando(true);
     try {
@@ -261,15 +324,43 @@ export function Faturamento() {
         // 44 dígitos - remove espaços/pontos coladas como formatação de leitura.
         nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
         nf_data_emissao: form.nf_data_emissao || null,
-        boleto_numero: form.boleto_numero || null,
-        boleto_linha_digitavel: form.boleto_linha_digitavel || null,
-        boleto_vencimento: form.boleto_vencimento || null,
       };
       if (linhaSelecionada.contaId) {
         // Conta já existia (lançamento avulso ou criada antes da migração
         // 056) - só atualiza os dados de NF/boleto.
-        const { error } = await supabase.from('contas_receber').update(camposNota).eq('id', linhaSelecionada.contaId);
+        const { error } = await supabase
+          .from('contas_receber')
+          .update({
+            ...camposNota,
+            boleto_numero: form.boleto_numero || null,
+            boleto_linha_digitavel: form.boleto_linha_digitavel || null,
+            boleto_vencimento: form.boleto_vencimento || null,
+          })
+          .eq('id', linhaSelecionada.contaId);
         if (error) throw error;
+      } else if (parcelado) {
+        // Uma NF só, paga em N parcelas - cada parcela vira sua própria
+        // conta a receber (mesma NF, mesmo orçamento), com vencimento e
+        // boleto próprios - reaproveita 100% do controle de "Contas a
+        // receber" já existente (cada parcela é baixada/recebida sozinha).
+        for (let i = 0; i < parcelas.length; i++) {
+          const p = parcelas[i];
+          const numeroConta = await gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
+          const { error } = await supabase.from('contas_receber').insert({
+            numero_conta: numeroConta,
+            orcamento_id: linhaSelecionada.orcamentoId,
+            cliente_id: linhaSelecionada.clienteId,
+            descricao: `${linhaSelecionada.descricao} - Parcela ${i + 1}/${parcelas.length}`,
+            valor: Number(p.valor),
+            data_vencimento: p.boleto_vencimento,
+            status: 'Em aberto',
+            ...camposNota,
+            boleto_numero: p.boleto_numero || null,
+            boleto_linha_digitavel: p.boleto_linha_digitavel || null,
+            boleto_vencimento: p.boleto_vencimento,
+          });
+          if (error) throw error;
+        }
       } else {
         // Ainda não existe conta pra esse orçamento - cria agora, com os
         // dados de NF/boleto já preenchidos de uma vez.
@@ -285,6 +376,9 @@ export function Faturamento() {
           data_vencimento: vencimento.toISOString().slice(0, 10),
           status: 'Em aberto',
           ...camposNota,
+          boleto_numero: form.boleto_numero || null,
+          boleto_linha_digitavel: form.boleto_linha_digitavel || null,
+          boleto_vencimento: form.boleto_vencimento || null,
         });
         if (error) throw error;
       }
@@ -507,31 +601,127 @@ export function Faturamento() {
               />
             </div>
 
-            <h2 style={{ fontSize: 13, marginTop: 16 }}>Boleto</h2>
-            <div className="campo-form">
-              <label>Número do boleto</label>
-              <input
-                type="text"
-                value={form.boleto_numero}
-                onChange={(e) => setForm((f) => ({ ...f, boleto_numero: e.target.value }))}
-              />
-            </div>
-            <div className="campo-form">
-              <label>Linha digitável</label>
-              <input
-                type="text"
-                value={form.boleto_linha_digitavel}
-                onChange={(e) => setForm((f) => ({ ...f, boleto_linha_digitavel: e.target.value }))}
-              />
-            </div>
-            <div className="campo-form">
-              <label>Vencimento do boleto</label>
-              <input
-                type="date"
-                value={form.boleto_vencimento}
-                onChange={(e) => setForm((f) => ({ ...f, boleto_vencimento: e.target.value }))}
-              />
-            </div>
+            {!linhaSelecionada.contaId && (
+              <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
+                <input
+                  type="checkbox"
+                  id="parcelado"
+                  checked={parcelado}
+                  onChange={(e) => {
+                    setParcelado(e.target.checked);
+                    if (e.target.checked && parcelas.length === 0) setParcelas([parcelaVazia()]);
+                  }}
+                  style={{ width: 'auto' }}
+                />
+                <label htmlFor="parcelado" style={{ marginBottom: 0 }}>
+                  Pagamento parcelado?
+                </label>
+              </div>
+            )}
+
+            {parcelado && !linhaSelecionada.contaId ? (
+              <>
+                <h2 style={{ fontSize: 13, marginTop: 16 }}>Parcelas / boletos</h2>
+                {parcelas.map((p, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      padding: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: 12 }}>Parcela {i + 1}</strong>
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover parcela"
+                        onClick={() => removerParcela(i)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <div className="campo-form" style={{ flex: 1 }}>
+                        <label>Valor (R$) *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={p.valor}
+                          onChange={(e) => atualizarParcela(i, 'valor', e.target.value)}
+                        />
+                      </div>
+                      <div className="campo-form" style={{ flex: 1 }}>
+                        <label>Vencimento *</label>
+                        <input
+                          type="date"
+                          value={p.boleto_vencimento}
+                          onChange={(e) => atualizarParcela(i, 'boleto_vencimento', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="campo-form">
+                      <label>Número do boleto</label>
+                      <input
+                        type="text"
+                        value={p.boleto_numero}
+                        onChange={(e) => atualizarParcela(i, 'boleto_numero', e.target.value)}
+                      />
+                    </div>
+                    <div className="campo-form">
+                      <label>Linha digitável</label>
+                      <input
+                        type="text"
+                        value={p.boleto_linha_digitavel}
+                        onChange={(e) => atualizarParcela(i, 'boleto_linha_digitavel', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button type="button" className="botao-secundario botao-pequeno" onClick={adicionarParcela}>
+                  + Adicionar parcela
+                </button>
+                <p
+                  style={{
+                    fontSize: 12,
+                    marginTop: 8,
+                    color: Math.abs(somaParcelas - linhaSelecionada.valor) > 0.01 ? 'var(--danger-500)' : 'var(--ink-400)',
+                  }}
+                >
+                  Soma das parcelas: R$ {somaParcelas.toFixed(2)} de R$ {linhaSelecionada.valor.toFixed(2)}
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 style={{ fontSize: 13, marginTop: 16 }}>Boleto</h2>
+                <div className="campo-form">
+                  <label>Número do boleto</label>
+                  <input
+                    type="text"
+                    value={form.boleto_numero}
+                    onChange={(e) => setForm((f) => ({ ...f, boleto_numero: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form">
+                  <label>Linha digitável</label>
+                  <input
+                    type="text"
+                    value={form.boleto_linha_digitavel}
+                    onChange={(e) => setForm((f) => ({ ...f, boleto_linha_digitavel: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form">
+                  <label>Vencimento do boleto</label>
+                  <input
+                    type="date"
+                    value={form.boleto_vencimento}
+                    onChange={(e) => setForm((f) => ({ ...f, boleto_vencimento: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
 
             {erro && <p className="erro-login">{erro}</p>}
 

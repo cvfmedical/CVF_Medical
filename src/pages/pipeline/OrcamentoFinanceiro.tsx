@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE } from '../../lib/statusOS';
 import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
@@ -67,6 +68,7 @@ interface Orcamento {
     cliente_final_id: number | null;
     grupo: string | null;
     subgrupo: string | null;
+    status_os: string | null;
   } | null;
 }
 
@@ -185,6 +187,7 @@ function CampoSelecao({
 export function OrcamentoFinanceiro() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
   const [searchParams] = useSearchParams();
   const [filtrosColunaLista, setFiltrosColunaLista] = useState<Record<string, string>>({});
@@ -229,7 +232,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo, status_os)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -251,6 +254,13 @@ export function OrcamentoFinanceiro() {
   const podeAprovarManualmente =
     orcamentoSelecionado?.status === 'Enviado ao Cliente' ||
     orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
+  // Só libera o atalho pra Faturamento quando o equipamento já está
+  // pronto/entregue (mesma porteira usada lá) - antes disso não tem o que
+  // faturar ainda, mesmo com o orçamento já aprovado.
+  const statusOSAtual = orcamentoSelecionado?.ordens_servico?.status_os;
+  const podeLancarNF =
+    orcamentoSelecionado?.status === 'Aprovado' &&
+    (statusOSAtual === STATUS_PRONTO_ENTREGA || statusOSAtual === STATUS_ENTREGUE);
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
   const avariasTriagemQuery = useAvariasTriagem();
 
@@ -1571,6 +1581,44 @@ export function OrcamentoFinanceiro() {
                     </>
                   )}
                 </div>
+                {clienteQuery.data && (
+                  <div style={{ marginTop: 2 }}>
+                    {clienteQuery.data.cnpj && (
+                      <>
+                        <strong>CNPJ:</strong> {clienteQuery.data.cnpj}
+                        {'  ·  '}
+                      </>
+                    )}
+                    {clienteQuery.data.nome_fantasia && (
+                      <>
+                        <strong>Nome fantasia:</strong> {clienteQuery.data.nome_fantasia}
+                      </>
+                    )}
+                  </div>
+                )}
+                {enderecoCompletoCliente(clienteQuery.data) && (
+                  <div>
+                    <strong>Endereço:</strong> {enderecoCompletoCliente(clienteQuery.data)}
+                    {clienteQuery.data?.cidade
+                      ? ` - ${clienteQuery.data.cidade}${clienteQuery.data.uf ? '/' + clienteQuery.data.uf : ''}`
+                      : ''}
+                  </div>
+                )}
+                {(clienteQuery.data?.telefone || clienteQuery.data?.email) && (
+                  <div>
+                    {clienteQuery.data?.telefone && (
+                      <>
+                        <strong>Telefone:</strong> {clienteQuery.data.telefone}
+                        {clienteQuery.data?.email ? '  ·  ' : ''}
+                      </>
+                    )}
+                    {clienteQuery.data?.email && (
+                      <>
+                        <strong>E-mail:</strong> {clienteQuery.data.email}
+                      </>
+                    )}
+                  </div>
+                )}
                 <strong>Ótica da OS {orcamentoSelecionado.ordens_servico.numero_os}:</strong>{' '}
                 {[orcamentoSelecionado.ordens_servico.optica_fab, orcamentoSelecionado.ordens_servico.optica_desc]
                   .filter(Boolean)
@@ -1937,6 +1985,15 @@ export function OrcamentoFinanceiro() {
                 {podeAprovarManualmente && (
                   <button className="botao-secundario" onClick={aprovarManualmente}>
                     Aprovar manualmente
+                  </button>
+                )}
+                {podeLancarNF && (
+                  <button
+                    className="botao-primario"
+                    onClick={() => navigate(`/financeiro/faturamento?orcamento=${orcamentoSelecionado.id}`)}
+                    title="Abre o Faturamento com este orçamento pronto pra lançar a NF"
+                  >
+                    Lançar NF
                   </button>
                 )}
                 {naoEnviado && (
