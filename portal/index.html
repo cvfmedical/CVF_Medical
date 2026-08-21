@@ -217,7 +217,23 @@
     #doc-overlay .obs .t { font-weight: 700; text-transform: uppercase; font-size: 12px; margin-bottom: 6px; }
     #doc-overlay .confirmado { background: #dcfce7; border: 1px solid #86c79b; border-radius: 6px; padding: 12px 16px; margin-top: 14px; color: #15803d; font-weight: 600; }
     #doc-overlay .assinatura { border-top: 1px solid #1b1d20; margin-top: 48px; padding-top: 6px; width: 70%; font-size: 12px; }
+    /* Faixa numerada + caixa em grade - MESMO padrão visual dos laudos/
+       relatórios do sistema interno (src/lib/imprimir.ts), pra um documento
+       ter a mesma cara impresso pelo portal ou pela CVF. */
+    #doc-overlay .laudo-secao {
+        background: #08336a; color: #fff; font-weight: 600; font-size: 11.5px;
+        text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 14px;
+        margin-top: 18px; margin-bottom: 0;
+    }
+    #doc-overlay .laudo-caixa { border: 1px solid #08336a; padding: 10px 16px; margin-bottom: 8px; }
+    #doc-overlay .laudo-linha-dupla { display: flex; margin: 0 -16px; border-bottom: 1px solid var(--borda); }
+    #doc-overlay .laudo-linha-dupla:first-child { margin-top: -10px; }
+    #doc-overlay .laudo-linha-dupla:last-child { border-bottom: none; margin-bottom: -10px; }
+    #doc-overlay .laudo-linha-dupla:nth-child(even) { background: #f8fafc; }
+    #doc-overlay .laudo-linha-dupla > div { flex: 1; padding: 7px 16px; }
+    #doc-overlay .laudo-linha-dupla > div:first-child { border-right: 1px solid var(--borda); }
     @media print {
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         body > *:not(#doc-overlay) { display: none !important; }
         #doc-overlay { position: static; overflow: visible; display: block; }
         #doc-overlay .doc-barra { display: none !important; }
@@ -454,6 +470,62 @@ function formatarMoedaPortal(v) {
     return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Mesmo formato usado no sistema interno (OrcamentoFinanceiro.tsx
+// enderecoCompletoCliente) - logradouro/número, complemento, bairro, CEP.
+function enderecoClientePortal(c) {
+    if (!c) return null;
+    const partes = [[c.logradouro, c.numero_endereco].filter(Boolean).join(', '), c.complemento, c.bairro, c.cep ? `CEP ${c.cep}` : null];
+    const texto = partes.filter(Boolean).join(' - ');
+    return texto || null;
+}
+
+// Seção "Identificação do cliente" - mesmo conteúdo/ordem do orçamento e
+// relatórios do sistema interno. No portal o cliente é sempre o próprio
+// logado (window._clientePortal), preenchido em carregarPortal().
+function secaoIdentificacaoClientePortal(numero, nomeExibicao) {
+    const c = window._clientePortal;
+    const titulo = numero ? `${numero}. Identificação do cliente` : 'Identificação do cliente';
+    return `
+        <div class="laudo-secao">${titulo}</div>
+        <div class="laudo-caixa">
+            <div class="laudo-linha-dupla">
+                <div><strong>Razão social:</strong> ${nomeExibicao || (c && c.razao_social) || '-'}</div>
+                <div><strong>CNPJ/CPF:</strong> ${(c && c.cnpj) || '-'}</div>
+            </div>
+            <div class="laudo-linha-dupla">
+                <div><strong>Nome fantasia:</strong> ${(c && c.nome_fantasia) || '-'}</div>
+                <div><strong>Cidade/UF:</strong> ${c && c.cidade ? `${c.cidade}${c.uf ? '/' + c.uf : ''}` : '-'}</div>
+            </div>
+            <div class="laudo-linha-dupla">
+                <div><strong>Endereço:</strong> ${enderecoClientePortal(c) || '-'}</div>
+            </div>
+            <div class="laudo-linha-dupla">
+                <div><strong>Telefone:</strong> ${(c && c.telefone) || '-'}</div>
+                <div><strong>E-mail:</strong> ${(c && c.email) || '-'}</div>
+            </div>
+        </div>`;
+}
+
+// Seção "Identificação do equipamento" - equipamento/série + NF de remessa
+// (quando existe) ou número de controle do cliente como alternativa, na
+// mesma prioridade usada no sistema interno.
+function secaoIdentificacaoEquipamentoPortal(numero, equipamento, fabricante, numeroSerie, nfNumero, nfSerie, numeroControleCliente) {
+    const controle = nfNumero
+        ? `<div class="laudo-linha-dupla"><div><strong>NF de remessa:</strong> ${nfNumero}${nfSerie ? '/' + nfSerie : ''}</div></div>`
+        : numeroControleCliente
+            ? `<div class="laudo-linha-dupla"><div><strong>Nº de controle do cliente:</strong> ${numeroControleCliente}</div></div>`
+            : '';
+    return `
+        <div class="laudo-secao">${numero}. Identificação do equipamento</div>
+        <div class="laudo-caixa">
+            <div class="laudo-linha-dupla">
+                <div><strong>Equipamento:</strong> ${equipamento || '-'} ${fabricante ? '(' + fabricante + ')' : ''}</div>
+                <div><strong>Nº de série:</strong> ${numeroSerie || '-'}</div>
+            </div>
+            ${controle}
+        </div>`;
+}
+
 // Garantia e condições gerais - texto institucional fixo (igual ao do sistema).
 const GARANTIA_PORTAL = {
     resumo: 'A CVF Medical garante os serviços de manutenção executados e as peças substituídas pelo prazo de 90 (noventa) dias, contados a partir da data de entrega do equipamento.',
@@ -489,27 +561,28 @@ const AVISO_MANUTENCAO_PORTAL = 'Durante o processo de execução da manutençã
 function imprimirOrcamentoDoc(o) {
     const linhas = (o.itens || []).map(i =>
         `<tr><td>${i.nome}</td><td>${i.qtd}</td><td>${formatarMoedaPortal(i.preco)}</td><td>${formatarMoedaPortal(i.preco * i.qtd)}</td></tr>`).join('');
-    const condicoes = (o.validade || o.pagamento) ? `
-        <div class="secao">Condições comerciais</div>
-        <div class="linha"><div class="rotulo">Validade da proposta</div><div class="valor">${o.validade || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Condições de pagamento</div><div class="valor">${o.pagamento || '-'}</div></div>` : '';
     const garantia = `
-        <div class="secao">Garantia</div>
-        <p style="margin-bottom:4px;">${GARANTIA_PORTAL.resumo}</p>
-        <p style="font-size:12px;color:#5c5a54;margin:2px 0;">${GARANTIA_PORTAL.intro}</p>
-        <ol style="margin:0;padding-left:18px;font-size:12px;color:#5c5a54;line-height:1.5;">
-            ${GARANTIA_PORTAL.itens.map(i => `<li>${i}</li>`).join('')}
-        </ol>
-        <div class="secao">Condições gerais</div>
-        ${CLAUSULAS_PORTAL.map(c => `<p style="font-size:12px;color:#5c5a54;margin:0 0 6px;"><strong>${c[0]}.</strong> ${c[1]}</p>`).join('')}`;
+        <div class="laudo-secao">5. Garantia</div>
+        <div class="laudo-caixa">
+            <div style="font-size:13px;margin-bottom:4px;">${GARANTIA_PORTAL.resumo}</div>
+            <p style="font-size:12px;color:#5c5a54;margin:2px 0;">${GARANTIA_PORTAL.intro}</p>
+            <ol style="margin:0;padding-left:18px;font-size:12px;color:#5c5a54;line-height:1.5;">
+                ${GARANTIA_PORTAL.itens.map(i => `<li>${i}</li>`).join('')}
+            </ol>
+        </div>
+        <div class="laudo-secao">6. Condições gerais</div>
+        <div class="laudo-caixa">
+            ${CLAUSULAS_PORTAL.map(c => `<p style="font-size:12px;color:#5c5a54;margin:0 0 6px;"><strong>${c[0]}.</strong> ${c[1]}</p>`).join('')}
+        </div>`;
     const corpo = `
         <h1>Orçamento de Manutenção</h1>
-        <div class="linha"><div class="rotulo">Nº orçamento</div><div class="valor">${o.numero_orcamento}</div></div>
-        <div class="linha"><div class="rotulo">Ordem de serviço</div><div class="valor">${o.numero_os || '-'}</div></div>
+        <p style="color:#5c5a54;font-size:13px;margin:-8px 0 12px;">Nº ${o.numero_orcamento} · OS ${o.numero_os || '-'}</p>
         <div class="linha"><div class="rotulo">Situação</div><div class="valor">${o.status}</div></div>
         <div class="linha"><div class="rotulo">Enviado em</div><div class="valor">${formatarData(o.enviadoEm)}</div></div>
         ${o.respostaEm ? `<div class="linha"><div class="rotulo">Respondido pelo cliente</div><div class="valor">${formatarData(o.respostaEm)}</div></div>` : ''}
-        <div class="secao">Itens</div>
+        ${secaoIdentificacaoClientePortal(1)}
+        ${secaoIdentificacaoEquipamentoPortal(2, o.optica_desc, o.optica_fab, o.optica_sn, o.nfRemessaNumero, o.nfRemessaSerie, o.numeroControleCliente)}
+        <div class="laudo-secao">3. Itens</div>
         <table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço unit.</th><th>Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
         ${o.temValorFixo ? `<p style="font-size:12px;color:#5c5a54;margin-top:6px;">Valor fechado por contrato — os preços dos itens acima são apenas de referência e não somam no total.</p>` : ''}
         ${o.bonificacao
@@ -517,14 +590,22 @@ function imprimirOrcamentoDoc(o) {
             : o.desconto > 0 ? `<p style="text-align:right;margin:6px 0 0;color:#5c5a54;">Subtotal: ${formatarMoedaPortal(o.subtotal)}</p><p style="text-align:right;margin:2px 0 0;color:#5c5a54;">Desconto: - ${formatarMoedaPortal(o.desconto)}</p>` : ''}
         <p style="text-align:right;font-weight:700;font-size:15px;margin-top:12px;">Total: ${formatarMoedaPortal(o.total)}</p>
         ${o.eh_otica ? `
-        <div class="secao">Procedimentos de manutenção incluídos</div>
+        <div class="laudo-secao">Procedimentos de manutenção incluídos</div>
+        <div class="laudo-caixa">
         <ul class="check">
             ${CHECKLIST_OTICA_PORTAL.map(item => `<li>${item}</li>`).join('')}
         </ul>
-        <p class="alerta">${AVISO_MANUTENCAO_PORTAL}</p>` : ''}
-        ${condicoes}
+        <p class="alerta">${AVISO_MANUTENCAO_PORTAL}</p>
+        </div>` : ''}
+        <div class="laudo-secao">4. Condições comerciais</div>
+        <div class="laudo-caixa">
+            <div class="laudo-linha-dupla">
+                <div><strong>Validade da proposta:</strong> ${o.validade || '-'}</div>
+                <div><strong>Condições de pagamento:</strong> ${o.pagamento || '-'}</div>
+            </div>
+        </div>
         ${garantia}
-        ${o.observacoes ? `<div class="secao">Observações</div><p>${o.observacoes}</p>` : ''}`;
+        ${o.observacoes ? `<div class="laudo-secao">7. Observações</div><div class="laudo-caixa"><p style="margin:0;">${o.observacoes}</p></div>` : ''}`;
     abrirDocumentoCVF('Orçamento ' + o.numero_orcamento, corpo);
 }
 
@@ -539,28 +620,45 @@ const AVARIAS_PORTAL = {
 
 function imprimirEntradaDoc(e) {
     const fotos = (e.fotosUrls && e.fotosUrls.length)
-        ? `<div class="secao">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px;">${e.fotosUrls.map(u => `<img src="${u}" style="max-width:200px;max-height:200px;border:1px solid #e4e1d8;border-radius:4px;">`).join('')}</div>`
+        ? `<div class="laudo-secao">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">${e.fotosUrls.map(u => `<img src="${u}" style="max-width:200px;max-height:200px;border:1px solid #e4e1d8;border-radius:4px;">`).join('')}</div>`
         : '';
-    const temNf = e.nf_remessa_numero || e.nf_remessa_serie;
-    const nf = temNf ? `
-        <div class="secao">Nota fiscal de remessa</div>
-        <div class="linha"><div class="rotulo">Número / Série</div><div class="valor">${e.nf_remessa_numero || '-'} / ${e.nf_remessa_serie || '-'}</div></div>
-        ${e.nf_remessa_data_emissao ? `<div class="linha"><div class="rotulo">Emissão</div><div class="valor">${formatarData(e.nf_remessa_data_emissao)}</div></div>` : ''}` : '';
     const av = e.triagem_avarias || {};
     const listaAv = Object.keys(AVARIAS_PORTAL).filter(k => av[k]).map(k => AVARIAS_PORTAL[k]);
-    const avarias = `
-        <div class="secao">Avarias identificadas na triagem</div>
-        ${listaAv.length ? `<ul style="margin:0;padding-left:18px;line-height:1.6;">${listaAv.map(l => `<li>${l}</li>`).join('')}</ul>` : '<p style="color:#5c5a54;">Nenhuma avaria marcada.</p>'}`;
     const corpo = `
         <h1>Registro de Entrada</h1>
-        <div class="linha"><div class="rotulo">Código</div><div class="valor">${e.codigo_entrada || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${e.equipamento_desc || '-'} ${e.equipamento_fab ? '(' + e.equipamento_fab + ')' : ''}</div></div>
-        <div class="linha"><div class="rotulo">Nº de série</div><div class="valor">${e.equipamento_sn || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Defeito relatado</div><div class="valor">${e.defeito_relatado || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Condição de chegada</div><div class="valor">${e.condicao_chegada || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Recebido em</div><div class="valor">${formatarData(e.data_entrada)}</div></div>
-        ${nf}
-        ${avarias}
+        <div class="laudo-caixa"><div><strong>Código:</strong> ${e.codigo_entrada || '-'}</div></div>
+
+        ${secaoIdentificacaoClientePortal('')}
+
+        <div class="laudo-secao">2. Identificação do equipamento</div>
+        <div class="laudo-caixa">
+            <div class="laudo-linha-dupla">
+                <div><strong>Equipamento:</strong> ${e.equipamento_desc || '-'}</div>
+                <div><strong>Fabricante:</strong> ${e.equipamento_fab || '-'}</div>
+            </div>
+            <div class="laudo-linha-dupla">
+                <div><strong>Nº de série:</strong> ${e.equipamento_sn || '-'}</div>
+                <div><strong>Condição de chegada:</strong> ${e.condicao_chegada || '-'}</div>
+            </div>
+            <div class="laudo-linha-dupla">
+                <div><strong>Defeito relatado:</strong> ${e.defeito_relatado || '-'}</div>
+                <div><strong>Data:</strong> ${formatarData(e.data_entrada)}</div>
+            </div>
+        </div>
+
+        <div class="laudo-secao">3. Nota fiscal de remessa para conserto</div>
+        <div class="laudo-caixa">
+            ${e.numero_controle_cliente ? `<div class="laudo-linha-dupla"><div><strong>Nº controle do cliente:</strong> ${e.numero_controle_cliente}</div></div>` : ''}
+            <div class="laudo-linha-dupla">
+                <div><strong>Número/Série:</strong> ${e.nf_remessa_numero || '-'} / ${e.nf_remessa_serie || '-'}</div>
+                <div><strong>Emissão:</strong> ${e.nf_remessa_data_emissao ? formatarData(e.nf_remessa_data_emissao) : '-'}</div>
+            </div>
+        </div>
+
+        <div class="laudo-secao">4. Avarias identificadas na triagem</div>
+        <div class="laudo-caixa">
+            <p style="margin:0;">${listaAv.length ? listaAv.join(', ') : 'Nenhuma avaria marcada.'}</p>
+        </div>
         ${fotos}`;
     abrirDocumentoCVF('Registro de Entrada ' + (e.codigo_entrada || ''), corpo);
 }
@@ -591,21 +689,40 @@ async function imprimirOSDoc(o) {
             pecasHtml = `<table><thead><tr><th>Item / peça</th><th>Qtd.</th><th>Observação / avaria</th><th>Foto</th></tr></thead><tbody>${linhas.join('')}</tbody></table>`;
         }
         if (orc.observacoes_tecnico) {
-            obsGeraisHtml = `<div class="secao">Observações técnicas gerais</div><p>${orc.observacoes_tecnico}</p>`;
+            obsGeraisHtml = `<div class="laudo-secao">4. Observações técnicas gerais</div><div class="laudo-caixa"><p style="margin:0;">${orc.observacoes_tecnico}</p></div>`;
         }
     }
     const corpo = `
-        <h1>Laudo de Identificação de Peças Danificadas</h1>
-        <p style="color:#5c5a54;font-size:13px;margin:-6px 0 10px;">Ordem de Serviço ${o.numero_os} — peças e avarias identificadas pela equipe técnica, com as imagens.</p>
-        <div class="linha"><div class="rotulo">Nº OS</div><div class="valor">${o.numero_os}</div></div>
-        <div class="linha"><div class="rotulo">Equipamento</div><div class="valor">${o.optica_desc || '-'} ${o.optica_fab ? '(' + o.optica_fab + ')' : ''}</div></div>
-        <div class="linha"><div class="rotulo">Status</div><div class="valor">${o.status_os || '-'}</div></div>
-        <div class="linha"><div class="rotulo">Abertura</div><div class="valor">${formatarData(o.data_abertura)}</div></div>
-        ${o.prazo_entrega ? `<div class="linha"><div class="rotulo">Prazo de entrega</div><div class="valor">${o.prazo_entrega}</div></div>` : ''}
-        <div class="secao">Peças danificadas identificadas</div>
-        ${pecasHtml}
-        ${obsGeraisHtml}`;
-    abrirDocumentoCVF('Laudo de Pecas Danificadas - OS ' + o.numero_os, corpo);
+        <h1>Ordem de Serviços - Laudo Técnico</h1>
+        <p style="color:#5c5a54;font-size:13px;margin:-6px 0 10px;">Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos</p>
+        <div class="laudo-caixa">
+            <div class="laudo-linha-dupla">
+                <div><strong>Ordem de serviço:</strong> ${o.numero_os}</div>
+                <div><strong>Prazo de entrega:</strong> ${o.prazo_entrega || '-'}</div>
+            </div>
+        </div>
+
+        ${secaoIdentificacaoClientePortal(1)}
+
+        <div class="laudo-secao">2. Identificação do equipamento</div>
+        <div class="laudo-caixa">
+            <div class="laudo-linha-dupla">
+                <div><strong>Equipamento:</strong> ${o.optica_desc || '-'} ${o.optica_fab ? '(' + o.optica_fab + ')' : ''}</div>
+                <div><strong>Nº de série:</strong> ${o.optica_sn || '-'}</div>
+            </div>
+            <div class="laudo-linha-dupla">
+                <div><strong>Defeito relatado:</strong> ${o.defeito_relatado || '-'}</div>
+            </div>
+        </div>
+
+        <div class="laudo-secao">3. Peças/serviços identificados</div>
+        <div class="laudo-caixa">${pecasHtml}</div>
+        ${obsGeraisHtml}
+        <p style="font-size:12px;color:#666;margin-top:12px;">
+            Este relatório mostra apenas o que foi identificado tecnicamente - os valores são definidos e enviados
+            separadamente pelo setor financeiro, no orçamento.
+        </p>`;
+    abrirDocumentoCVF('Laudo Tecnico - OS ' + o.numero_os, corpo);
 }
 
 const telaLogin = document.getElementById('tela-login');
@@ -741,7 +858,7 @@ function classeBadge(status) {
 async function carregarOrdens() {
     const { data: ordens, error } = await supabaseClient
         .from('ordens_servico')
-        .select('id, numero_os, optica_desc, optica_fab, status_os, data_abertura, prazo_entrega')
+        .select('id, numero_os, optica_desc, optica_fab, optica_sn, defeito_relatado, status_os, data_abertura, prazo_entrega')
         .order('data_abertura', { ascending: false });
 
     const corpo = document.getElementById('corpo-tabela');
@@ -821,7 +938,7 @@ async function carregarEntradas() {
 
     const { data: entradas, error } = await supabaseClient
         .from('entradas_equipamento')
-        .select('id, codigo_entrada, equipamento_desc, equipamento_fab, equipamento_sn, defeito_relatado, condicao_chegada, status, data_entrada, nf_remessa_numero, nf_remessa_serie, nf_remessa_data_emissao, triagem_avarias')
+        .select('id, codigo_entrada, equipamento_desc, equipamento_fab, equipamento_sn, defeito_relatado, condicao_chegada, status, data_entrada, nf_remessa_numero, nf_remessa_serie, nf_remessa_data_emissao, numero_controle_cliente, triagem_avarias')
         .order('data_entrada', { ascending: false });
 
     const listaEnt = error ? [] : (entradas || []);
@@ -874,7 +991,7 @@ async function carregarOrcamentos() {
 
     const { data: orcamentos, error } = await supabaseClient
         .from('orcamentos')
-        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc, eh_otica)')
+        .select('id, numero_orcamento, status, observacoes_financeiro, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, data_envio, data_resposta_cliente, ordem_servico_id, ordens_servico(numero_os, optica_desc, optica_fab, optica_sn, eh_otica)')
         .in('status', ['Enviado ao Cliente', 'Aprovado', 'Recusado'])
         .order('data_envio', { ascending: false });
 
@@ -884,6 +1001,11 @@ async function carregarOrcamentos() {
             .from('orcamento_itens')
             .select('quantidade, preco_unitario, observacao, produtos_servicos(nome)')
             .eq('orcamento_id', orc.id);
+        const { data: entradaResumo } = await supabaseClient
+            .from('entradas_equipamento')
+            .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
+            .eq('ordem_servico_id', orc.ordem_servico_id)
+            .maybeSingle();
 
         // Total: se há valor fixo de contrato, ele É o subtotal (itens ficam só
         // de referência). Senão, soma os itens. Depois aplica o desconto.
@@ -899,7 +1021,13 @@ async function carregarOrcamentos() {
         window._orcMap[orc.id] = {
             numero_orcamento: orc.numero_orcamento,
             numero_os: orc.ordens_servico ? orc.ordens_servico.numero_os : '',
+            optica_desc: orc.ordens_servico ? orc.ordens_servico.optica_desc : '',
+            optica_fab: orc.ordens_servico ? orc.ordens_servico.optica_fab : '',
+            optica_sn: orc.ordens_servico ? orc.ordens_servico.optica_sn : '',
             eh_otica: orc.ordens_servico ? orc.ordens_servico.eh_otica : null,
+            nfRemessaNumero: entradaResumo ? entradaResumo.nf_remessa_numero : null,
+            nfRemessaSerie: entradaResumo ? entradaResumo.nf_remessa_serie : null,
+            numeroControleCliente: entradaResumo ? entradaResumo.numero_controle_cliente : null,
             status: orc.status,
             observacoes: orc.observacoes_financeiro || '',
             itens: (itens || []).map(i => ({ nome: i.produtos_servicos ? i.produtos_servicos.nome : '', qtd: i.quantidade, preco: i.preco_unitario || 0 })),
@@ -1122,6 +1250,10 @@ async function carregarPortal() {
         .eq('auth_user_id', user ? user.id : '00000000-0000-0000-0000-000000000000')
         .limit(1);
     const cliente = clienteData && clienteData[0];
+    // Exposto globalmente pra imprimirOrcamentoDoc/imprimirEntradaDoc/
+    // imprimirOSDoc montarem a seção "Identificação do cliente" (mesmos
+    // dados usados no orçamento/relatórios do sistema interno).
+    window._clientePortal = cliente || null;
 
     const dados = document.getElementById('dados-cliente');
     if (!cliente) {
