@@ -693,7 +693,9 @@ export function OrcamentoFinanceiro() {
   // Corpo do documento do Orçamento (itens + condições comerciais + garantia +
   // condições gerais + observações). O texto legal fica compacto e agrupado
   // (page-break-inside:avoid) para não se espalhar por mais de uma página.
-  function montarOrcamentoHtml() {
+  function montarOrcamentoHtml(
+    entradaResumo?: { nfNumero: string | null; nfSerie: string | null; numeroControleCliente: string | null } | null,
+  ) {
     const os = orcamentoSelecionado!.ordens_servico;
     const linhas = (itensQuery.data ?? [])
       .map(
@@ -738,6 +740,11 @@ export function OrcamentoFinanceiro() {
           <div><strong>Equipamento:</strong> ${os?.optica_desc ?? '-'} ${os?.optica_fab ? '(' + os.optica_fab + ')' : ''}</div>
           <div><strong>Nº de série:</strong> <span class="mono">${os?.optica_sn ?? '-'}</span></div>
         </div>
+        ${entradaResumo?.nfNumero
+          ? `<div class="laudo-linha-dupla"><div><strong>NF de remessa:</strong> ${entradaResumo.nfNumero}${entradaResumo.nfSerie ? '/' + entradaResumo.nfSerie : ''}</div></div>`
+          : entradaResumo?.numeroControleCliente
+            ? `<div class="laudo-linha-dupla"><div><strong>Nº de controle do cliente:</strong> ${entradaResumo.numeroControleCliente}</div></div>`
+            : ''}
       </div>
 
       <div class="laudo-secao">3. Itens</div>
@@ -786,6 +793,21 @@ export function OrcamentoFinanceiro() {
       </div>`;
   }
 
+  // Como o equipamento chegou (NF de remessa ou nº de controle do cliente,
+  // cadastrados na Recepção) - usado na seção "Identificação do
+  // equipamento" do orçamento, pra quem só olha o orçamento já saber
+  // localizar o item na expedição/remessa do cliente.
+  async function buscarEntradaResumo(): Promise<{ nfNumero: string | null; nfSerie: string | null; numeroControleCliente: string | null } | null> {
+    if (!orcamentoSelecionado) return null;
+    const { data } = await supabase
+      .from('entradas_equipamento')
+      .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
+      .eq('ordem_servico_id', orcamentoSelecionado.ordem_servico_id)
+      .maybeSingle();
+    if (!data) return null;
+    return { nfNumero: data.nf_remessa_numero, nfSerie: data.nf_remessa_serie, numeroControleCliente: data.numero_controle_cliente };
+  }
+
   // Um clique em "Imprimir" gera os 3 documentos SEPARADOS (Registro de
   // Entrada, Ordem de Serviço e Orçamento), cada um em sua janela, para o
   // usuário salvar 3 PDFs distintos e anexá-los ao e-mail/WhatsApp do cliente
@@ -802,12 +824,16 @@ export function OrcamentoFinanceiro() {
     }
     const num = orcamentoSelecionado.numero_orcamento;
     const numOS = orcamentoSelecionado.ordens_servico?.numero_os ?? num;
-    const [entradaHtml, osHtml] = await Promise.all([buscarRegistroEntradaHtml(), buscarRelatorioOSHtml()]);
+    const [entradaHtml, osHtml, entradaResumo] = await Promise.all([
+      buscarRegistroEntradaHtml(),
+      buscarRelatorioOSHtml(),
+      buscarEntradaResumo(),
+    ]);
 
     // Registro de Entrada já traz suas próprias assinaturas dentro do corpo.
     escreverImpressao(jEntrada, `Registro de Entrada - ${num}`, entradaHtml, linksCompart(), { semAssinaturas: true });
     escreverImpressao(jOS, `Ordem de Serviço - ${numOS}`, osHtml, linksCompart(), { semAssinaturas: true });
-    escreverImpressao(jOrc, `Orçamento ${num}`, montarOrcamentoHtml(), linksCompart(), {
+    escreverImpressao(jOrc, `Orçamento ${num}`, montarOrcamentoHtml(entradaResumo), linksCompart(), {
       assinaturas: ['Q-CVF Medical (Financeiro)', 'Cliente (aprovação)'],
       anexoHtml: anexarOrientacao ? montarCorpoOrientacaoEsterilizacao() : undefined,
     });
@@ -915,7 +941,9 @@ export function OrcamentoFinanceiro() {
   async function buscarEntradaDadosPara(o: Orcamento, clienteInfo?: Partial<DadosClientePdf>): Promise<DadosEntradaPdf | null> {
     const { data: entrada } = await supabase
       .from('entradas_equipamento')
-      .select('id, codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, triagem_avarias')
+      .select(
+        'id, codigo_entrada, condicao_chegada, data_entrada, nf_remessa_numero, nf_remessa_serie, numero_controle_cliente, triagem_avarias',
+      )
       .eq('ordem_servico_id', o.ordem_servico_id)
       .maybeSingle();
     if (!entrada) return null;
@@ -941,6 +969,7 @@ export function OrcamentoFinanceiro() {
       data: entrada.data_entrada ? new Date(entrada.data_entrada).toLocaleDateString('pt-BR') : '',
       nfNumero: entrada.nf_remessa_numero ?? '',
       nfSerie: entrada.nf_remessa_serie ?? '',
+      numeroControleCliente: entrada.numero_controle_cliente ?? null,
       avarias: (avariasTriagemQuery.data ?? []).filter((it) => triagem[String(it.id)]).map((it) => it.descricao),
       fotos: fotosDataUri,
       ...ci,
@@ -1046,6 +1075,7 @@ export function OrcamentoFinanceiro() {
         const descontoCalc = o.bonificacao ? subtotalCalc : o.desconto ?? 0;
         const totalCalc = o.bonificacao ? 0 : Math.max(subtotalCalc - descontoCalc, 0);
         const clienteFinalNome = await nomeClienteFinal(os?.cliente_final_id ?? null);
+        const dadosEntrada = await buscarEntradaDadosPara(o, clientePdfLote);
 
         const dadosOrc: DadosOrcamentoPdf = {
           ...clientePdfLote,
@@ -1055,6 +1085,9 @@ export function OrcamentoFinanceiro() {
           clienteFinalNome,
           equipamento: os?.optica_desc ?? '-',
           numeroSerie: os?.optica_sn ?? '',
+          nfRemessaNumero: dadosEntrada?.nfNumero || null,
+          nfRemessaSerie: dadosEntrada?.nfSerie || null,
+          numeroControleCliente: dadosEntrada?.numeroControleCliente || null,
           itens: itens.map((it) => ({
             nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
             quantidade: it.quantidade,
@@ -1091,7 +1124,6 @@ export function OrcamentoFinanceiro() {
           observacoesTecnico: o.observacoes_tecnico,
           prazoEntrega: os?.prazo_entrega ?? null,
         };
-        const dadosEntrada = await buscarEntradaDadosPara(o, clientePdfLote);
         const anexosItem = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, false, i === lista.length - 1);
         anexos = anexos.concat(anexosItem);
         resumo.push({ numero: o.numero_orcamento, numeroOS: os?.numero_os ?? '-', total: totalCalc });
@@ -1176,6 +1208,7 @@ export function OrcamentoFinanceiro() {
       await persistirPrecosEObservacoes();
       const os = orcamentoSelecionado.ordens_servico;
       const itens = itensQuery.data ?? [];
+      const dadosEntrada = await buscarEntradaDados();
 
       const dadosOrc: DadosOrcamentoPdf = {
         ...clienteParaPdf(clienteQuery.data),
@@ -1185,6 +1218,9 @@ export function OrcamentoFinanceiro() {
         clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
         equipamento: os?.optica_desc ?? '-',
         numeroSerie: os?.optica_sn ?? '',
+        nfRemessaNumero: dadosEntrada?.nfNumero || null,
+        nfRemessaSerie: dadosEntrada?.nfSerie || null,
+        numeroControleCliente: dadosEntrada?.numeroControleCliente || null,
         itens: itens.map((it) => ({
           nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
           quantidade: it.quantidade,
@@ -1221,7 +1257,6 @@ export function OrcamentoFinanceiro() {
         observacoesTecnico: orcamentoSelecionado.observacoes_tecnico,
         prazoEntrega: os?.prazo_entrega ?? null,
       };
-      const dadosEntrada = await buscarEntradaDados();
       const anexos = await gerarAnexosOrcamento(dadosOrc, dadosEntrada, dadosOS, anexarOrientacao);
 
       const html = `<p>Prezado(a) cliente,</p>

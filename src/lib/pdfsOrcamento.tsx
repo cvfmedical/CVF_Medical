@@ -112,6 +112,12 @@ export interface DadosOrcamentoPdf extends DadosClientePdf {
   clienteFinalNome?: string | null;
   equipamento: string;
   numeroSerie: string;
+  // Identificação de como o equipamento chegou (Recepção/Registro de
+  // entrada) - NF de remessa quando existe, senão o número de controle
+  // que o próprio cliente usa internamente.
+  nfRemessaNumero?: string | null;
+  nfRemessaSerie?: string | null;
+  numeroControleCliente?: string | null;
   itens: ItemOrcamentoPdf[];
   subtotal: number;
   desconto: number;
@@ -136,9 +142,18 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
         {d.clienteFinalNome && (
           <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
         )}
-        <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>
+        <Text style={{ fontSize: 9, color: cinza, marginBottom: d.nfRemessaNumero || d.numeroControleCliente ? 2 : 10 }}>
           {d.equipamento}{d.numeroSerie ? ` · Nº série ${d.numeroSerie}` : ''}
         </Text>
+        {d.nfRemessaNumero ? (
+          <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>
+            NF de remessa: {d.nfRemessaNumero}{d.nfRemessaSerie ? `/${d.nfRemessaSerie}` : ''}
+          </Text>
+        ) : d.numeroControleCliente ? (
+          <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>
+            Nº de controle do cliente: {d.numeroControleCliente}
+          </Text>
+        ) : null}
 
         <View style={s.th}>
           <Text style={s.cItem}>Item</Text>
@@ -220,6 +235,7 @@ export interface DadosEntradaPdf extends DadosClientePdf {
   data: string;
   nfNumero: string;
   nfSerie: string;
+  numeroControleCliente?: string | null;
   avarias: string[];
   fotos?: string[]; // data URIs (base64) das fotos da entrada
 }
