@@ -609,21 +609,30 @@ function imprimirOrcamentoDoc(o) {
     abrirDocumentoCVF('Orçamento ' + o.numero_orcamento, corpo);
 }
 
-// Rótulos das avarias da triagem (espelha CHECKLIST_AVARIAS do sistema).
-const AVARIAS_PORTAL = {
-    tubo_amassado: 'Tubo de inox amassado / deformado',
-    cristal_trincado: 'Lente distal / cristal trincado ou riscado',
-    fibra_queimada: 'Guia de luz / fibras com queimaduras',
-    ocular_solta: 'Ocular / acoplador com folga ou danificado',
-    umidade_interna: 'Infiltração de umidade / fungos visíveis',
-};
+// Rótulos das avarias da triagem - a partir da migration 064 (sistema
+// interno) isso é um cadastro editável (tabela avarias_triagem, chave =
+// id), não um conjunto fixo. O mapa antigo aqui (chaves tipo
+// "umidade_interna") ficou desatualizado assim que o cadastro passou a
+// usar id numérico como chave em triagem_avarias - nenhuma avaria batia
+// mais e o documento sempre mostrava "Nenhuma avaria marcada.". Agora
+// busca do banco, igual ao sistema interno.
+window._avariasTriagemPortal = null;
+async function carregarAvariasTriagemPortal() {
+    if (window._avariasTriagemPortal) return window._avariasTriagemPortal;
+    const { data } = await supabaseClient.from('avarias_triagem').select('id, descricao');
+    const mapa = {};
+    (data || []).forEach((a) => { mapa[String(a.id)] = a.descricao; });
+    window._avariasTriagemPortal = mapa;
+    return mapa;
+}
 
-function imprimirEntradaDoc(e) {
+async function imprimirEntradaDoc(e) {
     const fotos = (e.fotosUrls && e.fotosUrls.length)
         ? `<div class="laudo-secao">Fotos</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">${e.fotosUrls.map(u => `<img src="${u}" style="max-width:200px;max-height:200px;border:1px solid #e4e1d8;border-radius:4px;">`).join('')}</div>`
         : '';
     const av = e.triagem_avarias || {};
-    const listaAv = Object.keys(AVARIAS_PORTAL).filter(k => av[k]).map(k => AVARIAS_PORTAL[k]);
+    const mapaAvarias = await carregarAvariasTriagemPortal();
+    const listaAv = Object.keys(av).filter((k) => av[k] && mapaAvarias[k]).map((k) => mapaAvarias[k]);
     const corpo = `
         <h1>Registro de Entrada</h1>
         <div class="laudo-caixa"><div><strong>Código:</strong> ${e.codigo_entrada || '-'}</div></div>
