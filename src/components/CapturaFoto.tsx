@@ -9,22 +9,45 @@ import { ModalJanela } from './ModalJanela';
 export function CapturaFoto({ onCapturar }: { onCapturar: (arquivo: File) => void }) {
   const [aberto, setAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [cameraId, setCameraId] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Lista as câmeras disponíveis (webcam interna, USB externa, ou
+  // frontal/traseira no celular) - só tem nome/label depois de uma
+  // permissão já concedida, por isso só chama depois do 1º getUserMedia.
+  async function listarCameras() {
+    try {
+      const dispositivos = await navigator.mediaDevices.enumerateDevices();
+      setCameras(dispositivos.filter((d) => d.kind === 'videoinput'));
+    } catch {
+      // Sem suporte a enumerateDevices - segue só com a câmera padrão.
+    }
+  }
 
   useEffect(() => {
     if (!aberto) return;
     let cancelado = false;
     setErro(null);
     navigator.mediaDevices
-      ?.getUserMedia({ video: true })
-      .then((stream) => {
+      ?.getUserMedia({ video: cameraId ? { deviceId: { exact: cameraId } } : true })
+      .then(async (stream) => {
         if (cancelado) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
+        if (cameras.length === 0) {
+          await listarCameras();
+          // Sem escolha explícita ainda - reflete no seletor qual câmera o
+          // navegador abriu por padrão, sem precisar reabrir o stream.
+          if (!cameraId) {
+            const idAtual = stream.getVideoTracks()[0]?.getSettings().deviceId;
+            if (idAtual) setCameraId(idAtual);
+          }
+        }
       })
       .catch(() => setErro('Não foi possível acessar a câmera (verifique a permissão do navegador).'));
 
@@ -33,10 +56,13 @@ export function CapturaFoto({ onCapturar }: { onCapturar: (arquivo: File) => voi
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [aberto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto, cameraId]);
 
   function fechar() {
     setAberto(false);
+    setCameras([]);
+    setCameraId('');
   }
 
   function capturar() {
@@ -67,7 +93,21 @@ export function CapturaFoto({ onCapturar }: { onCapturar: (arquivo: File) => voi
             {erro ? (
               <p className="erro-login">{erro}</p>
             ) : (
-              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+              <>
+                <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+                {cameras.length > 1 && (
+                  <div className="campo-form" style={{ marginTop: 8, marginBottom: 0 }}>
+                    <label>Câmera</label>
+                    <select value={cameraId} onChange={(e) => setCameraId(e.target.value)}>
+                      {cameras.map((c, i) => (
+                        <option key={c.deviceId} value={c.deviceId}>
+                          {c.label || `Câmera ${i + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
             )}
             <div className="modal-acoes">
               <button className="botao-secundario" onClick={fechar}>
