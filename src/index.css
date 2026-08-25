@@ -517,6 +517,17 @@ button {
   text-align: right;
 }
 
+.link-numero {
+  color: var(--copper-800);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.link-numero:hover {
+  text-decoration: underline;
+}
+
 .botao-icone {
   background: var(--copper-500-12);
   border: none;

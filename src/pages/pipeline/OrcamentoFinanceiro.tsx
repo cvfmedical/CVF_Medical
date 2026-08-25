@@ -261,6 +261,22 @@ export function OrcamentoFinanceiro() {
     },
   });
 
+  // Código da entrada de origem de cada OS - mesma query/chave usada no
+  // painel de Ordens de serviço, pra virar a coluna "Entrada" na lista.
+  const entradasQuery = useQuery({
+    queryKey: ['entradas-codigo-por-os'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('entradas_equipamento')
+        .select('ordem_servico_id, codigo_entrada')
+        .not('ordem_servico_id', 'is', null);
+      if (error) throw error;
+      return data as { ordem_servico_id: number; codigo_entrada: string }[];
+    },
+  });
+  const codigoEntradaPorOS = new Map<number, string>();
+  (entradasQuery.data ?? []).forEach((e) => codigoEntradaPorOS.set(e.ordem_servico_id, e.codigo_entrada));
+
   function nomeItem(item: ItemOrcamento) {
     return item.produtos_servicos?.nome ?? item.descricao_servico ?? '-';
   }
@@ -1575,9 +1591,10 @@ export function OrcamentoFinanceiro() {
                 );
               })()}
             </th>
+            <th>Entrada</th>
             {[
-              ['numero_orcamento', 'Nº orçamento'],
               ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['cliente_nome', 'Cliente'],
               ['status', 'Status'],
             ].map(([chave, label]) => (
@@ -1589,7 +1606,8 @@ export function OrcamentoFinanceiro() {
           </tr>
           <tr>
             <th></th>
-            {['numero_orcamento', 'numero_os', 'cliente_nome', 'status'].map((chave) => (
+            <th style={{ padding: '2px 6px' }}></th>
+            {['numero_os', 'numero_orcamento', 'cliente_nome', 'status'].map((chave) => (
               <th key={chave} style={{ padding: '2px 6px' }}>
                 <input
                   type="text"
@@ -1615,8 +1633,9 @@ export function OrcamentoFinanceiro() {
                   />
                 )}
               </td>
-              <td className="mono">{o.numero_orcamento}</td>
+              <td className="mono">{codigoEntradaPorOS.get(o.ordem_servico_id) ?? '-'}</td>
               <td className="mono">{o.ordens_servico?.numero_os}</td>
+              <td className="mono">{o.numero_orcamento}</td>
               <td>{o.ordens_servico?.cliente_nome}</td>
               <td>
                 <Badge tono={TONO_STATUS[o.status] ?? 'neutro'}>{o.status}</Badge>
@@ -1632,7 +1651,7 @@ export function OrcamentoFinanceiro() {
           ))}
           {linhasLista.length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhum orçamento encontrado.</td>
+              <td colSpan={7}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>

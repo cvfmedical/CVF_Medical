@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -9,7 +9,6 @@ import { supabase } from '../../lib/supabaseClient';
 import { type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
 import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO, STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 import { useAuth } from '../../contexts/AuthContext';
@@ -66,7 +65,6 @@ export function OrdensServicoPanel() {
     limparTudo,
     algumFiltroAtivo,
   } = useFiltrosColuna();
-  const [detalhe, setDetalhe] = useState<OrdemServico | null>(null);
   const avariasTriagemQuery = useAvariasTriagem();
   const [excluindo, setExcluindo] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -83,6 +81,39 @@ export function OrdensServicoPanel() {
     },
   });
 
+  // Código da entrada e número do orçamento de cada OS - pra virar link
+  // no início da linha (colunas Entrada / OS / Orçamento) em vez dos
+  // antigos botões "Registro de entrada" / "Ver orçamento" no fim dela.
+  const entradasQuery = useQuery({
+    queryKey: ['entradas-codigo-por-os'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('entradas_equipamento')
+        .select('ordem_servico_id, codigo_entrada')
+        .not('ordem_servico_id', 'is', null);
+      if (error) throw error;
+      return data as { ordem_servico_id: number; codigo_entrada: string }[];
+    },
+  });
+  const codigoEntradaPorOS = new Map<number, string>();
+  (entradasQuery.data ?? []).forEach((e) => codigoEntradaPorOS.set(e.ordem_servico_id, e.codigo_entrada));
+
+  const orcamentosQuery = useQuery({
+    queryKey: ['orcamentos-numero-por-os'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orcamentos')
+        .select('id, ordem_servico_id, numero_orcamento')
+        .order('id', { ascending: false });
+      if (error) throw error;
+      return data as { id: number; ordem_servico_id: number; numero_orcamento: string }[];
+    },
+  });
+  const numeroOrcamentoPorOS = new Map<number, string>();
+  (orcamentosQuery.data ?? []).forEach((o) => {
+    if (!numeroOrcamentoPorOS.has(o.ordem_servico_id)) numeroOrcamentoPorOS.set(o.ordem_servico_id, o.numero_orcamento);
+  });
+
   function excluirOS(os: OrdemServico) {
     setErro(null);
     pedirConfirmacao(
@@ -91,7 +122,6 @@ export function OrdensServicoPanel() {
         try {
           const { error } = await supabase.rpc('excluir_os_completa', { p_os_id: os.id });
           if (error) throw error;
-          if (detalhe?.id === os.id) setDetalhe(null);
           qc.invalidateQueries({ queryKey: ['ordens-servico-painel'] });
           qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
         } catch (e) {
@@ -244,8 +274,12 @@ export function OrdensServicoPanel() {
       <table className="tabela-crud">
         <thead>
           <tr>
+            <th>Entrada</th>
+            <ThOrdenavel chave="numero_os" colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
+              OS
+            </ThOrdenavel>
+            <th>Orçamento</th>
             {[
-              ['numero_os', 'Nº OS'],
               ['cliente_nome', 'Cliente'],
               ['optica_desc', 'Equipamento'],
               ['optica_sn', 'Nº de série'],
@@ -259,27 +293,32 @@ export function OrdensServicoPanel() {
             <th></th>
           </tr>
           <tr>
-            {COLUNAS_FILTRAVEIS.map((chave) => {
+            <th style={{ padding: '2px 6px' }}></th>
+            {COLUNAS_FILTRAVEIS.map((chave, i) => {
               const valoresDisponiveis = Array.from(
                 new Set((query.data ?? []).map((os) => String(valorColuna(os, chave) ?? ''))),
               ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
               return (
-                <th key={chave} style={{ padding: '2px 6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      className="campo-filtro-coluna"
-                      placeholder="Filtrar..."
-                      value={filtrosColuna[chave] ?? ''}
-                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
-                    />
-                    <FiltroColunaValores
-                      valores={valoresDisponiveis}
-                      selecionados={filtrosValores[chave] ?? new Set()}
-                      onChange={(v) => setValoresColuna(chave, v)}
-                    />
-                  </div>
-                </th>
+                <Fragment key={chave}>
+                  <th style={{ padding: '2px 6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        className="campo-filtro-coluna"
+                        placeholder="Filtrar..."
+                        value={filtrosColuna[chave] ?? ''}
+                        onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                      />
+                      <FiltroColunaValores
+                        valores={valoresDisponiveis}
+                        selecionados={filtrosValores[chave] ?? new Set()}
+                        onChange={(v) => setValoresColuna(chave, v)}
+                      />
+                    </div>
+                  </th>
+                  {/* coluna Orçamento (sem filtro) entra logo após a de numero_os */}
+                  {i === 0 && <th style={{ padding: '2px 6px' }}></th>}
+                </Fragment>
               );
             })}
             <th></th>
@@ -288,7 +327,34 @@ export function OrdensServicoPanel() {
         <tbody>
           {linhas.map((os) => (
             <tr key={os.id}>
-              <td className="mono">{os.numero_os}</td>
+              <td>
+                <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${os.id}`)}>
+                  {codigoEntradaPorOS.get(os.id) ?? '-'}
+                </span>
+              </td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  title="Ficha de acompanhamento"
+                  onClick={() => imprimirFicha(os)}
+                >
+                  {os.numero_os}
+                </span>
+              </td>
+              <td>
+                {numeroOrcamentoPorOS.has(os.id) ? (
+                  <span
+                    className="link-numero mono"
+                    onClick={() => navigate(`/orcamento-tecnico?os=${os.id}`)}
+                  >
+                    {numeroOrcamentoPorOS.get(os.id)}
+                  </span>
+                ) : (
+                  <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                    -
+                  </span>
+                )}
+              </td>
               <td>{os.cliente_nome}</td>
               <td>{os.optica_desc}</td>
               <td className="mono">{os.optica_sn}</td>
@@ -297,36 +363,10 @@ export function OrdensServicoPanel() {
               </td>
               <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
               <td className="acoes-tabela">
-                <button className="botao-secundario" onClick={() => setDetalhe(os)}>
-                  Detalhes
-                </button>
-                <button
-                  className="botao-secundario"
-                  style={{ marginLeft: 6 }}
-                  onClick={() => navigate(`/registro-entrada?os=${os.id}`)}
-                >
-                  Registro de entrada
-                </button>
-                <button
-                  className="botao-secundario"
-                  style={{ marginLeft: 6 }}
-                  onClick={() => navigate(`/orcamento-tecnico?os=${os.id}`)}
-                >
-                  Ver orçamento
-                </button>
-                <button
-                  className="botao-secundario"
-                  style={{ marginLeft: 6 }}
-                  title="Documento pra imprimir e acompanhar o equipamento fisicamente dentro da CVF"
-                  onClick={() => imprimirFicha(os)}
-                >
-                  Ficha de acompanhamento
-                </button>
                 {funcionario?.nivel_acesso === 'Administrador' && STATUS_EXCLUIVEIS.includes(os.status_os ?? '') && (
                   <button
                     className="botao-icone perigo"
                     title="Excluir OS por completo"
-                    style={{ marginLeft: 6 }}
                     disabled={excluindo === os.id}
                     onClick={() => excluirOS(os)}
                   >
@@ -338,51 +378,11 @@ export function OrdensServicoPanel() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhuma OS encontrada.</td>
+              <td colSpan={9}>Nenhuma OS encontrada.</td>
             </tr>
           )}
         </tbody>
       </table>
-
-      {detalhe && (
-        <ModalJanela titulo={detalhe.numero_os} aoFechar={() => setDetalhe(null)}>
-            <div className="campo-form">
-              <label>Cliente</label>
-              <p>{detalhe.cliente_nome}</p>
-            </div>
-            <div className="campo-form">
-              <label>Equipamento</label>
-              <p>
-                {detalhe.optica_desc} ({detalhe.optica_fab}) - <span className="mono">{detalhe.optica_sn}</span>
-              </p>
-            </div>
-            <div className="campo-form">
-              <label>Defeito relatado</label>
-              <p>{detalhe.defeito_relatado || '-'}</p>
-            </div>
-            <div className="campo-form">
-              <label>Avarias identificadas na triagem</label>
-              {(avariasTriagemQuery.data ?? []).filter((item) => detalhe.triagem_avarias?.[String(item.id)]).length === 0 && (
-                <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma avaria marcada</p>
-              )}
-              {(avariasTriagemQuery.data ?? [])
-                .filter((item) => detalhe.triagem_avarias?.[String(item.id)])
-                .map((item) => (
-                  <Badge key={item.id} tono="copper">
-                    {item.descricao}
-                  </Badge>
-                ))}
-            </div>
-            <div className="modal-acoes">
-              <button className="botao-secundario" onClick={() => setDetalhe(null)}>
-                Fechar
-              </button>
-              <button className="botao-primario" onClick={() => imprimirFicha(detalhe)}>
-                Ficha de acompanhamento
-              </button>
-            </div>
-        </ModalJanela>
-      )}
 
       {ModalConfirmacao}
     </div>
