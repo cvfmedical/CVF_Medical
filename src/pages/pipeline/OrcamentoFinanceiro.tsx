@@ -122,6 +122,12 @@ interface PrecoModalidade {
   modalidades_manutencao: { nome: string } | null;
 }
 
+interface PrecoQuantidade {
+  id: number;
+  descricao: string;
+  valor_fixo: number;
+}
+
 const TONO_STATUS: Record<string, 'copper' | 'teal' | 'danger' | 'neutro'> = {
   'Aguardando Precificação': 'copper',
   'Aguardando Envio ao Cliente': 'copper',
@@ -215,6 +221,7 @@ export function OrcamentoFinanceiro() {
   const [precos, setPrecos] = useState<Record<number, string>>({});
   const [precoFixoSelecionado, setPrecoFixoSelecionado] = useState('');
   const [modalidadeSelecionada, setModalidadeSelecionada] = useState('');
+  const [precoQuantidadeSelecionado, setPrecoQuantidadeSelecionado] = useState('');
   // Valor de contrato aplicado direto no total do orçamento - os itens
   // ficam com preço zerado (só de referência, não somam no total nesse
   // caso). null = precificação normal por item.
@@ -449,6 +456,35 @@ export function OrcamentoFinanceiro() {
     setValorFixoContrato(preco.valor_fixo);
   }
 
+  // Preço fixo por quantidade de peças (ex: "OBJ + 3 ROD") - cadastrado em
+  // Clientes.tsx ("Preços por quantidade"). Mesma mecânica dos outros dois
+  // valores fixos acima: o financeiro escolhe a linha que bate com os
+  // itens do orçamento e aplica em valorFixoContrato.
+  const precosQuantidadeQuery = useQuery({
+    queryKey: ['precos-quantidade-cliente', clienteIdOS, clienteFinalIdOS],
+    enabled: !!clienteIdOS,
+    queryFn: async (): Promise<PrecoQuantidade[]> => {
+      const idsCliente = [clienteIdOS!, ...(clienteFinalIdOS ? [clienteFinalIdOS] : [])];
+      const { data, error } = await supabase
+        .from('cliente_precos_quantidade')
+        .select('id, descricao, valor_fixo')
+        .in('cliente_id', idsCliente);
+      if (error) throw error;
+      return data as unknown as PrecoQuantidade[];
+    },
+  });
+
+  function aplicarPrecoQuantidade() {
+    const preco = precosQuantidadeQuery.data?.find((p) => String(p.id) === precoQuantidadeSelecionado);
+    if (!preco || !itensQuery.data?.length) return;
+    const zerados: Record<number, string> = {};
+    for (const item of itensQuery.data) {
+      zerados[item.id] = '0';
+    }
+    setPrecos(zerados);
+    setValorFixoContrato(preco.valor_fixo);
+  }
+
   useEffect(() => {
     if (!itensQuery.data) return;
     // Restaurando um rascunho minimizado: usa os preços salvos, não os do banco.
@@ -574,6 +610,7 @@ export function OrcamentoFinanceiro() {
     setValorFixoContrato(null);
     setPrecoFixoSelecionado('');
     setModalidadeSelecionada('');
+    setPrecoQuantidadeSelecionado('');
   }
 
   async function verFoto(caminho: string | null) {
@@ -1702,6 +1739,46 @@ export function OrcamentoFinanceiro() {
                   </button>
                 ) : (
                   <button className="botao-secundario" onClick={aplicarModalidade} disabled={!modalidadeSelecionada}>
+                    Aplicar ao total
+                  </button>
+                )}
+              </div>
+            )}
+
+            {(precosQuantidadeQuery.data ?? []).length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'flex-end',
+                  background: 'var(--paper-50)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Valor fixo do contrato (por quantidade de peças)</label>
+                  <select value={precoQuantidadeSelecionado} onChange={(e) => setPrecoQuantidadeSelecionado(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {(precosQuantidadeQuery.data ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.descricao} - {formatarMoeda(p.valor_fixo)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {valorFixoContrato != null ? (
+                  <button className="botao-secundario perigo" onClick={removerValorFixo}>
+                    Remover valor fixo
+                  </button>
+                ) : (
+                  <button
+                    className="botao-secundario"
+                    onClick={aplicarPrecoQuantidade}
+                    disabled={!precoQuantidadeSelecionado}
+                  >
                     Aplicar ao total
                   </button>
                 )}

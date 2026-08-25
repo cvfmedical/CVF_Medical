@@ -164,6 +164,68 @@ export function Clientes() {
     qc.invalidateQueries({ queryKey: ['cliente-modalidade-precos', clientePrecos?.id] });
   }
 
+  // Tabela de preço por quantidade de peças (ex: "OBJ + 3 ROD" = R$
+  // 1.920,00) - alguns clientes negociam um valor fechado conforme a
+  // quantidade de peças trocadas, em vez de preço por item ou por modelo/
+  // modalidade. A descrição é texto livre porque a combinação varia muito
+  // de cliente pra cliente (só "N ROD", ou "OBJ + N ROD", etc.) - o
+  // financeiro escolhe a linha que bate com os itens do orçamento.
+  const [clientePrecosQtd, setClientePrecosQtd] = useState<Cliente | null>(null);
+  const [descricaoQtdNova, setDescricaoQtdNova] = useState('');
+  const [valorQtdNovo, setValorQtdNovo] = useState('');
+  const [erroPrecosQtd, setErroPrecosQtd] = useState<string | null>(null);
+
+  const precosQuantidadeQuery = useQuery({
+    queryKey: ['cliente-precos-quantidade', clientePrecosQtd?.id],
+    enabled: !!clientePrecosQtd,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cliente_precos_quantidade')
+        .select('id, descricao, valor_fixo')
+        .eq('cliente_id', clientePrecosQtd!.id)
+        .order('valor_fixo');
+      if (error) throw error;
+      return data as { id: number; descricao: string; valor_fixo: number }[];
+    },
+  });
+
+  function abrirPrecosQuantidade(c: Cliente) {
+    setClientePrecosQtd(c);
+    setDescricaoQtdNova('');
+    setValorQtdNovo('');
+    setErroPrecosQtd(null);
+  }
+
+  async function adicionarPrecoQuantidade() {
+    if (!clientePrecosQtd) return;
+    setErroPrecosQtd(null);
+    if (!descricaoQtdNova.trim() || !valorQtdNovo) {
+      setErroPrecosQtd('Informe a descrição (ex: "3 ROD") e o valor.');
+      return;
+    }
+    const { error } = await supabase.from('cliente_precos_quantidade').insert({
+      cliente_id: clientePrecosQtd.id,
+      descricao: descricaoQtdNova.trim(),
+      valor_fixo: Number(valorQtdNovo),
+    });
+    if (error) {
+      setErroPrecosQtd(mensagemErro(error));
+      return;
+    }
+    setDescricaoQtdNova('');
+    setValorQtdNovo('');
+    qc.invalidateQueries({ queryKey: ['cliente-precos-quantidade', clientePrecosQtd.id] });
+  }
+
+  async function excluirPrecoQuantidade(id: number) {
+    const { error } = await supabase.from('cliente_precos_quantidade').delete().eq('id', id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['cliente-precos-quantidade', clientePrecosQtd?.id] });
+  }
+
   const { minimizar: minimizarRascunho } = useRascunhoDeTela('clientes', {
     titulo: editando ? 'Editar cliente' : 'Novo cliente',
     obterEstado: () => ({ form, editando }),
@@ -417,6 +479,9 @@ export function Clientes() {
               <td className="acoes-tabela">
                 <button className="botao-secundario botao-pequeno" onClick={() => abrirPrecosModalidade(c)}>
                   Preços por modalidade
+                </button>
+                <button className="botao-secundario botao-pequeno" onClick={() => abrirPrecosQuantidade(c)}>
+                  Preços por quantidade
                 </button>
                 <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(c)}>
                   <IconPencil size={16} />
@@ -674,6 +739,69 @@ export function Clientes() {
 
         <div className="modal-acoes">
           <button className="botao-primario" onClick={() => setClientePrecos(null)}>
+            Fechar
+          </button>
+        </div>
+      </ModalJanela>
+    )}
+
+    {clientePrecosQtd && (
+      <ModalJanela
+        titulo={`Preços por quantidade - ${clientePrecosQtd.razao_social}`}
+        aoFechar={() => setClientePrecosQtd(null)}
+      >
+        <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+          Preço fechado conforme a quantidade de peças trocadas (ex: "3 ROD", "OBJ + 2 ROD") pra este cliente, em vez
+          de precificar item por item. O financeiro escolhe a linha que bate com os itens do orçamento na hora de
+          precificar.
+        </p>
+
+        <table className="tabela-crud">
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th>Valor fixo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(precosQuantidadeQuery.data ?? []).map((p) => (
+              <tr key={p.id}>
+                <td>{p.descricao}</td>
+                <td>R$ {Number(p.valor_fixo).toFixed(2)}</td>
+                <td className="acoes-tabela">
+                  <button className="botao-icone perigo" title="Remover" onClick={() => excluirPrecoQuantidade(p.id)}>
+                    <IconTrash size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {(precosQuantidadeQuery.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={3}>Nenhum preço cadastrado ainda.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+          <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+            <label>Descrição (ex: "3 ROD", "OBJ + 2 ROD")</label>
+            <input type="text" value={descricaoQtdNova} onChange={(e) => setDescricaoQtdNova(e.target.value)} />
+          </div>
+          <div className="campo-form" style={{ width: 140, marginBottom: 0 }}>
+            <label>Valor fixo (R$)</label>
+            <input type="number" value={valorQtdNovo} onChange={(e) => setValorQtdNovo(e.target.value)} />
+          </div>
+          <button className="botao-secundario" onClick={adicionarPrecoQuantidade}>
+            Adicionar
+          </button>
+        </div>
+
+        {erroPrecosQtd && <p className="erro-login">{erroPrecosQtd}</p>}
+
+        <div className="modal-acoes">
+          <button className="botao-primario" onClick={() => setClientePrecosQtd(null)}>
             Fechar
           </button>
         </div>
