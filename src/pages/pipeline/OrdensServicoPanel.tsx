@@ -11,10 +11,11 @@ import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { Badge } from '../../components/Badge';
-import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
+import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO, STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { mensagemErro } from '../../lib/erros';
+import { abrirImpressao } from '../../lib/imprimir';
 import { IconTrash } from '@tabler/icons-react';
 
 // OS ainda não iniciou manutenção física - único momento em que dá pra
@@ -104,6 +105,94 @@ export function OrdensServicoPanel() {
         mensagem: `A OS, o orçamento (se houver) e o vínculo com a entrada de origem serão apagados. A entrada volta para "Aguardando Triagem" - suas fotos e checklist continuam salvos, mas ela precisa ser convertida em OS de novo. Essa ação não pode ser desfeita.`,
       },
     );
+  }
+
+  // Documento físico que "caminha" com o equipamento dentro da CVF -
+  // identificação, defeito relatado, avarias da triagem, peças aprovadas
+  // (se já tiver orçamento aprovado) e um checklist das etapas do pipeline
+  // (mesmos nomes de STATUS_OS_ORDENADOS, pra nunca ficar dessincronizado
+  // do fluxo real) com espaço pra rubrica/data - o técnico marca à mão
+  // conforme o equipamento avança, sem precisar abrir o sistema.
+  async function imprimirFicha(os: OrdemServico) {
+    const { data: orcamento } = await supabase
+      .from('orcamentos')
+      .select('id')
+      .eq('ordem_servico_id', os.id)
+      .eq('status', 'Aprovado')
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let itensHtml = '<p style="margin:0;color:var(--ink-400);">Orçamento ainda não aprovado.</p>';
+    if (orcamento) {
+      const { data: itens } = await supabase
+        .from('orcamento_itens')
+        .select('quantidade, descricao_servico, produtos_servicos(nome)')
+        .eq('orcamento_id', orcamento.id);
+      itensHtml = itens?.length
+        ? `<ul style="margin:0;padding-left:18px;">${itens
+            .map((it) => {
+              const nome = (it as unknown as { produtos_servicos: { nome: string } | null }).produtos_servicos?.nome ?? it.descricao_servico ?? '-';
+              return `<li>${nome} (x${it.quantidade})</li>`;
+            })
+            .join('')}</ul>`
+        : '<p style="margin:0;color:var(--ink-400);">Nenhum item cadastrado no orçamento.</p>';
+    }
+
+    const avariasMarcadas = (avariasTriagemQuery.data ?? [])
+      .filter((item) => os.triagem_avarias?.[String(item.id)])
+      .map((item) => item.descricao);
+
+    const caixaCheck = '<span style="display:inline-block;width:15px;height:15px;border:1.5px solid #21201c;"></span>';
+
+    const corpo = `
+      <h1>Ficha de Acompanhamento</h1>
+      <p class="subtitulo">Documento interno - acompanha o equipamento dentro da CVF, marcado à mão a cada etapa.</p>
+
+      <div class="laudo-secao">Identificação</div>
+      <div class="laudo-caixa">
+        <div class="laudo-linha-dupla">
+          <div><strong>Nº OS:</strong> <span class="mono">${os.numero_os}</span></div>
+          <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'}${os.optica_fab ? ' (' + os.optica_fab + ')' : ''}</div>
+          <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>
+        </div>
+      </div>
+
+      <div class="laudo-secao">Defeito relatado</div>
+      <div class="laudo-caixa"><p style="margin:0;">${os.defeito_relatado || '-'}</p></div>
+
+      <div class="laudo-secao">Avarias identificadas na triagem</div>
+      <div class="laudo-caixa">
+        ${avariasMarcadas.length ? `<p style="margin:0;">${avariasMarcadas.join(', ')}</p>` : '<p style="margin:0;color:var(--ink-400);">Nenhuma avaria marcada.</p>'}
+      </div>
+
+      <div class="laudo-secao">Peças a substituir (conforme orçamento aprovado)</div>
+      <div class="laudo-caixa">${itensHtml}</div>
+
+      <div class="laudo-secao">Etapas do processo</div>
+      <table class="dados">
+        <thead>
+          <tr>
+            <th>Etapa</th>
+            <th style="width:44px;text-align:center;">OK</th>
+            <th style="width:130px;">Rubrica</th>
+            <th style="width:90px;">Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${STATUS_OS_ORDENADOS.map(
+            (etapa) => `<tr><td>${etapa}</td><td style="text-align:center;">${caixaCheck}</td><td></td><td></td></tr>`,
+          ).join('')}
+        </tbody>
+      </table>
+
+      <div class="laudo-secao">Observações durante o processo</div>
+      <div class="laudo-caixa" style="min-height:90px;"></div>
+    `;
+    abrirImpressao(`Ficha de Acompanhamento - ${os.numero_os}`, corpo, undefined, { semAssinaturas: true });
   }
 
   function valorColuna(os: OrdemServico, chave: string): unknown {
@@ -216,6 +305,14 @@ export function OrdensServicoPanel() {
                 >
                   Ver orçamento
                 </button>
+                <button
+                  className="botao-secundario"
+                  style={{ marginLeft: 6 }}
+                  title="Documento pra imprimir e acompanhar o equipamento fisicamente dentro da CVF"
+                  onClick={() => imprimirFicha(os)}
+                >
+                  Ficha de acompanhamento
+                </button>
                 {funcionario?.nivel_acesso === 'Administrador' && STATUS_EXCLUIVEIS.includes(os.status_os ?? '') && (
                   <button
                     className="botao-icone perigo"
@@ -270,6 +367,9 @@ export function OrdensServicoPanel() {
             <div className="modal-acoes">
               <button className="botao-secundario" onClick={() => setDetalhe(null)}>
                 Fechar
+              </button>
+              <button className="botao-primario" onClick={() => imprimirFicha(detalhe)}>
+                Ficha de acompanhamento
               </button>
             </div>
         </ModalJanela>
