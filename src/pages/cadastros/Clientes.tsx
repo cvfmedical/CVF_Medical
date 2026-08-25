@@ -164,34 +164,58 @@ export function Clientes() {
     qc.invalidateQueries({ queryKey: ['cliente-modalidade-precos', clientePrecos?.id] });
   }
 
-  // Tabela de preço por quantidade de peças (ex: "OBJ + 3 ROD" = R$
-  // 1.920,00) - alguns clientes negociam um valor fechado conforme a
-  // quantidade de peças trocadas, em vez de preço por item ou por modelo/
-  // modalidade. A descrição é texto livre porque a combinação varia muito
-  // de cliente pra cliente (só "N ROD", ou "OBJ + N ROD", etc.) - o
-  // financeiro escolhe a linha que bate com os itens do orçamento.
+  // Tabela de preço por quantidade de peças, aplicada AUTOMATICAMENTE na
+  // precificação (OrcamentoFinanceiro.tsx) - o sistema conta quantos itens
+  // do orçamento têm a tag "grupo_contado" (cadastrada em Produtos e
+  // serviços, campo "Grupo de contagem") e acha a linha certa sozinho, sem
+  // o financeiro escolher na mão. "Grupo extra" é opcional - quando
+  // preenchido, a linha só bate se aquele outro grupo também estiver (ou
+  // não estiver, conforme "presente/ausente") no orçamento. Exemplo real:
+  // grupo_contado=ROD_LENS, grupo_extra=OBJETIVA, presente=true,
+  // quantidade=3 → "OBJETIVA + 3 ROD_LENS".
   const [clientePrecosQtd, setClientePrecosQtd] = useState<Cliente | null>(null);
   const [descricaoQtdNova, setDescricaoQtdNova] = useState('');
+  const [grupoContadoNovo, setGrupoContadoNovo] = useState('');
+  const [quantidadeNova, setQuantidadeNova] = useState('');
+  const [usaGrupoExtra, setUsaGrupoExtra] = useState(false);
+  const [grupoExtraNovo, setGrupoExtraNovo] = useState('');
+  const [extraPresenteNovo, setExtraPresenteNovo] = useState(true);
   const [valorQtdNovo, setValorQtdNovo] = useState('');
   const [erroPrecosQtd, setErroPrecosQtd] = useState<string | null>(null);
+
+  interface PrecoQuantidadeCadastro {
+    id: number;
+    descricao: string;
+    grupo_contado: string;
+    quantidade: number;
+    grupo_extra: string | null;
+    extra_presente: boolean;
+    valor_fixo: number;
+  }
 
   const precosQuantidadeQuery = useQuery({
     queryKey: ['cliente-precos-quantidade', clientePrecosQtd?.id],
     enabled: !!clientePrecosQtd,
-    queryFn: async () => {
+    queryFn: async (): Promise<PrecoQuantidadeCadastro[]> => {
       const { data, error } = await supabase
         .from('cliente_precos_quantidade')
-        .select('id, descricao, valor_fixo')
+        .select('id, descricao, grupo_contado, quantidade, grupo_extra, extra_presente, valor_fixo')
         .eq('cliente_id', clientePrecosQtd!.id)
-        .order('valor_fixo');
+        .order('grupo_extra')
+        .order('quantidade');
       if (error) throw error;
-      return data as { id: number; descricao: string; valor_fixo: number }[];
+      return data as PrecoQuantidadeCadastro[];
     },
   });
 
   function abrirPrecosQuantidade(c: Cliente) {
     setClientePrecosQtd(c);
     setDescricaoQtdNova('');
+    setGrupoContadoNovo('');
+    setQuantidadeNova('');
+    setUsaGrupoExtra(false);
+    setGrupoExtraNovo('');
+    setExtraPresenteNovo(true);
     setValorQtdNovo('');
     setErroPrecosQtd(null);
   }
@@ -199,13 +223,21 @@ export function Clientes() {
   async function adicionarPrecoQuantidade() {
     if (!clientePrecosQtd) return;
     setErroPrecosQtd(null);
-    if (!descricaoQtdNova.trim() || !valorQtdNovo) {
-      setErroPrecosQtd('Informe a descrição (ex: "3 ROD") e o valor.');
+    if (!descricaoQtdNova.trim() || !grupoContadoNovo.trim() || quantidadeNova === '' || !valorQtdNovo) {
+      setErroPrecosQtd('Preencha descrição, grupo contado, quantidade e valor.');
+      return;
+    }
+    if (usaGrupoExtra && !grupoExtraNovo.trim()) {
+      setErroPrecosQtd('Informe o grupo extra, ou desmarque "Depende de outro item".');
       return;
     }
     const { error } = await supabase.from('cliente_precos_quantidade').insert({
       cliente_id: clientePrecosQtd.id,
       descricao: descricaoQtdNova.trim(),
+      grupo_contado: grupoContadoNovo.trim().toUpperCase(),
+      quantidade: Number(quantidadeNova),
+      grupo_extra: usaGrupoExtra ? grupoExtraNovo.trim().toUpperCase() : null,
+      extra_presente: usaGrupoExtra ? extraPresenteNovo : true,
       valor_fixo: Number(valorQtdNovo),
     });
     if (error) {
@@ -213,6 +245,7 @@ export function Clientes() {
       return;
     }
     setDescricaoQtdNova('');
+    setQuantidadeNova('');
     setValorQtdNovo('');
     qc.invalidateQueries({ queryKey: ['cliente-precos-quantidade', clientePrecosQtd.id] });
   }
@@ -751,15 +784,16 @@ export function Clientes() {
         aoFechar={() => setClientePrecosQtd(null)}
       >
         <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
-          Preço fechado conforme a quantidade de peças trocadas (ex: "3 ROD", "OBJ + 2 ROD") pra este cliente, em vez
-          de precificar item por item. O financeiro escolhe a linha que bate com os itens do orçamento na hora de
-          precificar.
+          Preço fechado conforme a quantidade de peças trocadas (ex: "3 ROD LENS", "OBJETIVA + 2 ROD LENS") pra este
+          cliente, aplicado automaticamente na precificação - o sistema conta quantos itens do orçamento têm cada
+          "grupo de contagem" (cadastrado em Produtos e serviços) e acha a linha certa sozinho.
         </p>
 
         <table className="tabela-crud">
           <thead>
             <tr>
               <th>Descrição</th>
+              <th>Regra</th>
               <th>Valor fixo</th>
               <th></th>
             </tr>
@@ -768,6 +802,10 @@ export function Clientes() {
             {(precosQuantidadeQuery.data ?? []).map((p) => (
               <tr key={p.id}>
                 <td>{p.descricao}</td>
+                <td style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                  {p.grupo_extra ? `${p.extra_presente ? 'com' : 'sem'} ${p.grupo_extra} + ` : ''}
+                  {p.quantidade}x {p.grupo_contado}
+                </td>
                 <td>R$ {Number(p.valor_fixo).toFixed(2)}</td>
                 <td className="acoes-tabela">
                   <button className="botao-icone perigo" title="Remover" onClick={() => excluirPrecoQuantidade(p.id)}>
@@ -778,18 +816,65 @@ export function Clientes() {
             ))}
             {(precosQuantidadeQuery.data ?? []).length === 0 && (
               <tr>
-                <td colSpan={3}>Nenhum preço cadastrado ainda.</td>
+                <td colSpan={4}>Nenhum preço cadastrado ainda.</td>
               </tr>
             )}
           </tbody>
         </table>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
-          <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-            <label>Descrição (ex: "3 ROD", "OBJ + 2 ROD")</label>
-            <input type="text" value={descricaoQtdNova} onChange={(e) => setDescricaoQtdNova(e.target.value)} />
+        <div className="campo-form" style={{ marginTop: 12 }}>
+          <label>Descrição (rótulo pra exibição, ex: "3 ROD LENS")</label>
+          <input type="text" value={descricaoQtdNova} onChange={(e) => setDescricaoQtdNova(e.target.value)} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="campo-form" style={{ flex: 1 }}>
+            <label>Grupo contado (ex: ROD_LENS)</label>
+            <input
+              type="text"
+              value={grupoContadoNovo}
+              onChange={(e) => setGrupoContadoNovo(e.target.value.toUpperCase())}
+              placeholder="Tag cadastrada em Produtos e serviços"
+            />
           </div>
-          <div className="campo-form" style={{ width: 140, marginBottom: 0 }}>
+          <div className="campo-form" style={{ width: 120 }}>
+            <label>Quantidade</label>
+            <input type="number" min={0} value={quantidadeNova} onChange={(e) => setQuantidadeNova(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            id="usaGrupoExtra"
+            checked={usaGrupoExtra}
+            onChange={(e) => setUsaGrupoExtra(e.target.checked)}
+            style={{ width: 'auto' }}
+          />
+          <label htmlFor="usaGrupoExtra" style={{ marginBottom: 0 }}>
+            Depende de outro item também estar (ou não estar) no orçamento?
+          </label>
+        </div>
+        {usaGrupoExtra && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div className="campo-form" style={{ flex: 1 }}>
+              <label>Grupo extra (ex: OBJETIVA)</label>
+              <input type="text" value={grupoExtraNovo} onChange={(e) => setGrupoExtraNovo(e.target.value.toUpperCase())} />
+            </div>
+            <div className="campo-form" style={{ width: 160 }}>
+              <label>Condição</label>
+              <select
+                value={extraPresenteNovo ? 'presente' : 'ausente'}
+                onChange={(e) => setExtraPresenteNovo(e.target.value === 'presente')}
+              >
+                <option value="presente">Precisa estar presente</option>
+                <option value="ausente">Precisa estar ausente</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
             <label>Valor fixo (R$)</label>
             <input type="number" value={valorQtdNovo} onChange={(e) => setValorQtdNovo(e.target.value)} />
           </div>

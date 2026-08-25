@@ -87,6 +87,7 @@ interface ItemOrcamento {
     preco_valor1: number | null;
     preco_valor2: number | null;
     preco_valor3: number | null;
+    grupo_contagem_preco: string | null;
   } | null;
 }
 
@@ -125,6 +126,10 @@ interface PrecoModalidade {
 interface PrecoQuantidade {
   id: number;
   descricao: string;
+  grupo_contado: string;
+  quantidade: number;
+  grupo_extra: string | null;
+  extra_presente: boolean;
   valor_fixo: number;
 }
 
@@ -221,7 +226,6 @@ export function OrcamentoFinanceiro() {
   const [precos, setPrecos] = useState<Record<number, string>>({});
   const [precoFixoSelecionado, setPrecoFixoSelecionado] = useState('');
   const [modalidadeSelecionada, setModalidadeSelecionada] = useState('');
-  const [precoQuantidadeSelecionado, setPrecoQuantidadeSelecionado] = useState('');
   // Valor de contrato aplicado direto no total do orçamento - os itens
   // ficam com preço zerado (só de referência, não somam no total nesse
   // caso). null = precificação normal por item.
@@ -292,7 +296,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3)',
+          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3, grupo_contagem_preco)',
         )
         .eq('orcamento_id', selecionadoId!);
       if (error) throw error;
@@ -456,10 +460,12 @@ export function OrcamentoFinanceiro() {
     setValorFixoContrato(preco.valor_fixo);
   }
 
-  // Preço fixo por quantidade de peças (ex: "OBJ + 3 ROD") - cadastrado em
-  // Clientes.tsx ("Preços por quantidade"). Mesma mecânica dos outros dois
-  // valores fixos acima: o financeiro escolhe a linha que bate com os
-  // itens do orçamento e aplica em valorFixoContrato.
+  // Preço fixo por quantidade de peças (ex: "OBJETIVA + 3 ROD_LENS") -
+  // cadastrado em Clientes.tsx ("Preços por quantidade"). Diferente dos
+  // outros dois valores fixos acima (que o financeiro escolhe na mão),
+  // este é detectado AUTOMATICAMENTE: conta quantos itens do orçamento têm
+  // cada "grupo de contagem" (produtos_servicos.grupo_contagem_preco) e
+  // acha sozinho a linha que bate - só falta um clique pra aplicar.
   const precosQuantidadeQuery = useQuery({
     queryKey: ['precos-quantidade-cliente', clienteIdOS, clienteFinalIdOS],
     enabled: !!clienteIdOS,
@@ -467,22 +473,46 @@ export function OrcamentoFinanceiro() {
       const idsCliente = [clienteIdOS!, ...(clienteFinalIdOS ? [clienteFinalIdOS] : [])];
       const { data, error } = await supabase
         .from('cliente_precos_quantidade')
-        .select('id, descricao, valor_fixo')
+        .select('id, descricao, grupo_contado, quantidade, grupo_extra, extra_presente, valor_fixo')
         .in('cliente_id', idsCliente);
       if (error) throw error;
       return data as unknown as PrecoQuantidade[];
     },
   });
 
-  function aplicarPrecoQuantidade() {
-    const preco = precosQuantidadeQuery.data?.find((p) => String(p.id) === precoQuantidadeSelecionado);
-    if (!preco || !itensQuery.data?.length) return;
+  // Conta, por grupo de contagem, a quantidade total de itens do orçamento
+  // que carregam aquela tag - depois procura a linha do cliente cuja
+  // regra (grupo contado + quantidade, e grupo extra presente/ausente
+  // quando exigido) bate exatamente com o que está no orçamento agora.
+  const precoQuantidadeDetectado = (() => {
+    const regras = precosQuantidadeQuery.data;
+    if (!regras?.length || !itensQuery.data?.length) return null;
+    const contagem = new Map<string, number>();
+    for (const item of itensQuery.data) {
+      const grupo = item.produtos_servicos?.grupo_contagem_preco;
+      if (!grupo) continue;
+      contagem.set(grupo, (contagem.get(grupo) ?? 0) + item.quantidade);
+    }
+    return (
+      regras.find((r) => {
+        if ((contagem.get(r.grupo_contado) ?? 0) !== r.quantidade) return false;
+        if (r.grupo_extra) {
+          const temExtra = (contagem.get(r.grupo_extra) ?? 0) > 0;
+          if (temExtra !== r.extra_presente) return false;
+        }
+        return true;
+      }) ?? null
+    );
+  })();
+
+  function aplicarPrecoQuantidadeDetectado() {
+    if (!precoQuantidadeDetectado || !itensQuery.data?.length) return;
     const zerados: Record<number, string> = {};
     for (const item of itensQuery.data) {
       zerados[item.id] = '0';
     }
     setPrecos(zerados);
-    setValorFixoContrato(preco.valor_fixo);
+    setValorFixoContrato(precoQuantidadeDetectado.valor_fixo);
   }
 
   useEffect(() => {
@@ -610,7 +640,6 @@ export function OrcamentoFinanceiro() {
     setValorFixoContrato(null);
     setPrecoFixoSelecionado('');
     setModalidadeSelecionada('');
-    setPrecoQuantidadeSelecionado('');
   }
 
   async function verFoto(caminho: string | null) {
@@ -1112,7 +1141,7 @@ export function OrcamentoFinanceiro() {
         const { data: itensData, error: errItens } = await supabase
           .from('orcamento_itens')
           .select(
-            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3)',
+            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3, grupo_contagem_preco)',
           )
           .eq('orcamento_id', o.id);
         if (errItens) throw errItens;
@@ -1745,12 +1774,36 @@ export function OrcamentoFinanceiro() {
               </div>
             )}
 
-            {(precosQuantidadeQuery.data ?? []).length > 0 && (
+            {precoQuantidadeDetectado && valorFixoContrato == null && (
               <div
                 style={{
                   display: 'flex',
                   gap: 8,
-                  alignItems: 'flex-end',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--teal-500-12)',
+                  border: '1px solid var(--teal-500)',
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ fontSize: 13 }}>
+                  <strong>Preço por quantidade detectado:</strong> {precoQuantidadeDetectado.descricao} -{' '}
+                  {formatarMoeda(precoQuantidadeDetectado.valor_fixo)}
+                </div>
+                <button className="botao-secundario" onClick={aplicarPrecoQuantidadeDetectado}>
+                  Aplicar ao total
+                </button>
+              </div>
+            )}
+            {valorFixoContrato != null && precoQuantidadeDetectado && precoQuantidadeDetectado.valor_fixo === valorFixoContrato && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
                   background: 'var(--paper-50)',
                   border: '1px solid var(--border)',
                   borderRadius: 8,
@@ -1758,30 +1811,12 @@ export function OrcamentoFinanceiro() {
                   marginBottom: 12,
                 }}
               >
-                <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-                  <label>Valor fixo do contrato (por quantidade de peças)</label>
-                  <select value={precoQuantidadeSelecionado} onChange={(e) => setPrecoQuantidadeSelecionado(e.target.value)}>
-                    <option value="">Selecione...</option>
-                    {(precosQuantidadeQuery.data ?? []).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.descricao} - {formatarMoeda(p.valor_fixo)}
-                      </option>
-                    ))}
-                  </select>
+                <div style={{ fontSize: 13 }}>
+                  Valor fixo aplicado por quantidade de peças: <strong>{precoQuantidadeDetectado.descricao}</strong>
                 </div>
-                {valorFixoContrato != null ? (
-                  <button className="botao-secundario perigo" onClick={removerValorFixo}>
-                    Remover valor fixo
-                  </button>
-                ) : (
-                  <button
-                    className="botao-secundario"
-                    onClick={aplicarPrecoQuantidade}
-                    disabled={!precoQuantidadeSelecionado}
-                  >
-                    Aplicar ao total
-                  </button>
-                )}
+                <button className="botao-secundario perigo" onClick={removerValorFixo}>
+                  Remover valor fixo
+                </button>
               </div>
             )}
 

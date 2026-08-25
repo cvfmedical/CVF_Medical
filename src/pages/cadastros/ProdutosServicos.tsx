@@ -33,6 +33,10 @@ interface ProdutoServico {
   preco_valor1: number | null;
   preco_valor2: number | null;
   preco_valor3: number | null;
+  // Tag pra precificação automática por quantidade (Clientes.tsx "Preços
+  // por quantidade") - itens com a mesma tag (ex: "ROD_LENS") somam
+  // quantidade juntos, mesmo sendo variantes/tamanhos diferentes.
+  grupo_contagem_preco: string | null;
   unidade: string;
   codigo_barras: string | null;
   observacoes: string | null;
@@ -71,6 +75,7 @@ function formVazioPara(tipos: string[]) {
     preco_valor1: '',
     preco_valor2: '',
     preco_valor3: '',
+    grupo_contagem_preco: '',
     unidade: 'un',
     observacoes: '',
     status_ativo: true,
@@ -212,6 +217,7 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
       preco_valor1: p.preco_valor1 != null ? String(p.preco_valor1) : '',
       preco_valor2: p.preco_valor2 != null ? String(p.preco_valor2) : '',
       preco_valor3: p.preco_valor3 != null ? String(p.preco_valor3) : '',
+      grupo_contagem_preco: p.grupo_contagem_preco ?? '',
       unidade: p.unidade ?? 'un',
       observacoes: p.observacoes ?? '',
       status_ativo: p.status_ativo,
@@ -291,6 +297,7 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
         preco_valor1: form.preco_valor1 ? Number(form.preco_valor1) : null,
         preco_valor2: form.preco_valor2 ? Number(form.preco_valor2) : null,
         preco_valor3: form.preco_valor3 ? Number(form.preco_valor3) : null,
+        grupo_contagem_preco: form.grupo_contagem_preco.trim() || null,
         unidade: form.unidade || 'un',
         observacoes: form.observacoes || null,
         status_ativo: form.status_ativo,
@@ -545,6 +552,21 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
                   />
                 </div>
               </div>
+            </div>
+            <div className="campo-form">
+              <label>Grupo de contagem (preço por quantidade, opcional)</label>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 0, marginBottom: 6 }}>
+                Pra clientes com preço fechado por quantidade de peças (ex: "3 ROD LENS" ou "OBJETIVA + 2 ROD LENS" -
+                cadastro de Clientes, "Preços por quantidade"). Itens com a mesma tag somam quantidade juntos, mesmo
+                sendo tamanhos/variantes diferentes (ex: todos os "ROD LENS ..." usam a tag ROD_LENS). Deixe em
+                branco se este item não participa dessa precificação.
+              </p>
+              <input
+                type="text"
+                value={form.grupo_contagem_preco}
+                onChange={(e) => setForm((f) => ({ ...f, grupo_contagem_preco: e.target.value.toUpperCase() }))}
+                placeholder="Ex: ROD_LENS, OBJETIVA"
+              />
             </div>
             <div className="campo-form">
               <label>Observações</label>
