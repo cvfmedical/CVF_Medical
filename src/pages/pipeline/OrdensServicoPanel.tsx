@@ -143,54 +143,67 @@ export function OrdensServicoPanel() {
       .filter((item) => os.triagem_avarias?.[String(item.id)])
       .map((item) => item.descricao);
 
-    const caixaCheck = '<span style="display:inline-block;width:15px;height:15px;border:1.5px solid #21201c;"></span>';
+    const caixaCheck = '<span style="display:inline-block;width:12px;height:12px;border:1.3px solid #21201c;"></span>';
 
+    // Estilo compacto SÓ desta ficha (não mexe no CSS global de
+    // imprimir.ts, usado por outros relatórios) - precisa caber tudo numa
+    // folha só, já que é colada fisicamente no equipamento.
     const corpo = `
-      <h1>Ficha de Acompanhamento</h1>
-      <p class="subtitulo">Documento interno - acompanha o equipamento dentro da CVF, marcado à mão a cada etapa.</p>
+      <style>
+        .ficha-compacta { font-size: 11px; }
+        .ficha-compacta h1 { font-size: 15px; margin-bottom: 1px; }
+        .ficha-compacta .subtitulo { font-size: 9.5px; margin-bottom: 8px; }
+        .ficha-compacta .laudo-secao { padding: 3px 10px; margin-top: 8px; margin-bottom: 0; font-size: 9.5px; }
+        .ficha-compacta .laudo-caixa { padding: 4px 10px; margin-bottom: 0; }
+        .ficha-compacta .laudo-linha-dupla > div { padding: 3px 10px; }
+        .ficha-compacta table.dados th, .ficha-compacta table.dados td { padding: 2px 8px; font-size: 9.5px; }
+        .ficha-compacta ul { margin: 0; padding-left: 14px; }
+      </style>
+      <div class="ficha-compacta">
+        <h1>Ficha de Acompanhamento</h1>
+        <p class="subtitulo">Documento interno - acompanha o equipamento dentro da CVF, marcado à mão a cada etapa.</p>
 
-      <div class="laudo-secao">Identificação</div>
-      <div class="laudo-caixa">
-        <div class="laudo-linha-dupla">
-          <div><strong>Nº OS:</strong> <span class="mono">${os.numero_os}</span></div>
-          <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
+        <div class="laudo-secao">Identificação</div>
+        <div class="laudo-caixa">
+          <div class="laudo-linha-dupla">
+            <div><strong>Nº OS:</strong> <span class="mono">${os.numero_os}</span></div>
+            <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
+          </div>
+          <div class="laudo-linha-dupla">
+            <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'}${os.optica_fab ? ' (' + os.optica_fab + ')' : ''}</div>
+            <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>
+          </div>
+          <div class="laudo-linha-dupla">
+            <div><strong>Defeito relatado:</strong> ${os.defeito_relatado || '-'}</div>
+          </div>
+          <div class="laudo-linha-dupla">
+            <div><strong>Avarias na triagem:</strong> ${avariasMarcadas.length ? avariasMarcadas.join(', ') : 'Nenhuma avaria marcada'}</div>
+          </div>
         </div>
-        <div class="laudo-linha-dupla">
-          <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'}${os.optica_fab ? ' (' + os.optica_fab + ')' : ''}</div>
-          <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>
-        </div>
+
+        <div class="laudo-secao">Peças a substituir (conforme orçamento aprovado)</div>
+        <div class="laudo-caixa">${itensHtml}</div>
+
+        <div class="laudo-secao">Etapas do processo</div>
+        <table class="dados">
+          <thead>
+            <tr>
+              <th>Etapa</th>
+              <th style="width:40px;text-align:center;">OK</th>
+              <th style="width:110px;">Rubrica</th>
+              <th style="width:75px;">Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${STATUS_OS_ORDENADOS.map(
+              (etapa) => `<tr><td>${etapa}</td><td style="text-align:center;">${caixaCheck}</td><td></td><td></td></tr>`,
+            ).join('')}
+          </tbody>
+        </table>
+
+        <div class="laudo-secao">Observações durante o processo</div>
+        <div class="laudo-caixa" style="min-height:34px;"></div>
       </div>
-
-      <div class="laudo-secao">Defeito relatado</div>
-      <div class="laudo-caixa"><p style="margin:0;">${os.defeito_relatado || '-'}</p></div>
-
-      <div class="laudo-secao">Avarias identificadas na triagem</div>
-      <div class="laudo-caixa">
-        ${avariasMarcadas.length ? `<p style="margin:0;">${avariasMarcadas.join(', ')}</p>` : '<p style="margin:0;color:var(--ink-400);">Nenhuma avaria marcada.</p>'}
-      </div>
-
-      <div class="laudo-secao">Peças a substituir (conforme orçamento aprovado)</div>
-      <div class="laudo-caixa">${itensHtml}</div>
-
-      <div class="laudo-secao">Etapas do processo</div>
-      <table class="dados">
-        <thead>
-          <tr>
-            <th>Etapa</th>
-            <th style="width:44px;text-align:center;">OK</th>
-            <th style="width:130px;">Rubrica</th>
-            <th style="width:90px;">Data</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${STATUS_OS_ORDENADOS.map(
-            (etapa) => `<tr><td>${etapa}</td><td style="text-align:center;">${caixaCheck}</td><td></td><td></td></tr>`,
-          ).join('')}
-        </tbody>
-      </table>
-
-      <div class="laudo-secao">Observações durante o processo</div>
-      <div class="laudo-caixa" style="min-height:90px;"></div>
     `;
     abrirImpressao(`Ficha de Acompanhamento - ${os.numero_os}`, corpo, undefined, { semAssinaturas: true });
   }
