@@ -232,6 +232,14 @@ export function OrcamentoFinanceiro() {
   // caso). null = precificação normal por item.
   const [valorFixoContrato, setValorFixoContrato] = useState<number | null>(null);
   const [desconto, setDesconto] = useState('');
+  // Desconto por percentual é só uma forma alternativa de preencher o
+  // mesmo "desconto" em R$ (o banco continua guardando o valor final em
+  // R$, igual sempre foi - orcamentos.desconto, portal, Orçamentos
+  // aprovados etc. continuam lendo um número normal). Funciona também com
+  // valor fixo por quantidade/modelo/modalidade, já que o percentual
+  // incide sobre o subtotal (que É o valor fixo quando aplicado).
+  const [descontoTipo, setDescontoTipo] = useState<'valor' | 'percentual'>('valor');
+  const [descontoPercentual, setDescontoPercentual] = useState('');
   // Bonificação de fidelidade: serviço em cortesia (100% de desconto, total
   // R$ 0,00). Não gera conta a receber (ver trigger no banco).
   const [bonificacao, setBonificacao] = useState(false);
@@ -590,6 +598,8 @@ export function OrcamentoFinanceiro() {
       precoFixoSelecionado,
       valorFixoContrato,
       desconto,
+      descontoTipo,
+      descontoPercentual,
       bonificacao,
       anexarOrientacao,
       emailsAdicionais,
@@ -602,6 +612,8 @@ export function OrcamentoFinanceiro() {
       setPrecoFixoSelecionado((e.precoFixoSelecionado as string) ?? '');
       setValorFixoContrato((e.valorFixoContrato as number | null) ?? null);
       setDesconto((e.desconto as string) ?? '');
+      setDescontoTipo((e.descontoTipo as 'valor' | 'percentual') ?? 'valor');
+      setDescontoPercentual((e.descontoPercentual as string) ?? '');
       setBonificacao(Boolean(e.bonificacao));
       setAnexarOrientacao(Boolean(e.anexarOrientacao));
       setEmailsAdicionais((e.emailsAdicionais as string) ?? '');
@@ -619,7 +631,11 @@ export function OrcamentoFinanceiro() {
     valorFixoContrato != null
       ? valorFixoContrato
       : (itensQuery.data ?? []).reduce((soma, item) => soma + (Number(precos[item.id]) || 0) * item.quantidade, 0);
-  const descontoNum = bonificacao ? subtotal : Number(desconto) || 0;
+  const descontoNum = bonificacao
+    ? subtotal
+    : descontoTipo === 'percentual'
+      ? Math.min(subtotal, (subtotal * (Number(descontoPercentual) || 0)) / 100)
+      : Number(desconto) || 0;
   const total = bonificacao ? 0 : Math.max(subtotal - descontoNum, 0);
 
   // Valor de contrato vira o total do orçamento direto - os itens ficam
@@ -939,6 +955,8 @@ export function OrcamentoFinanceiro() {
     setPrecoFixoSelecionado('');
     setValorFixoContrato(o.valor_fixo_contrato ?? null);
     setDesconto(o.desconto ? String(o.desconto) : '');
+    setDescontoTipo('valor');
+    setDescontoPercentual('');
     setBonificacao(!!o.bonificacao);
     setAnexarOrientacao(false);
     setEmailsAdicionais('');
@@ -1952,18 +1970,47 @@ export function OrcamentoFinanceiro() {
                 <span>Subtotal</span>
                 <span>{formatarMoeda(subtotal)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                <label style={{ fontSize: 13, color: 'var(--ink-600)', margin: 0 }}>Desconto (R$)</label>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={bonificacao ? subtotal : desconto}
-                  disabled={bonificacao || travado}
-                  onChange={(e) => setDesconto(e.target.value)}
-                  style={{ width: 120, textAlign: 'right', padding: '6px 8px' }}
-                />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 8 }}>
+                <label style={{ fontSize: 13, color: 'var(--ink-600)', margin: 0 }}>Desconto</label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <select
+                    value={descontoTipo}
+                    disabled={bonificacao || travado}
+                    onChange={(e) => setDescontoTipo(e.target.value as 'valor' | 'percentual')}
+                    style={{ padding: '6px 4px', width: 56 }}
+                  >
+                    <option value="valor">R$</option>
+                    <option value="percentual">%</option>
+                  </select>
+                  {descontoTipo === 'percentual' ? (
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.1"
+                      value={bonificacao ? 100 : descontoPercentual}
+                      disabled={bonificacao || travado}
+                      onChange={(e) => setDescontoPercentual(e.target.value)}
+                      style={{ width: 90, textAlign: 'right', padding: '6px 8px' }}
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={bonificacao ? subtotal : desconto}
+                      disabled={bonificacao || travado}
+                      onChange={(e) => setDesconto(e.target.value)}
+                      style={{ width: 120, textAlign: 'right', padding: '6px 8px' }}
+                    />
+                  )}
+                </div>
               </div>
+              {!bonificacao && descontoTipo === 'percentual' && descontoNum > 0 && (
+                <div style={{ textAlign: 'right', fontSize: 11, color: 'var(--ink-400)', marginTop: 2 }}>
+                  Equivale a {formatarMoeda(descontoNum)}
+                </div>
+              )}
               <label
                 style={{
                   display: 'flex',
