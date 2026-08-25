@@ -143,13 +143,18 @@ export function OrdensServicoPanel() {
       .filter((item) => os.triagem_avarias?.[String(item.id)])
       .map((item) => item.descricao);
 
-    const caixaCheck = '<span style="display:inline-block;width:12px;height:12px;border:1.3px solid #21201c;"></span>';
+    const caixaCheck = '<span style="display:inline-block;width:8px;height:8px;border:1.2px solid #21201c;"></span>';
 
     // Só a tabela de etapas fica compacta (é a parte comprida, com 11
     // linhas) - o resto do documento usa o tamanho normal do sistema.
+    // O bloco .etapas-bloco também aperta a faixa "Etapas do processo" e
+    // o espaçamento acima da tabela - só nesse trecho, via seletor
+    // aninhado, sem afetar as demais faixas .laudo-secao do documento.
     const corpo = `
       <style>
-        .etapas-compactas th, .etapas-compactas td { padding: 3px 8px; font-size: 10px; }
+        .etapas-bloco .laudo-secao { margin-top: 6px; padding: 2px 14px; font-size: 10px; }
+        .etapas-compactas { margin-top: 1px; }
+        .etapas-compactas th, .etapas-compactas td { padding: 1px 5px; font-size: 8px; line-height: 1.1; }
       </style>
       <h1>Ficha de Acompanhamento</h1>
       <p class="subtitulo">Documento interno - acompanha o equipamento dentro da CVF, marcado à mão a cada etapa.</p>
@@ -177,22 +182,24 @@ export function OrdensServicoPanel() {
       <div class="laudo-secao">Peças a substituir (conforme orçamento aprovado)</div>
       <div class="laudo-caixa">${itensHtml}</div>
 
-      <div class="laudo-secao">Etapas do processo</div>
-      <table class="dados etapas-compactas">
-        <thead>
-          <tr>
-            <th>Etapa</th>
-            <th style="width:40px;text-align:center;">OK</th>
-            <th style="width:110px;">Rubrica</th>
-            <th style="width:75px;">Data</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${STATUS_OS_ORDENADOS.map(
-            (etapa) => `<tr><td>${etapa}</td><td style="text-align:center;">${caixaCheck}</td><td></td><td></td></tr>`,
-          ).join('')}
-        </tbody>
-      </table>
+      <div class="etapas-bloco">
+        <div class="laudo-secao">Etapas do processo</div>
+        <table class="dados etapas-compactas">
+          <thead>
+            <tr>
+              <th>Etapa</th>
+              <th style="width:40px;text-align:center;">OK</th>
+              <th style="width:110px;">Rubrica</th>
+              <th style="width:75px;">Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${STATUS_OS_ORDENADOS.map(
+              (etapa) => `<tr><td>${etapa}</td><td style="text-align:center;">${caixaCheck}</td><td></td><td></td></tr>`,
+            ).join('')}
+          </tbody>
+        </table>
+      </div>
 
       <div class="laudo-secao">Observações durante o processo</div>
       <div class="laudo-caixa" style="min-height:90px;"></div>
