@@ -64,6 +64,7 @@ interface Orcamento {
     optica_desc: string | null;
     optica_fab: string | null;
     optica_sn: string | null;
+    defeito_relatado: string | null;
     prazo_entrega: string | null;
     eh_otica: boolean | null;
     cliente_final_id: number | null;
@@ -244,7 +245,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo, status_os)',
+          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo, status_os)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -658,6 +659,7 @@ export function OrcamentoFinanceiro() {
   function clienteParaPdf(c: Cliente | undefined): DadosClientePdf {
     return {
       cnpj: c?.cnpj ?? null,
+      nomeFantasia: c?.nome_fantasia ?? null,
       endereco: enderecoCompletoCliente(c),
       cidade: c?.cidade ?? null,
       uf: c?.uf ?? null,
@@ -1190,6 +1192,9 @@ export function OrcamentoFinanceiro() {
           clienteNome: os?.cliente_nome ?? '',
           clienteFinalNome,
           equipamento: os?.optica_desc ?? '-',
+          fabricante: os?.optica_fab ?? null,
+          numeroSerie: os?.optica_sn ?? null,
+          defeitoRelatado: os?.defeito_relatado ?? null,
           itens: await Promise.all(
             itens.map(async (it) => ({
               nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
@@ -1323,6 +1328,9 @@ export function OrcamentoFinanceiro() {
         clienteNome: os?.cliente_nome ?? '',
         clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
         equipamento: os?.optica_desc ?? '-',
+        fabricante: os?.optica_fab ?? null,
+        numeroSerie: os?.optica_sn ?? null,
+        defeitoRelatado: os?.defeito_relatado ?? null,
         itens: await Promise.all(
           itens.map(async (it) => ({
             nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',

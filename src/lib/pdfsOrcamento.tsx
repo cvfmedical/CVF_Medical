@@ -13,6 +13,16 @@ const azulEscuro = '#26386c';
 const tinta = '#21201c';
 const cinza = '#5c5a54';
 const borda = '#e4e1d8';
+// Mesma identidade visual do resto do sistema (laudos - BancadaVisaoPdf.tsx/
+// LaudoEquipamentoPdf.tsx - e relatórios impressos - src/lib/imprimir.ts):
+// faixa de seção azul-marinho, caixa com borda e grade zebrada. Os 3
+// documentos deste arquivo (orçamento/entrada/OS) são os únicos que ainda
+// usavam o estilo antigo (iam num e-mail automático com "cara" diferente
+// dos mesmos 3 documentos quando impressos manualmente).
+const corAzul = '#08336a';
+const corBorda = '#1e40af';
+const corLinha = '#d1d5db';
+const corZebra = '#f8fafc';
 
 const s = StyleSheet.create({
   page: { paddingTop: 36, paddingBottom: 64, paddingHorizontal: 40, fontSize: 10, fontFamily: 'Helvetica', color: tinta },
@@ -22,6 +32,14 @@ const s = StyleSheet.create({
   slogan: { fontSize: 9, fontStyle: 'italic', color: azul },
   titulo: { fontSize: 15, color: azulEscuro, marginBottom: 2 },
   subtitulo: { fontSize: 9, color: cinza, marginBottom: 14 },
+  faixa: { backgroundColor: corAzul, color: '#fff', fontFamily: 'Helvetica-Bold', fontSize: 9, padding: 5, marginTop: 12, marginBottom: 3 },
+  caixa: { border: 1, borderColor: corBorda, padding: 4, marginBottom: 6 },
+  linhaDupla: { flexDirection: 'row' },
+  colEsq: { flex: 1, padding: 4, borderRightWidth: 0.5, borderRightColor: corLinha },
+  colDir: { flex: 1, padding: 4 },
+  linhaZebra: { backgroundColor: corZebra },
+  linhaBorda: { borderTopWidth: 0.5, borderTopColor: corLinha },
+  bold: { fontFamily: 'Helvetica-Bold' },
   secao: { fontSize: 10, fontWeight: 700, color: azulEscuro, textTransform: 'uppercase', borderBottomWidth: 1, borderBottomColor: borda, paddingBottom: 3, marginTop: 14, marginBottom: 6 },
   linha: { flexDirection: 'row', marginBottom: 4 },
   rotulo: { width: 130, color: cinza },
@@ -63,19 +81,108 @@ function Cabecalho({ titulo, subtitulo }: { titulo: string; subtitulo?: string }
   );
 }
 
-// Identificação completa do cliente (CNPJ, endereço, telefone, e-mail) -
-// mesmos campos usados no Laudo de equipamento e nos relatórios impressos,
-// pra todo documento do sistema ter a mesma completude.
-function LinhaCliente({ d }: { d: DadosClientePdf }) {
-  if (!d.cnpj && !d.endereco && !d.cidade && !d.telefone && !d.email) return null;
+// Seção "N. Identificação do cliente" - mesma faixa azul-marinho + grade
+// zebrada usada nos laudos e nos relatórios impressos (imprimir.ts), pra
+// os 3 documentos deste arquivo (que vão como anexo no envio automático
+// por e-mail) terem a mesma cara de quando são gerados/impressos na mão.
+function SecaoIdentificacaoCliente({
+  numero,
+  nome,
+  d,
+  clienteFinalNome,
+}: {
+  numero?: string;
+  nome: string;
+  d: DadosClientePdf;
+  clienteFinalNome?: string | null;
+}) {
   return (
-    <Text style={{ fontSize: 8.5, color: cinza, marginBottom: 6 }}>
-      {d.cnpj ? `CNPJ/CPF: ${d.cnpj}` : ''}
-      {d.endereco ? `${d.cnpj ? ' · ' : ''}${d.endereco}` : ''}
-      {d.cidade ? `${d.cnpj || d.endereco ? ' · ' : ''}${d.cidade}${d.uf ? '/' + d.uf : ''}` : ''}
-      {d.telefone ? `${d.cnpj || d.endereco || d.cidade ? ' · ' : ''}Tel: ${d.telefone}` : ''}
-      {d.email ? `${d.cnpj || d.endereco || d.cidade || d.telefone ? ' · ' : ''}${d.email}` : ''}
-    </Text>
+    <>
+      <Text style={s.faixa}>{numero ? `${numero}. ` : ''}Identificação do cliente</Text>
+      <View style={s.caixa}>
+        <View style={s.linhaDupla}>
+          <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+            <Text style={s.bold}>Razão social: </Text>
+            {nome || '-'}
+          </Text>
+          <Text style={s.colDir}>
+            <Text style={s.bold}>CNPJ/CPF: </Text>
+            {d.cnpj || '-'}
+          </Text>
+        </View>
+        <View style={[s.linhaDupla, s.linhaBorda, s.linhaZebra]}>
+          <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+            <Text style={s.bold}>Nome fantasia: </Text>
+            {d.nomeFantasia || '-'}
+          </Text>
+          <Text style={s.colDir}>
+            <Text style={s.bold}>Cidade/UF: </Text>
+            {d.cidade ? `${d.cidade}${d.uf ? '/' + d.uf : ''}` : '-'}
+          </Text>
+        </View>
+        <View style={[s.linhaDupla, s.linhaBorda]}>
+          <Text style={{ padding: 4 }}>
+            <Text style={s.bold}>Endereço: </Text>
+            {d.endereco || '-'}
+          </Text>
+        </View>
+        <View style={[s.linhaDupla, s.linhaBorda, s.linhaZebra]}>
+          <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+            <Text style={s.bold}>Telefone: </Text>
+            {d.telefone || '-'}
+          </Text>
+          <Text style={s.colDir}>
+            <Text style={s.bold}>E-mail: </Text>
+            {d.email || '-'}
+          </Text>
+        </View>
+        {clienteFinalNome && (
+          <View style={[s.linhaDupla, s.linhaBorda]}>
+            <Text style={{ padding: 4 }}>
+              <Text style={s.bold}>Unidade atendida: </Text>
+              {clienteFinalNome}
+            </Text>
+          </View>
+        )}
+      </View>
+    </>
+  );
+}
+
+// Seção "N. Identificação do equipamento" - equipamento/fabricante + nº de
+// série, com uma linha extra opcional (NF de remessa/nº de controle no
+// orçamento, defeito relatado na OS).
+function SecaoIdentificacaoEquipamento({
+  numero,
+  equipamento,
+  fabricante,
+  numeroSerie,
+  linhaExtra,
+}: {
+  numero: string;
+  equipamento: string;
+  fabricante?: string | null;
+  numeroSerie?: string | null;
+  linhaExtra?: ReactNode;
+}) {
+  return (
+    <>
+      <Text style={s.faixa}>{numero}. Identificação do equipamento</Text>
+      <View style={s.caixa}>
+        <View style={s.linhaDupla}>
+          <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+            <Text style={s.bold}>Equipamento: </Text>
+            {equipamento || '-'}
+            {fabricante ? ` (${fabricante})` : ''}
+          </Text>
+          <Text style={s.colDir}>
+            <Text style={s.bold}>Nº de série: </Text>
+            {numeroSerie || '-'}
+          </Text>
+        </View>
+        {linhaExtra}
+      </View>
+    </>
   );
 }
 
@@ -98,6 +205,7 @@ export interface ItemOrcamentoPdf {
 
 export interface DadosClientePdf {
   cnpj?: string | null;
+  nomeFantasia?: string | null;
   endereco?: string | null;
   cidade?: string | null;
   uf?: string | null;
@@ -134,27 +242,37 @@ export interface DadosOrcamentoPdf extends DadosClientePdf {
 }
 
 function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
+  const nfOuControle = d.nfRemessaNumero ? (
+    <View style={[s.linhaDupla, s.linhaBorda, s.linhaZebra]}>
+      <Text style={{ padding: 4 }}>
+        <Text style={s.bold}>NF de remessa: </Text>
+        {d.nfRemessaNumero}
+        {d.nfRemessaSerie ? `/${d.nfRemessaSerie}` : ''}
+      </Text>
+    </View>
+  ) : d.numeroControleCliente ? (
+    <View style={[s.linhaDupla, s.linhaBorda, s.linhaZebra]}>
+      <Text style={{ padding: 4 }}>
+        <Text style={s.bold}>Nº de controle do cliente: </Text>
+        {d.numeroControleCliente}
+      </Text>
+    </View>
+  ) : undefined;
+
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Cabecalho titulo="Orçamento de Manutenção" subtitulo={`Nº ${d.numeroOrcamento} · OS ${d.numeroOS} · ${d.clienteNome}`} />
-        <LinhaCliente d={d} />
-        {d.clienteFinalNome && (
-          <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
-        )}
-        <Text style={{ fontSize: 9, color: cinza, marginBottom: d.nfRemessaNumero || d.numeroControleCliente ? 2 : 10 }}>
-          {d.equipamento}{d.numeroSerie ? ` · Nº série ${d.numeroSerie}` : ''}
-        </Text>
-        {d.nfRemessaNumero ? (
-          <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>
-            NF de remessa: {d.nfRemessaNumero}{d.nfRemessaSerie ? `/${d.nfRemessaSerie}` : ''}
-          </Text>
-        ) : d.numeroControleCliente ? (
-          <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>
-            Nº de controle do cliente: {d.numeroControleCliente}
-          </Text>
-        ) : null}
+        <Cabecalho titulo="Orçamento de Manutenção" subtitulo={`Nº ${d.numeroOrcamento} · OS ${d.numeroOS}`} />
 
+        <SecaoIdentificacaoCliente numero="1" nome={d.clienteNome} d={d} clienteFinalNome={d.clienteFinalNome} />
+        <SecaoIdentificacaoEquipamento
+          numero="2"
+          equipamento={d.equipamento}
+          numeroSerie={d.numeroSerie}
+          linhaExtra={nfOuControle}
+        />
+
+        <Text style={s.faixa}>3. Itens</Text>
         <View style={s.th}>
           <Text style={s.cItem}>Item</Text>
           <Text style={s.cQtd}>Qtd.</Text>
@@ -189,33 +307,51 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
 
         {d.ehOtica && (
           <View wrap={false}>
-            <Text style={s.secao}>Procedimentos de manutenção incluídos</Text>
-            {CHECKLIST_OTICA.map((item, i) => (
-              <Text style={s.item} key={i}>• {item}</Text>
-            ))}
-            <Text style={s.alerta}>{AVISO_MANUTENCAO}</Text>
+            <Text style={s.faixa}>Procedimentos de manutenção incluídos</Text>
+            <View style={s.caixa}>
+              {CHECKLIST_OTICA.map((item, i) => (
+                <Text style={s.item} key={i}>• {item}</Text>
+              ))}
+              <Text style={s.alerta}>{AVISO_MANUTENCAO}</Text>
+            </View>
           </View>
         )}
 
-        <Text style={s.secao}>Condições comerciais</Text>
-        <View style={s.linha}><Text style={s.rotulo}>Validade da proposta</Text><Text style={s.valor}>{d.validade || '-'}</Text></View>
-        <View style={s.linha}><Text style={s.rotulo}>Condições de pagamento</Text><Text style={s.valor}>{d.pagamento || '-'}</Text></View>
+        <Text style={s.faixa}>4. Condições comerciais</Text>
+        <View style={s.caixa}>
+          <View style={s.linhaDupla}>
+            <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={s.bold}>Validade da proposta: </Text>
+              {d.validade || '-'}
+            </Text>
+            <Text style={s.colDir}>
+              <Text style={s.bold}>Condições de pagamento: </Text>
+              {d.pagamento || '-'}
+            </Text>
+          </View>
+        </View>
 
         <View wrap={false}>
-          <Text style={s.secao}>Garantia</Text>
-          <Text style={{ marginBottom: 3 }}>{d.garantiaResumo}</Text>
-          <Text style={s.legal}>{d.garantiaIntro}</Text>
-          {d.garantiaItens.map((g, i) => (
-            <Text style={s.legal} key={i}>{i + 1}. {g}</Text>
-          ))}
-          <Text style={s.secao}>Condições gerais</Text>
-          {d.clausulas.map((c, i) => (
-            <Text style={s.legal} key={i}><Text style={{ fontWeight: 700 }}>{c.titulo}.</Text> {c.texto}</Text>
-          ))}
+          <Text style={s.faixa}>5. Garantia</Text>
+          <View style={s.caixa}>
+            <Text style={{ marginBottom: 3 }}>{d.garantiaResumo}</Text>
+            <Text style={s.legal}>{d.garantiaIntro}</Text>
+            {d.garantiaItens.map((g, i) => (
+              <Text style={s.legal} key={i}>{i + 1}. {g}</Text>
+            ))}
+          </View>
+          <Text style={s.faixa}>6. Condições gerais</Text>
+          <View style={s.caixa}>
+            {d.clausulas.map((c, i) => (
+              <Text style={s.legal} key={i}><Text style={{ fontWeight: 700 }}>{c.titulo}.</Text> {c.texto}</Text>
+            ))}
+          </View>
           {d.observacoes ? (
             <>
-              <Text style={s.secao}>Observações</Text>
-              <Text style={s.legal}>{d.observacoes}</Text>
+              <Text style={s.faixa}>7. Observações</Text>
+              <View style={s.caixa}>
+                <Text style={s.legal}>{d.observacoes}</Text>
+              </View>
             </>
           ) : null}
         </View>
@@ -241,27 +377,79 @@ export interface DadosEntradaPdf extends DadosClientePdf {
 }
 
 function DocEntrada({ d }: { d: DadosEntradaPdf }) {
+  const nfOuControle = d.nfNumero ? (
+    <View style={[s.linhaDupla, s.linhaBorda]}>
+      <Text style={{ padding: 4 }}>
+        <Text style={s.bold}>Número/Série: </Text>
+        {d.nfNumero}
+        {d.nfSerie ? `/${d.nfSerie}` : ''}
+      </Text>
+    </View>
+  ) : d.numeroControleCliente ? (
+    <View style={[s.linhaDupla, s.linhaBorda]}>
+      <Text style={{ padding: 4 }}>
+        <Text style={s.bold}>Nº controle do cliente: </Text>
+        {d.numeroControleCliente}
+      </Text>
+    </View>
+  ) : undefined;
+
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Cabecalho titulo="Registro de Entrada" subtitulo={`${d.codigo} · ${d.clienteNome}`} />
-        <LinhaCliente d={d} />
-        <View style={s.linha}><Text style={s.rotulo}>Equipamento</Text><Text style={s.valor}>{d.equipamento || '-'}</Text></View>
-        <View style={s.linha}><Text style={s.rotulo}>Fabricante</Text><Text style={s.valor}>{d.fabricante || '-'}</Text></View>
-        <View style={s.linha}><Text style={s.rotulo}>Nº de série</Text><Text style={s.valor}>{d.numeroSerie || '-'}</Text></View>
-        <View style={s.linha}><Text style={s.rotulo}>Condição de chegada</Text><Text style={s.valor}>{d.condicaoChegada || '-'}</Text></View>
-        <View style={s.linha}><Text style={s.rotulo}>Data de entrada</Text><Text style={s.valor}>{d.data || '-'}</Text></View>
-        <Text style={s.secao}>Nota fiscal de remessa</Text>
-        <View style={s.linha}><Text style={s.rotulo}>Número / Série</Text><Text style={s.valor}>{d.nfNumero || '-'} / {d.nfSerie || '-'}</Text></View>
-        <Text style={s.secao}>Avarias identificadas na triagem</Text>
-        {d.avarias.length === 0 ? (
-          <Text style={{ color: cinza }}>Nenhuma avaria marcada.</Text>
-        ) : (
-          d.avarias.map((a, i) => <Text key={i}>• {a}</Text>)
+        <Cabecalho titulo="Registro de Entrada" subtitulo={d.codigo} />
+
+        <SecaoIdentificacaoCliente nome={d.clienteNome} d={d} />
+
+        <Text style={s.faixa}>2. Identificação do equipamento</Text>
+        <View style={s.caixa}>
+          <View style={s.linhaDupla}>
+            <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={s.bold}>Equipamento: </Text>
+              {d.equipamento || '-'}
+            </Text>
+            <Text style={s.colDir}>
+              <Text style={s.bold}>Fabricante: </Text>
+              {d.fabricante || '-'}
+            </Text>
+          </View>
+          <View style={[s.linhaDupla, s.linhaBorda, s.linhaZebra]}>
+            <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={s.bold}>Nº de série: </Text>
+              {d.numeroSerie || '-'}
+            </Text>
+            <Text style={s.colDir}>
+              <Text style={s.bold}>Condição de chegada: </Text>
+              {d.condicaoChegada || '-'}
+            </Text>
+          </View>
+          <View style={[s.linhaDupla, s.linhaBorda]}>
+            <Text style={{ padding: 4 }}>
+              <Text style={s.bold}>Data de entrada: </Text>
+              {d.data || '-'}
+            </Text>
+          </View>
+        </View>
+
+        {nfOuControle && (
+          <>
+            <Text style={s.faixa}>3. Nota fiscal de remessa para conserto</Text>
+            <View style={s.caixa}>{nfOuControle}</View>
+          </>
         )}
+
+        <Text style={s.faixa}>{nfOuControle ? '4' : '3'}. Avarias identificadas na triagem</Text>
+        <View style={s.caixa}>
+          {d.avarias.length === 0 ? (
+            <Text style={{ color: cinza }}>Nenhuma avaria marcada.</Text>
+          ) : (
+            d.avarias.map((a, i) => <Text key={i}>• {a}</Text>)
+          )}
+        </View>
+
         {d.fotos && d.fotos.length > 0 && (
           <>
-            <Text style={s.secao}>Fotos</Text>
+            <Text style={s.faixa}>Fotos</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
               {d.fotos.map((f, i) => (
                 <Image key={i} src={f} style={{ width: 150, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 3 }} />
@@ -287,26 +475,55 @@ export interface DadosOSPdf extends DadosClientePdf {
   clienteNome: string;
   clienteFinalNome?: string | null;
   equipamento: string;
+  fabricante?: string | null;
+  numeroSerie?: string | null;
+  defeitoRelatado?: string | null;
   itens: ItemOSPdf[];
   observacoesTecnico?: string | null;
   prazoEntrega?: string | null;
 }
 
 function DocOS({ d }: { d: DadosOSPdf }) {
+  const numeroSecaoItens = 3;
+  const numeroSecaoObs = d.itens.length > 0 ? numeroSecaoItens + 1 : numeroSecaoItens;
+
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Cabecalho titulo="Ordem de Serviço" subtitulo={`${d.numeroOS} · ${d.clienteNome}`} />
-        <LinhaCliente d={d} />
-        {d.clienteFinalNome && (
-          <Text style={{ fontSize: 9, color: cinza, marginBottom: 2 }}>Unidade atendida: {d.clienteFinalNome}</Text>
-        )}
-        <Text style={{ fontSize: 9, color: cinza, marginBottom: 10 }}>{d.equipamento}</Text>
-        {d.prazoEntrega ? (
-          <View style={s.linha}><Text style={s.rotulo}>Prazo de entrega</Text><Text style={s.valor}>{d.prazoEntrega}</Text></View>
-        ) : null}
+        <Cabecalho titulo="Ordem de Serviços - Laudo Técnico" subtitulo="Q-CVF Medical - Manutenção em Equipamentos Cirúrgicos" />
+
+        <View style={s.caixa}>
+          <View style={s.linhaDupla}>
+            <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
+              <Text style={s.bold}>Ordem de serviço: </Text>
+              {d.numeroOS}
+            </Text>
+            <Text style={s.colDir}>
+              <Text style={s.bold}>Prazo de entrega: </Text>
+              {d.prazoEntrega || '-'}
+            </Text>
+          </View>
+        </View>
+
+        <SecaoIdentificacaoCliente numero="1" nome={d.clienteNome} d={d} clienteFinalNome={d.clienteFinalNome} />
+        <SecaoIdentificacaoEquipamento
+          numero="2"
+          equipamento={d.equipamento}
+          fabricante={d.fabricante}
+          numeroSerie={d.numeroSerie}
+          linhaExtra={
+            <View style={[s.linhaDupla, s.linhaBorda]}>
+              <Text style={{ padding: 4 }}>
+                <Text style={s.bold}>Defeito relatado: </Text>
+                {d.defeitoRelatado || '-'}
+              </Text>
+            </View>
+          }
+        />
+
         {d.itens.length > 0 && (
           <>
+            <Text style={s.faixa}>{numeroSecaoItens}. Peças/serviços identificados</Text>
             <View style={s.th}>
               <Text style={s.cItem}>Item / peça</Text>
               <Text style={s.cQtd}>Qtd.</Text>
@@ -331,12 +548,18 @@ function DocOS({ d }: { d: DadosOSPdf }) {
         )}
         {d.observacoesTecnico ? (
           <>
-            <Text style={s.secao}>Observações técnicas gerais</Text>
-            <Text>{d.observacoesTecnico}</Text>
+            <Text style={s.faixa}>{numeroSecaoObs}. Observações técnicas gerais</Text>
+            <View style={s.caixa}>
+              <Text>{d.observacoesTecnico}</Text>
+            </View>
           </>
         ) : d.itens.length === 0 ? (
           <Text style={{ color: cinza, marginTop: 8 }}>Nenhuma peça ou observação registrada ainda.</Text>
         ) : null}
+        <Text style={s.legal}>
+          Este relatório mostra apenas o que foi identificado tecnicamente - os valores são definidos e enviados
+          separadamente pelo setor financeiro, no orçamento.
+        </Text>
         <Rodape />
       </Page>
     </Document>
