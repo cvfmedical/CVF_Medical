@@ -24,6 +24,7 @@ import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { formatarModeloOtica } from '../../lib/formato';
 import { registrarEmailEnviado } from '../../lib/emailsEnviados';
+import { AlertaGarantia } from '../../components/AlertaGarantia';
 
 const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'cliente', 'equipamento_desc', 'equipamento_sn', 'nf_remessa', 'status', 'data_entrada'];
 
@@ -994,6 +995,11 @@ export function EntradaEquipamento() {
           aoMinimizar={minimizarEntrada}
           larguraMax={560}
         >
+            <AlertaGarantia
+              clienteId={form.cliente_id ? Number(form.cliente_id) : null}
+              numeroSerie={form.equipamento_sn}
+              ordemServicoIdAtual={editando?.ordem_servico_id ?? null}
+            />
             {!!editando?.ordem_servico_id && (
               <p style={{ fontSize: 12, color: 'var(--copper-500)', marginTop: -8, marginBottom: 12 }}>
                 Esta entrada já foi convertida em OS - os dados ficam somente-leitura (o checklist de avarias

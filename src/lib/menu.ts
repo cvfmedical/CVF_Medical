@@ -116,6 +116,7 @@ export const MENU: CategoriaMenu[] = [
     icone: IconBriefcase,
     itens: [
       { label: 'Contratos de manutenção', path: '/comercial/contratos', categoria: 'comercial', implementado: false },
+      { label: 'Garantias ativas', path: '/comercial/garantias', categoria: 'comercial', implementado: false },
     ],
   },
   {

@@ -14,6 +14,7 @@ import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOr
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { CapturaFoto } from '../../components/CapturaFoto';
+import { AlertaGarantia } from '../../components/AlertaGarantia';
 
 interface Orcamento {
   id: number;
@@ -452,6 +453,14 @@ export function OrcamentoTecnico() {
           Mostra OS em triagem (orçamento novo) e OS com orçamento já iniciado, ainda não enviado ao financeiro.
         </p>
       </div>
+
+      {osId && osDetalheQuery.data && (
+        <AlertaGarantia
+          clienteId={osDetalheQuery.data.cliente_id}
+          numeroSerie={osDetalheQuery.data.optica_sn}
+          ordemServicoIdAtual={Number(osId)}
+        />
+      )}
 
       {osId && orcamentoQuery.isLoading && <CarregandoTela />}
 

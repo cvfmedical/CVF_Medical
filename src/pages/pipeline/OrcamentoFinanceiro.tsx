@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE } from '../../lib/statusOS';
+import { AlertaGarantia } from '../../components/AlertaGarantia';
 import { normalizarBusca } from '../../lib/normalizarBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
@@ -1559,6 +1560,11 @@ export function OrcamentoFinanceiro() {
           aoMinimizar={minimizarFinanceiro}
           larguraMax={640}
         >
+            <AlertaGarantia
+              clienteId={orcamentoSelecionado.ordens_servico?.cliente_id}
+              numeroSerie={orcamentoSelecionado.ordens_servico?.optica_sn}
+              ordemServicoIdAtual={orcamentoSelecionado.ordem_servico_id}
+            />
             {orcamentoSelecionado.ordens_servico && (
               <div
                 style={{
