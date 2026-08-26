@@ -380,7 +380,7 @@ export function Faturamento() {
       setErro('Informe o número da nota.');
       return;
     }
-    if (!linhaSelecionada.contaId && parcelado) {
+    if (parcelado) {
       if (parcelas.length === 0) {
         setErro('Adicione pelo menos uma parcela, ou desmarque "Pagamento parcelado".');
         return;
@@ -406,24 +406,21 @@ export function Faturamento() {
         nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
         nf_data_emissao: form.nf_data_emissao || null,
       };
-      if (linhaSelecionada.contaId) {
-        // Conta já existia (lançamento avulso ou criada antes da migração
-        // 056) - só atualiza os dados de NF/boleto.
-        const { error } = await supabase
-          .from('contas_receber')
-          .update({
-            ...camposNota,
-            boleto_numero: form.boleto_numero || null,
-            boleto_linha_digitavel: form.boleto_linha_digitavel || null,
-            boleto_vencimento: form.boleto_vencimento || null,
-          })
-          .eq('id', linhaSelecionada.contaId);
-        if (error) throw error;
-      } else if (parcelado) {
+      if (parcelado) {
         // Uma NF só, paga em N parcelas - cada parcela vira sua própria
         // conta a receber (mesma NF, mesmo orçamento), com vencimento e
         // boleto próprios - reaproveita 100% do controle de "Contas a
         // receber" já existente (cada parcela é baixada/recebida sozinha).
+        if (linhaSelecionada.contaId) {
+          // Já existia uma conta avulsa pra esse orçamento (lançamento
+          // avulso ou criada antes da migração 056, ainda sem NF) - remove
+          // ela pra dar lugar às N parcelas abaixo.
+          const { error: erroRemover } = await supabase
+            .from('contas_receber')
+            .delete()
+            .eq('id', linhaSelecionada.contaId);
+          if (erroRemover) throw erroRemover;
+        }
         for (let i = 0; i < parcelas.length; i++) {
           const p = parcelas[i];
           const numeroConta = await gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
@@ -442,6 +439,19 @@ export function Faturamento() {
           });
           if (error) throw error;
         }
+      } else if (linhaSelecionada.contaId) {
+        // Conta já existia (lançamento avulso ou criada antes da migração
+        // 056) e não é parcelado - só atualiza os dados de NF/boleto.
+        const { error } = await supabase
+          .from('contas_receber')
+          .update({
+            ...camposNota,
+            boleto_numero: form.boleto_numero || null,
+            boleto_linha_digitavel: form.boleto_linha_digitavel || null,
+            boleto_vencimento: form.boleto_vencimento || null,
+          })
+          .eq('id', linhaSelecionada.contaId);
+        if (error) throw error;
       } else {
         // Ainda não existe conta pra esse orçamento - cria agora, com os
         // dados de NF/boleto já preenchidos de uma vez.
@@ -766,7 +776,7 @@ export function Faturamento() {
               />
             </div>
 
-            {!linhaSelecionada.contaId && (
+            {!linhaSelecionada.nf_numero && (
               <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
                 <input
                   type="checkbox"
@@ -784,7 +794,7 @@ export function Faturamento() {
               </div>
             )}
 
-            {parcelado && !linhaSelecionada.contaId ? (
+            {parcelado ? (
               <>
                 <h2 style={{ fontSize: 13, marginTop: 16 }}>Parcelas / boletos</h2>
                 {parcelas.map((p, i) => (
