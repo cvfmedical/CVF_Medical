@@ -118,21 +118,77 @@ export function OrcamentoTecnico() {
     if (osParam) setOsId(osParam);
   }, [searchParams]);
 
-  const orcamentoQuery = useQuery({
-    queryKey: ['orcamento-por-os', osId],
+  // Qual orçamento desta OS está sendo editado agora. Uma OS pode ter mais
+  // de um (orçamentos alternativos - ex.: cliente escolhe entre só o
+  // reparo pedido ou o reparo + uma peça extra que o técnico identificou);
+  // null = segue o comportamento padrão de sempre mostrar o mais recente.
+  const [orcamentoIdSelecionado, setOrcamentoIdSelecionado] = useState<number | null>(null);
+  useEffect(() => {
+    setOrcamentoIdSelecionado(null);
+  }, [osId]);
+
+  const orcamentosOSQuery = useQuery({
+    queryKey: ['orcamentos-da-os', osId],
     enabled: !!osId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orcamentos')
+        .select('id, numero_orcamento, status')
+        .eq('ordem_servico_id', Number(osId))
+        .order('id', { ascending: true });
+      if (error) throw error;
+      return data as { id: number; numero_orcamento: string; status: string }[];
+    },
+  });
+  const idOrcamentoAtivo = orcamentoIdSelecionado ?? orcamentosOSQuery.data?.at(-1)?.id ?? null;
+
+  const orcamentoQuery = useQuery({
+    queryKey: ['orcamento-detalhe', idOrcamentoAtivo],
+    enabled: !!idOrcamentoAtivo,
     queryFn: async (): Promise<Orcamento | null> => {
       const { data, error } = await supabase
         .from('orcamentos')
         .select('id, numero_orcamento, status, observacoes_tecnico')
-        .eq('ordem_servico_id', Number(osId))
-        .order('id', { ascending: false })
-        .limit(1)
+        .eq('id', idOrcamentoAtivo!)
         .maybeSingle();
       if (error) throw error;
       return data as Orcamento | null;
     },
   });
+
+  // Cria mais um orçamento pra mesma OS (mesmo equipamento, escopo de
+  // manutenção diferente) - ex.: Opção 1 só com o que o cliente pediu,
+  // Opção 2 incluindo uma peça extra identificada no teste. Numeração
+  // deriva do primeiro orçamento da OS (raiz sem sufixo) + /2, /3...
+  // Quando um deles é aprovado, os outros da mesma OS são recusados
+  // automaticamente (trigger sync_status_os_por_orcamento no banco).
+  const [criandoAlternativo, setCriandoAlternativo] = useState(false);
+  async function criarOrcamentoAlternativo() {
+    const irmaos = orcamentosOSQuery.data ?? [];
+    if (irmaos.length === 0) return;
+    setErro(null);
+    setCriandoAlternativo(true);
+    try {
+      const raiz = irmaos[0].numero_orcamento.split('/')[0];
+      const proximoIndice = irmaos.length + 1;
+      const { data, error } = await supabase
+        .from('orcamentos')
+        .insert({
+          numero_orcamento: `${raiz}/${proximoIndice}`,
+          ordem_servico_id: Number(osId),
+          status: 'Aguardando Precificação',
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ['orcamentos-da-os', osId] });
+      setOrcamentoIdSelecionado(data.id);
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setCriandoAlternativo(false);
+    }
+  }
 
   const osDetalheQuery = useQuery({
     queryKey: ['os-detalhe-orcamento-tecnico', osId],
@@ -242,7 +298,7 @@ export function OrcamentoTecnico() {
         .update({ observacoes_tecnico: observacoesGerais.trim() || null })
         .eq('id', orcamentoQuery.data.id);
       if (error) throw error;
-      qc.invalidateQueries({ queryKey: ['orcamento-por-os', osId] });
+      qc.invalidateQueries({ queryKey: ['orcamento-detalhe', orcamentoQuery.data.id] });
     } catch (e) {
       setErro(mensagemErro(e));
     } finally {
@@ -261,7 +317,7 @@ export function OrcamentoTecnico() {
         status: 'Aguardando Precificação',
       });
       if (error) throw error;
-      qc.invalidateQueries({ queryKey: ['orcamento-por-os', osId] });
+      qc.invalidateQueries({ queryKey: ['orcamentos-da-os', osId] });
       qc.invalidateQueries({ queryKey: ['ordens-servico-para-orcamento-tecnico'] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -378,9 +434,18 @@ export function OrcamentoTecnico() {
     setErro(null);
     setExcluindo(true);
     try {
-      const { error } = await supabase.from('orcamentos').delete().eq('id', orcamentoQuery.data.id);
+      const idExcluido = orcamentoQuery.data.id;
+      const { error } = await supabase.from('orcamentos').delete().eq('id', idExcluido);
       if (error) throw error;
-      setOsId('');
+      // Se ainda sobrar outro orçamento (alternativo) nesta OS, fica na
+      // tela mostrando ele - só volta pra busca quando era o último.
+      const restantes = (orcamentosOSQuery.data ?? []).filter((o) => o.id !== idExcluido);
+      setOrcamentoIdSelecionado(null);
+      if (restantes.length === 0) {
+        setOsId('');
+      } else {
+        await qc.invalidateQueries({ queryKey: ['orcamentos-da-os', osId] });
+      }
       qc.invalidateQueries({ queryKey: ['ordens-servico-para-orcamento-tecnico'] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -475,13 +540,39 @@ export function OrcamentoTecnico() {
 
       {orcamentoQuery.data && (
         <div>
+          {(orcamentosOSQuery.data?.length ?? 0) > 1 && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+              {orcamentosOSQuery.data!.map((o) => (
+                <button
+                  key={o.id}
+                  className={o.id === orcamentoQuery.data!.id ? 'botao-primario botao-pequeno' : 'botao-secundario botao-pequeno'}
+                  onClick={() => setOrcamentoIdSelecionado(o.id)}
+                  title={o.status}
+                >
+                  {o.numero_orcamento}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="crud-cabecalho">
             <p className="mono" style={{ color: 'var(--ink-400)' }}>
               {orcamentoQuery.data.numero_orcamento} — {orcamentoQuery.data.status}
             </p>
-            <button className="botao-primario botao-pequeno" onClick={abrirModalItem} disabled={travado}>
-              <IconPlus size={16} /> Adicionar item
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                className="botao-secundario botao-pequeno"
+                title="Cria outro orçamento pra mesma OS com um escopo de manutenção diferente - ex.: cliente escolhe entre só o que pediu ou incluir mais uma peça identificada no teste"
+                onClick={criarOrcamentoAlternativo}
+                disabled={criandoAlternativo}
+              >
+                {criandoAlternativo
+                  ? 'Criando...'
+                  : `+ Orçamento alternativo (Opção ${(orcamentosOSQuery.data?.length ?? 1) + 1})`}
+              </button>
+              <button className="botao-primario botao-pequeno" onClick={abrirModalItem} disabled={travado}>
+                <IconPlus size={16} /> Adicionar item
+              </button>
+            </div>
           </div>
           {travado && (
             <p style={{ fontSize: 12, color: 'var(--copper-500)' }}>
