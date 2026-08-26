@@ -1667,7 +1667,13 @@ export function OrcamentoFinanceiro() {
               <td>
                 <Badge tono={TONO_STATUS[o.status] ?? 'neutro'}>{o.status}</Badge>
               </td>
-              <td></td>
+              <td className="acoes-tabela">
+                <button className="botao-secundario" onClick={() => abrirOrcamento(o)}>
+                  {o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente'
+                    ? 'Precificar'
+                    : 'Ver / reimprimir'}
+                </button>
+              </td>
             </tr>
           ))}
           {linhasLista.length === 0 && (
