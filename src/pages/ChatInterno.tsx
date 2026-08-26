@@ -300,7 +300,12 @@ export function ChatInterno() {
                     }}
                   />
                 </div>
-                <button className="botao-primario" onClick={enviar} disabled={enviando || !texto.trim()}>
+                <button
+                  className="botao-primario"
+                  style={{ width: 'auto', flexShrink: 0, marginTop: 0 }}
+                  onClick={enviar}
+                  disabled={enviando || !texto.trim()}
+                >
                   Enviar
                 </button>
               </div>
