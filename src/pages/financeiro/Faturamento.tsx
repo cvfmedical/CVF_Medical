@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -15,6 +15,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -34,6 +35,11 @@ interface ContaReceber {
   boleto_numero: string | null;
   boleto_linha_digitavel: string | null;
   boleto_vencimento: string | null;
+  orcamentos: {
+    numero_orcamento: string;
+    ordem_servico_id: number;
+    ordens_servico: { numero_os: string } | null;
+  } | null;
 }
 
 interface OrcamentoAprovado {
@@ -57,6 +63,9 @@ interface LinhaFaturamento {
   chave: string;
   contaId: number | null;
   orcamentoId: number | null;
+  ordemServicoId: number | null;
+  numeroOS: string | null;
+  numeroOrcamento: string | null;
   numero: string;
   clienteId: number | null;
   descricao: string;
@@ -98,10 +107,12 @@ function liberada(statusOS: string | null): boolean {
   return statusOS === STATUS_PRONTO_ENTREGA || statusOS === STATUS_ENTREGUE;
 }
 
-const COLUNAS_FILTRAVEIS = ['numero', 'cliente', 'descricao', 'valor', 'nota_fiscal'];
+const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'numero_os', 'numero_orcamento', 'numero', 'cliente', 'descricao', 'valor', 'nota_fiscal'];
 
 export function Faturamento() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
   const [searchParams] = useSearchParams();
   const [linhaSelecionada, setLinhaSelecionada] = useState<LinhaFaturamento | null>(null);
   const [form, setForm] = useState(formVazio);
@@ -122,6 +133,9 @@ export function Faturamento() {
   // faturar, sem precisar passar pelas telas de teste/entrega uma a uma.
   const [orcamentoParaPular, setOrcamentoParaPular] = useState('');
   const [pulandoEtapa, setPulandoEtapa] = useState(false);
+  // Já faturado some da tabela por padrão - só volta quando o usuário quer
+  // consultar (não é mais uma pendência de ação).
+  const [mostrarFaturados, setMostrarFaturados] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -138,7 +152,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('contas_receber')
         .select(
-          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento',
+          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
         )
         .neq('status', 'Cancelado')
         .order('id', { ascending: false });
@@ -180,6 +194,9 @@ export function Faturamento() {
       chave: `cr-${c.id}`,
       contaId: c.id,
       orcamentoId: c.orcamento_id,
+      ordemServicoId: c.orcamentos?.ordem_servico_id ?? null,
+      numeroOS: c.orcamentos?.ordens_servico?.numero_os ?? null,
+      numeroOrcamento: c.orcamentos?.numero_orcamento ?? null,
       numero: c.numero_conta,
       clienteId: c.cliente_id,
       descricao: c.descricao ?? '',
@@ -205,6 +222,9 @@ export function Faturamento() {
           chave: `orc-${o.id}`,
           contaId: null,
           orcamentoId: o.id,
+          ordemServicoId: o.ordem_servico_id,
+          numeroOS: o.ordens_servico?.numero_os ?? null,
+          numeroOrcamento: o.numero_orcamento,
           numero: o.numero_orcamento,
           clienteId: o.ordens_servico?.cliente_id ?? null,
           descricao: `Orçamento ${o.numero_orcamento} - OS ${o.ordens_servico?.numero_os ?? ''}`,
@@ -227,9 +247,13 @@ export function Faturamento() {
   // aprovados cujo equipamento já está pronto/entregue. Orçamentos aprovados
   // ainda "Aguardando entrega" pertencem a uma etapa anterior do pipeline e
   // não devem poluir esta tabela.
-  const linhasParaFaturar = linhas.filter((l) => l.contaId != null || liberada(l.statusOS));
+  const linhasAcionaveis = linhas.filter((l) => l.contaId != null || liberada(l.statusOS));
 
-  const liberadas = linhasParaFaturar.filter((l) => !l.nf_numero && (l.contaId == null ? liberada(l.statusOS) : true));
+  const liberadas = linhasAcionaveis.filter((l) => !l.nf_numero && (l.contaId == null ? liberada(l.statusOS) : true));
+
+  // Já faturado sai da tabela principal por padrão (aqui é fila de ação,
+  // não histórico) - "Mostrar faturados" liga de volta só pra consulta.
+  const linhasParaFaturar = linhasAcionaveis.filter((l) => mostrarFaturados || !l.nf_numero);
 
   function nomeCliente(id: number | null) {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}` : '-';
@@ -258,6 +282,9 @@ export function Faturamento() {
   function valorColuna(l: LinhaFaturamento, chave: string): unknown {
     if (chave === 'cliente') return nomeCliente(l.clienteId);
     if (chave === 'nota_fiscal') return labelNotaFiscal(l);
+    if (chave === 'codigo_entrada') return (l.ordemServicoId != null ? codigoEntradaPorOS.get(l.ordemServicoId) : null) ?? '';
+    if (chave === 'numero_os') return l.numeroOS ?? '';
+    if (chave === 'numero_orcamento') return l.numeroOrcamento ?? '';
     return (l as unknown as Record<string, unknown>)[chave];
   }
 
@@ -546,10 +573,18 @@ export function Faturamento() {
         </div>
       )}
 
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }}>
+        <input type="checkbox" checked={mostrarFaturados} onChange={(e) => setMostrarFaturados(e.target.checked)} />
+        Mostrar já faturados (consulta)
+      </label>
+
       <table className="tabela-crud">
         <thead>
           <tr>
             {[
+              ['codigo_entrada', 'Entrada'],
+              ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['numero', 'Nº'],
               ['cliente', 'Cliente'],
               ['descricao', 'Descrição'],
@@ -592,6 +627,49 @@ export function Faturamento() {
         <tbody>
           {linhasOrdenadasFiltradas.map((l) => (
             <tr key={l.chave}>
+              <td>
+                {l.ordemServicoId ? (
+                  <span
+                    className="link-numero mono"
+                    onClick={() => navigate(`/registro-entrada?os=${l.ordemServicoId}`)}
+                  >
+                    {codigoEntradaPorOS.get(l.ordemServicoId) ?? '-'}
+                  </span>
+                ) : (
+                  <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                    -
+                  </span>
+                )}
+              </td>
+              <td>
+                {l.ordemServicoId ? (
+                  <span
+                    className="link-numero mono"
+                    title="Abrir orçamento técnico desta OS"
+                    onClick={() => navigate(`/orcamento-tecnico?os=${l.ordemServicoId}`)}
+                  >
+                    {l.numeroOS ?? '-'}
+                  </span>
+                ) : (
+                  <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                    -
+                  </span>
+                )}
+              </td>
+              <td>
+                {l.numeroOrcamento && l.orcamentoId ? (
+                  <span
+                    className="link-numero mono"
+                    onClick={() => navigate(`/orcamento-tecnico?os=${l.ordemServicoId}&orcamento=${l.orcamentoId}`)}
+                  >
+                    {l.numeroOrcamento}
+                  </span>
+                ) : (
+                  <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                    -
+                  </span>
+                )}
+              </td>
               <td className="mono">{l.numero}</td>
               <td>{nomeCliente(l.clienteId)}</td>
               <td>{l.descricao}</td>
@@ -637,7 +715,7 @@ export function Faturamento() {
           ))}
           {linhasOrdenadasFiltradas.length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhuma conta a receber ou orçamento aprovado encontrado.</td>
+              <td colSpan={9}>Nenhuma conta a receber ou orçamento aprovado encontrado.</td>
             </tr>
           )}
         </tbody>
