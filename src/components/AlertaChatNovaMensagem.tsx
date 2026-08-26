@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { AlertaCard } from './AlertaCard';
 import { useAlertaDismissivel } from '../lib/useAlertaDismissivel';
+import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 
 // Contagem de mensagens não lidas no Chat interno, em qualquer conversa -
 // renderizado dentro da pilha AlertasFlutuantes, igual os demais alertas.
@@ -31,7 +32,9 @@ export function AlertaChatNovaMensagem() {
     },
   });
 
-  if (!query.data || query.data === 0 || oculto) return null;
+  const ativo = !!query.data && query.data > 0 && !oculto;
+  useRegistrarAlertaAtivo('chat-nova-mensagem', ativo);
+  if (!ativo) return null;
 
   return (
     <AlertaCard

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { AlertaCard } from './AlertaCard';
 import { useAlertaDismissivel } from '../lib/useAlertaDismissivel';
+import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 
 // Contagem de orçamentos aguardando precificação/envio - só aparece
 // para quem tem permissão financeira, some quando a fila está vazia.
@@ -28,7 +29,9 @@ export function AlertaOrcamentosPendentes() {
     },
   });
 
-  if (!podeVer || !query.data || oculto) return null;
+  const ativo = !!podeVer && !!query.data && !oculto;
+  useRegistrarAlertaAtivo('orcamentos-pendentes', ativo);
+  if (!ativo) return null;
 
   return (
     <AlertaCard

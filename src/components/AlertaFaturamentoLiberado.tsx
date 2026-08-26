@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useContasLiberadasParaFaturar } from '../lib/useContasLiberadasParaFaturar';
 import { AlertaCard } from './AlertaCard';
 import { useAlertaDismissivel } from '../lib/useAlertaDismissivel';
+import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 
 // Contagem de orçamentos aprovados com OS pronta/entregue e ainda sem NF
 // lançada. Query compartilhada com a tela de Faturamento
@@ -16,7 +17,9 @@ export function AlertaFaturamentoLiberado() {
 
   const query = useContasLiberadasParaFaturar(podeVer);
 
-  if (!podeVer || !query.data || query.data.length === 0 || oculto) return null;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  useRegistrarAlertaAtivo('faturamento-liberado', ativo);
+  if (!ativo) return null;
 
   return (
     <AlertaCard

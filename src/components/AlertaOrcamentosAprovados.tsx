@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useOrcamentosAprovados } from '../lib/useOrcamentosAprovados';
 import { AlertaCard } from './AlertaCard';
 import { useAlertaDismissivel } from '../lib/useAlertaDismissivel';
+import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 
 // Contagem de orçamentos aprovados pelo cliente, ainda esperando o
 // técnico iniciar/terminar a manutenção. Query compartilhada com a
@@ -16,7 +17,9 @@ export function AlertaOrcamentosAprovados() {
 
   const query = useOrcamentosAprovados(podeVer);
 
-  if (!podeVer || !query.data || query.data.length === 0 || oculto) return null;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  useRegistrarAlertaAtivo('orcamentos-aprovados', ativo);
+  if (!ativo) return null;
 
   return (
     <AlertaCard

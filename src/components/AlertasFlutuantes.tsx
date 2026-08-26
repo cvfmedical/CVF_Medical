@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { IconGripVertical } from '@tabler/icons-react';
 import { AlertaOrcamentosPendentes } from './AlertaOrcamentosPendentes';
 import { AlertaOSAguardandoOrcamento } from './AlertaOSAguardandoOrcamento';
@@ -6,6 +6,7 @@ import { AlertaOrcamentosAprovados } from './AlertaOrcamentosAprovados';
 import { AlertaFaturamentoLiberado } from './AlertaFaturamentoLiberado';
 import { AlertaEmailFalhou } from './AlertaEmailFalhou';
 import { AlertaChatNovaMensagem } from './AlertaChatNovaMensagem';
+import { ContextoAlertasAtivos } from '../lib/useRegistrarAlertaAtivo';
 
 const CHAVE_POSICAO = 'alertas-flutuantes-posicao';
 
@@ -33,6 +34,18 @@ export function AlertasFlutuantes() {
   const [posicao, setPosicao] = useState<Posicao | null>(() => posicaoSalva());
   const arrastandoRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [ativos, setAtivos] = useState<Set<string>>(new Set());
+  const registrar = useCallback((chave: string, ativo: boolean) => {
+    setAtivos((prev) => {
+      const jaTem = prev.has(chave);
+      if (ativo === jaTem) return prev;
+      const novo = new Set(prev);
+      if (ativo) novo.add(chave);
+      else novo.delete(chave);
+      return novo;
+    });
+  }, []);
+  const temAlertaAtivo = ativos.size > 0;
 
   useEffect(() => {
     function aoMover(e: PointerEvent) {
@@ -79,36 +92,40 @@ export function AlertasFlutuantes() {
     <div style={estiloPosicao}>
       <div
         ref={containerRef}
-        style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
+        style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: temAlertaAtivo ? 4 : 0 }}
       >
-        <button
-          onPointerDown={iniciarArrasto}
-          onDoubleClick={restaurarPosicaoPadrao}
-          title="Arraste pra mover - clique duplo restaura a posição padrão"
-          style={{
-            cursor: 'grab',
-            background: 'var(--graphite-900)',
-            color: '#f0f0ef',
-            border: 'none',
-            borderRadius: 8,
-            width: 22,
-            alignSelf: 'stretch',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            touchAction: 'none',
-            flexShrink: 0,
-          }}
-        >
-          <IconGripVertical size={14} />
-        </button>
+        {temAlertaAtivo && (
+          <button
+            onPointerDown={iniciarArrasto}
+            onDoubleClick={restaurarPosicaoPadrao}
+            title="Arraste pra mover - clique duplo restaura a posição padrão"
+            style={{
+              cursor: 'grab',
+              background: 'var(--graphite-900)',
+              color: '#f0f0ef',
+              border: 'none',
+              borderRadius: 8,
+              width: 22,
+              alignSelf: 'stretch',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              touchAction: 'none',
+              flexShrink: 0,
+            }}
+          >
+            <IconGripVertical size={14} />
+          </button>
+        )}
         <div style={{ display: 'flex', flexDirection: 'row', gap: 12 }}>
-          <AlertaOrcamentosPendentes />
-          <AlertaOSAguardandoOrcamento />
-          <AlertaOrcamentosAprovados />
-          <AlertaFaturamentoLiberado />
-          <AlertaEmailFalhou />
-          <AlertaChatNovaMensagem />
+          <ContextoAlertasAtivos.Provider value={registrar}>
+            <AlertaOrcamentosPendentes />
+            <AlertaOSAguardandoOrcamento />
+            <AlertaOrcamentosAprovados />
+            <AlertaFaturamentoLiberado />
+            <AlertaEmailFalhou />
+            <AlertaChatNovaMensagem />
+          </ContextoAlertasAtivos.Provider>
         </div>
       </div>
     </div>

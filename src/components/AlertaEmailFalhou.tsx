@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useEmailsComFalha } from '../lib/useEmailsComFalha';
 import { AlertaCard } from './AlertaCard';
 import { useAlertaDismissivel } from '../lib/useAlertaDismissivel';
+import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 
 // E-mails de orçamento que o Resend confirmou terem falhado (endereço
 // inválido/inexistente) ou gerado reclamação - só se sabe disso depois,
@@ -17,7 +18,9 @@ export function AlertaEmailFalhou() {
 
   const query = useEmailsComFalha(podeVer);
 
-  if (!podeVer || !query.data || query.data.length === 0 || oculto) return null;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  useRegistrarAlertaAtivo('email-falhou', ativo);
+  if (!ativo) return null;
 
   return (
     <AlertaCard
