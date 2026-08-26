@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
-import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
+import { proximoNumeroDeJob } from '../../lib/numeroSequencial';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { formatarModeloOtica } from '../../lib/formato';
 
@@ -28,8 +28,11 @@ interface ProdutoCatalogo {
   subgrupo: string | null;
 }
 
+// OS aberta direto, sem Entrada - ainda assim usa o número compartilhado
+// (Entrada/OS/Orçamento), pra não colidir nem dessincronizar com o resto.
 async function gerarNumeroOS(): Promise<string> {
-  return gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
+  const n = await proximoNumeroDeJob();
+  return `OS-${n}`;
 }
 
 export function OrdemServico() {

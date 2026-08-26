@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
+import { proximoNumeroDeJob, sufixoNumerico } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatarMoeda, formatarModeloOtica } from '../../lib/formato';
@@ -169,7 +169,9 @@ export function LancamentoRetroativo() {
     try {
       const cliente = clientesQuery.data!.find((c) => String(c.id) === clienteId)!;
 
-      const numeroOS = await gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
+      // Número compartilhado (mesmo sufixo em OS e Orçamento, só troca o
+      // prefixo) - sem Entrada nesse fluxo, então minta do zero aqui.
+      const numeroOS = `OS-${await proximoNumeroDeJob()}`;
       const { data: os, error: erroOS } = await supabase
         .from('ordens_servico')
         .insert({
@@ -188,7 +190,7 @@ export function LancamentoRetroativo() {
         .single();
       if (erroOS) throw erroOS;
 
-      const numeroOrcamento = await gerarNumeroSequencial('ORC', 'orcamentos', 'numero_orcamento');
+      const numeroOrcamento = `ORC-${sufixoNumerico(numeroOS)}`;
       const { data: orcamento, error: erroOrc } = await supabase
         .from('orcamentos')
         .insert({

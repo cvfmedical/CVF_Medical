@@ -6,7 +6,7 @@ import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
+import { proximoNumeroDeJob, sufixoNumerico } from '../../lib/numeroSequencial';
 import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
@@ -104,12 +104,13 @@ interface Cliente {
   cep: string | null;
 }
 
+// Número compartilhado (mesmo sufixo numérico em Entrada/OS/Orçamento -
+// só o prefixo muda) - só é mintado "do zero" aqui, na Entrada; ao
+// converter em OS (converterEmOS abaixo), o número é herdado desta
+// entrada, não gerado de novo.
 async function gerarCodigoEntrada(): Promise<string> {
-  return gerarNumeroSequencial('ENT', 'entradas_equipamento', 'codigo_entrada');
-}
-
-async function gerarNumeroOS(): Promise<string> {
-  return gerarNumeroSequencial('OS', 'ordens_servico', 'numero_os');
+  const n = await proximoNumeroDeJob();
+  return `ENT-${n}`;
 }
 
 const formVazio = {
@@ -590,7 +591,9 @@ export function EntradaEquipamento() {
     setConvertendo(entrada.id);
     try {
       const c = cliente(entrada.cliente_id);
-      const numeroOS = await gerarNumeroOS();
+      // Herda o mesmo número da entrada (só troca o prefixo) - Entrada e
+      // OS do mesmo equipamento não devem ter números diferentes.
+      const numeroOS = `OS-${sufixoNumerico(entrada.codigo_entrada)}`;
       const { data: os, error } = await supabase
         .from('ordens_servico')
         .insert({

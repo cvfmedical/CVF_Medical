@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
+import { sufixoNumerico } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -64,10 +64,6 @@ interface ItemOrcamento {
 interface OSOpcao {
   value: string;
   label: string;
-}
-
-async function gerarNumeroOrcamento(): Promise<string> {
-  return gerarNumeroSequencial('ORC', 'orcamentos', 'numero_orcamento');
 }
 
 export function OrcamentoTecnico() {
@@ -309,10 +305,13 @@ export function OrcamentoTecnico() {
   }
 
   async function criarOrcamento() {
+    if (!osDetalheQuery.data) return;
     setErro(null);
     setCriando(true);
     try {
-      const numero = await gerarNumeroOrcamento();
+      // Herda o mesmo número da OS (só troca o prefixo) - o primeiro
+      // orçamento de uma OS não deve ter um número diferente dela.
+      const numero = `ORC-${sufixoNumerico(osDetalheQuery.data.numero_os)}`;
       const { error } = await supabase.from('orcamentos').insert({
         numero_orcamento: numero,
         ordem_servico_id: Number(osId),
