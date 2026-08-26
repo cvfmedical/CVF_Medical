@@ -59,10 +59,12 @@ import { ContratosManutencao } from './pages/comercial/ContratosManutencao';
 import { GarantiasAtivas } from './pages/comercial/GarantiasAtivas';
 import { ConfiguracoesUsuarios } from './pages/sistema/ConfiguracoesUsuarios';
 import { AcessoPortalCliente } from './pages/sistema/AcessoPortalCliente';
+import { ChatInterno } from './pages/ChatInterno';
 
 // Telas já migradas - path -> componente. O que não estiver aqui cai no
 // placeholder EmConstrucao (ainda não implementado).
 const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
+  '/chat': ChatInterno,
   '/clientes': Clientes,
   '/funcionarios': Funcionarios,
   '/fornecedores': Fornecedores,

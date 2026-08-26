@@ -3,6 +3,7 @@ import {
   IconBriefcase,
   IconClipboardList,
   IconCoin,
+  IconMessageCircle,
   IconMicroscope,
   IconPackage,
   IconSettings,
@@ -36,6 +37,16 @@ export interface CategoriaMenu {
 // Rótulos em sentence case (regra de design: nunca Title Case/CAIXA ALTA,
 // exceto siglas como OS/ISO/PDF/CNPJ/NF-e).
 export const MENU: CategoriaMenu[] = [
+  {
+    titulo: 'Chat interno',
+    icone: IconMessageCircle,
+    itens: [
+      // categoria 'cadastros_gerais' aqui só pelo efeito colateral de já
+      // incluir os 4 níveis de acesso não-administrador - chat é uma
+      // ferramenta de uso geral, não faz sentido restringir por cargo.
+      { label: 'Conversas', path: '/chat', categoria: 'cadastros_gerais', implementado: false },
+    ],
+  },
   {
     titulo: 'Cadastros gerais',
     icone: IconAddressBook,
