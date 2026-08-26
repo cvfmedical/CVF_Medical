@@ -1009,6 +1009,20 @@ export function EntradaEquipamento() {
               </td>
               <td>{new Date(e.data_entrada).toLocaleDateString('pt-BR')}</td>
               <td className="acoes-tabela">
+                {/* "Converter em OS" primeiro no DOM (mesmo cabendo à
+                    esquerda dos ícones) - é a ação principal dessa tela, e
+                    numa tabela larga que precisa rolar pro lado, o que vem
+                    primeiro fica visível sem precisar rolar. */}
+                {!e.ordem_servico_id && (
+                  <button
+                    className="botao-secundario"
+                    style={{ marginRight: 6 }}
+                    disabled={convertendo === e.id}
+                    onClick={() => converterEmOS(e)}
+                  >
+                    {convertendo === e.id ? 'Convertendo...' : 'Converter em OS'}
+                  </button>
+                )}
                 <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(e)}>
                   <IconPencil size={16} />
                 </button>
@@ -1054,16 +1068,6 @@ export function EntradaEquipamento() {
                 >
                   <IconTrash size={16} />
                 </button>
-                {!e.ordem_servico_id && (
-                  <button
-                    className="botao-secundario"
-                    style={{ marginLeft: 6 }}
-                    disabled={convertendo === e.id}
-                    onClick={() => converterEmOS(e)}
-                  >
-                    {convertendo === e.id ? 'Convertendo...' : 'Converter em OS'}
-                  </button>
-                )}
               </td>
             </tr>
           ))}
