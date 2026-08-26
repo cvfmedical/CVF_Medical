@@ -329,7 +329,7 @@ button {
   flex: 1;
   padding: 24px;
   position: relative;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .conteudo-camada {
