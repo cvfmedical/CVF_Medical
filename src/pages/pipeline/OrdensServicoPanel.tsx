@@ -112,18 +112,19 @@ export function OrdensServicoPanel() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orcamentos')
-        .select('id, ordem_servico_id, numero_orcamento')
+        .select('id, ordem_servico_id, numero_orcamento, status')
         .order('id', { ascending: false });
       if (error) throw error;
-      return data as { id: number; ordem_servico_id: number; numero_orcamento: string }[];
+      return data as { id: number; ordem_servico_id: number; numero_orcamento: string; status: string }[];
     },
   });
-  // Só o orçamento mais recente de cada OS (pra coluna/link) - se a OS tiver
-  // orçamentos alternativos, o link abre direto nesse específico (não só
-  // "a OS", que mostraria o mais recente por padrão de qualquer jeito).
+  // Qual orçamento representa a OS na coluna/link - com orçamentos
+  // alternativos, prioriza o Aprovado (é o que "vale"); sem nenhum
+  // aprovado, cai no mais recente (aguardando decisão do cliente).
   const orcamentoPorOS = new Map<number, { id: number; numero: string }>();
   (orcamentosQuery.data ?? []).forEach((o) => {
-    if (!orcamentoPorOS.has(o.ordem_servico_id)) orcamentoPorOS.set(o.ordem_servico_id, { id: o.id, numero: o.numero_orcamento });
+    const atual = orcamentoPorOS.get(o.ordem_servico_id);
+    if (!atual || o.status === 'Aprovado') orcamentoPorOS.set(o.ordem_servico_id, { id: o.id, numero: o.numero_orcamento });
   });
 
   function excluirOS(os: OrdemServico) {

@@ -660,14 +660,17 @@ export function OrcamentoTecnico() {
             <button className="botao-primario" onClick={finalizar}>
               Finalizar identificação de danos
             </button>
-            {!travado && (
+            {(!travado || orcamentoQuery.data.status === 'Recusado') && (
               <button
                 className="botao-secundario perigo"
                 disabled={excluindo}
                 onClick={() =>
                   pedirConfirmacao(excluirOrcamentoTecnico, {
                     titulo: 'Excluir orçamento',
-                    mensagem: `Confirma excluir o orçamento ${orcamentoQuery.data?.numero_orcamento} inteiro (com todos os itens)? Isso libera a OS pra edição na tela de Registro de Entrada. Não pode ser desfeito.`,
+                    mensagem:
+                      (orcamentosOSQuery.data?.length ?? 0) > 1
+                        ? `Confirma excluir o orçamento ${orcamentoQuery.data?.numero_orcamento} inteiro (com todos os itens)? Os outros orçamentos alternativos desta OS não são afetados. Não pode ser desfeito.`
+                        : `Confirma excluir o orçamento ${orcamentoQuery.data?.numero_orcamento} inteiro (com todos os itens)? Isso libera a OS pra edição na tela de Registro de Entrada. Não pode ser desfeito.`,
                   })
                 }
               >

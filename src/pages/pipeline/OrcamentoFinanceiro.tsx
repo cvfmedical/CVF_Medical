@@ -2169,7 +2169,7 @@ export function OrcamentoFinanceiro() {
                 <button className="botao-secundario" onClick={() => compartilhar('email')}>
                   E-mail
                 </button>
-                {orcamentoSelecionado.status === 'Aguardando Precificação' ? (
+                {orcamentoSelecionado.status === 'Aguardando Precificação' || orcamentoSelecionado.status === 'Recusado' ? (
                   <button className="botao-secundario perigo" onClick={excluirOrcamento}>
                     Excluir orçamento
                   </button>

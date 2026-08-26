@@ -39,21 +39,22 @@ export function Entrega() {
   const [osSelecionadas, setOsSelecionadas] = useState<Set<number>>(new Set());
 
   // Nº do orçamento de cada OS - pra saber a que orçamento essa entrega se
-  // refere, sem precisar abrir a OS. Pega o mais recente quando a OS tem
-  // mais de um orçamento (reversão de precificação etc.).
+  // refere, sem precisar abrir a OS. Com orçamentos alternativos, prioriza
+  // o Aprovado (é o que "vale" - a essa altura do pipeline já tem um).
   const orcamentosQuery = useQuery({
     queryKey: ['orcamentos-numero-por-os'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orcamentos')
-        .select('id, numero_orcamento, ordem_servico_id')
+        .select('id, numero_orcamento, ordem_servico_id, status')
         .order('id', { ascending: false });
       if (error) throw error;
-      return data as { id: number; numero_orcamento: string; ordem_servico_id: number }[];
+      return data as { id: number; numero_orcamento: string; ordem_servico_id: number; status: string }[];
     },
   });
   function orcamentoPorOS(osId: number): { id: number; numero: string } | null {
-    const o = orcamentosQuery.data?.find((o) => o.ordem_servico_id === osId);
+    const doOS = orcamentosQuery.data?.filter((o) => o.ordem_servico_id === osId) ?? [];
+    const o = doOS.find((o) => o.status === 'Aprovado') ?? doOS[0];
     return o ? { id: o.id, numero: o.numero_orcamento } : null;
   }
 
