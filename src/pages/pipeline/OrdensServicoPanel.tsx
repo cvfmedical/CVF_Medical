@@ -157,6 +157,17 @@ export function OrdensServicoPanel() {
   // do fluxo real) com espaço pra rubrica/data - o técnico marca à mão
   // conforme o equipamento avança, sem precisar abrir o sistema.
   async function imprimirFicha(os: OrdemServico) {
+    const { data: entrada } = await supabase
+      .from('entradas_equipamento')
+      .select('numero_controle_cliente, nf_remessa_numero, nf_remessa_serie')
+      .eq('ordem_servico_id', os.id)
+      .maybeSingle();
+    const controleCliente = entrada?.numero_controle_cliente
+      ? entrada.numero_controle_cliente
+      : entrada?.nf_remessa_numero
+        ? `NF ${entrada.nf_remessa_numero}${entrada.nf_remessa_serie ? '/' + entrada.nf_remessa_serie : ''}`
+        : '-';
+
     const { data: orcamento } = await supabase
       .from('orcamentos')
       .select('id')
@@ -212,6 +223,11 @@ export function OrdensServicoPanel() {
         <div class="laudo-linha-dupla">
           <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'}${os.optica_fab ? ' (' + os.optica_fab + ')' : ''}</div>
           <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div style="border-right:0;">
+            <strong>Nº controle interno / NF cliente:</strong> <span class="mono">${controleCliente}</span>
+          </div>
         </div>
       </div>
 

@@ -1512,6 +1512,7 @@ export function OrcamentoFinanceiro() {
   // buscar em todos os status. Fica ANTES do "if isLoading" porque
   // useLinhasOrdenadas é um hook - não pode ser chamado condicionalmente.
   function valorColunaLista(o: Orcamento, chave: string): unknown {
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(o.ordem_servico_id) ?? '';
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
     if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
     return (o as unknown as Record<string, unknown>)[chave];
@@ -1591,8 +1592,8 @@ export function OrcamentoFinanceiro() {
                 );
               })()}
             </th>
-            <th>Entrada</th>
             {[
+              ['codigo_entrada', 'Entrada'],
               ['numero_os', 'OS'],
               ['numero_orcamento', 'Orçamento'],
               ['cliente_nome', 'Cliente'],
@@ -1606,8 +1607,7 @@ export function OrcamentoFinanceiro() {
           </tr>
           <tr>
             <th></th>
-            <th style={{ padding: '2px 6px' }}></th>
-            {['numero_os', 'numero_orcamento', 'cliente_nome', 'status'].map((chave) => (
+            {['codigo_entrada', 'numero_os', 'numero_orcamento', 'cliente_nome', 'status'].map((chave) => (
               <th key={chave} style={{ padding: '2px 6px' }}>
                 <input
                   type="text"
