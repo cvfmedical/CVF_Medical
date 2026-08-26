@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconEye, IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
+import { IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
 import { imprimirEtiquetaRastreio } from '../../lib/etiquetaRastreio';
 import { type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
@@ -914,7 +914,11 @@ export function EntradaEquipamento() {
               <td>
                 <input type="checkbox" checked={selecionadasEnvio.has(e.id)} onChange={() => alternarSelecaoEnvio(e)} />
               </td>
-              <td className="mono">{e.codigo_entrada}</td>
+              <td>
+                <span className="link-numero mono" title="Ver entrada" onClick={() => abrirDetalhe(e)}>
+                  {e.codigo_entrada}
+                </span>
+              </td>
               <td>{cliente(e.cliente_id)?.razao_social}</td>
               <td>{e.equipamento_desc}</td>
               <td className="mono">{e.equipamento_sn}</td>
@@ -926,9 +930,6 @@ export function EntradaEquipamento() {
               </td>
               <td>{new Date(e.data_entrada).toLocaleDateString('pt-BR')}</td>
               <td className="acoes-tabela">
-                <button className="botao-icone" title="Ver entrada" onClick={() => abrirDetalhe(e)}>
-                  <IconEye size={16} />
-                </button>
                 <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(e)}>
                   <IconPencil size={16} />
                 </button>

@@ -1633,20 +1633,41 @@ export function OrcamentoFinanceiro() {
                   />
                 )}
               </td>
-              <td className="mono">{codigoEntradaPorOS.get(o.ordem_servico_id) ?? '-'}</td>
-              <td className="mono">{o.ordens_servico?.numero_os}</td>
-              <td className="mono">{o.numero_orcamento}</td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/registro-entrada?os=${o.ordem_servico_id}`)}
+                >
+                  {codigoEntradaPorOS.get(o.ordem_servico_id) ?? '-'}
+                </span>
+              </td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  title="Abrir orçamento técnico desta OS"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${o.ordem_servico_id}`)}
+                >
+                  {o.ordens_servico?.numero_os}
+                </span>
+              </td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  title={
+                    o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente'
+                      ? 'Precificar'
+                      : 'Ver / reimprimir'
+                  }
+                  onClick={() => abrirOrcamento(o)}
+                >
+                  {o.numero_orcamento}
+                </span>
+              </td>
               <td>{o.ordens_servico?.cliente_nome}</td>
               <td>
                 <Badge tono={TONO_STATUS[o.status] ?? 'neutro'}>{o.status}</Badge>
               </td>
-              <td className="acoes-tabela">
-                <button className="botao-secundario" onClick={() => abrirOrcamento(o)}>
-                  {o.status === 'Aguardando Precificação' || o.status === 'Aguardando Envio ao Cliente'
-                    ? 'Precificar'
-                    : 'Ver / reimprimir'}
-                </button>
-              </td>
+              <td></td>
             </tr>
           ))}
           {linhasLista.length === 0 && (

@@ -113,19 +113,21 @@ export function OrcamentoTecnico() {
   // Equipamento) ou de "Ver orçamento" (Ordens de Serviço) - nesses
   // casos a OS pode já ter passado da triagem, por isso não depende da
   // lista filtrada acima.
-  useEffect(() => {
-    const osParam = searchParams.get('os');
-    if (osParam) setOsId(osParam);
-  }, [searchParams]);
-
   // Qual orçamento desta OS está sendo editado agora. Uma OS pode ter mais
   // de um (orçamentos alternativos - ex.: cliente escolhe entre só o
   // reparo pedido ou o reparo + uma peça extra que o técnico identificou);
   // null = segue o comportamento padrão de sempre mostrar o mais recente.
   const [orcamentoIdSelecionado, setOrcamentoIdSelecionado] = useState<number | null>(null);
+
+  // ?orcamento= no link permite abrir direto num alternativo específico
+  // (ex.: clicando no número dele em outra tela) - sem isso, a tela sempre
+  // cairia no mais recente da OS, que pode não ser o que foi clicado.
   useEffect(() => {
-    setOrcamentoIdSelecionado(null);
-  }, [osId]);
+    const osParam = searchParams.get('os');
+    if (osParam) setOsId(osParam);
+    const orcamentoParam = searchParams.get('orcamento');
+    setOrcamentoIdSelecionado(orcamentoParam ? Number(orcamentoParam) : null);
+  }, [searchParams]);
 
   const orcamentosOSQuery = useQuery({
     queryKey: ['orcamentos-da-os', osId],
@@ -513,7 +515,14 @@ export function OrcamentoTecnico() {
 
       <div className="campo-form" style={{ maxWidth: 420 }}>
         <label>Ordem de serviço</label>
-        <ComboboxBusca opcoes={opcoesOSQuery.data ?? []} valor={osId} onChange={setOsId} />
+        <ComboboxBusca
+          opcoes={opcoesOSQuery.data ?? []}
+          valor={osId}
+          onChange={(v) => {
+            setOsId(v);
+            setOrcamentoIdSelecionado(null);
+          }}
+        />
         <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
           Mostra OS em triagem (orçamento novo) e OS com orçamento já iniciado, ainda não enviado ao financeiro.
         </p>

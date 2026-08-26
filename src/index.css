@@ -522,6 +522,7 @@ button {
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .link-numero:hover {

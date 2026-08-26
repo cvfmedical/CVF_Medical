@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -15,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { mensagemErro } from '../../lib/erros';
 import { abrirImpressao } from '../../lib/imprimir';
-import { IconTrash } from '@tabler/icons-react';
+import { IconPrinter, IconTrash } from '@tabler/icons-react';
 
 // OS ainda não iniciou manutenção física - único momento em que dá pra
 // excluir por completo (espelha a checagem feita em excluir_os_completa,
@@ -28,7 +28,16 @@ const STATUS_EXCLUIVEIS = [
   '3. AGUARDANDO APROVAÇÃO DO CLIENTE',
 ];
 
-const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'optica_desc', 'optica_sn', 'status_os', 'data_abertura'];
+const COLUNAS_FILTRAVEIS = [
+  'codigo_entrada',
+  'numero_os',
+  'numero_orcamento',
+  'cliente_nome',
+  'optica_desc',
+  'optica_sn',
+  'status_os',
+  'data_abertura',
+];
 
 interface OrdemServico {
   id: number;
@@ -109,9 +118,12 @@ export function OrdensServicoPanel() {
       return data as { id: number; ordem_servico_id: number; numero_orcamento: string }[];
     },
   });
-  const numeroOrcamentoPorOS = new Map<number, string>();
+  // Só o orçamento mais recente de cada OS (pra coluna/link) - se a OS tiver
+  // orçamentos alternativos, o link abre direto nesse específico (não só
+  // "a OS", que mostraria o mais recente por padrão de qualquer jeito).
+  const orcamentoPorOS = new Map<number, { id: number; numero: string }>();
   (orcamentosQuery.data ?? []).forEach((o) => {
-    if (!numeroOrcamentoPorOS.has(o.ordem_servico_id)) numeroOrcamentoPorOS.set(o.ordem_servico_id, o.numero_orcamento);
+    if (!orcamentoPorOS.has(o.ordem_servico_id)) orcamentoPorOS.set(o.ordem_servico_id, { id: o.id, numero: o.numero_orcamento });
   });
 
   function excluirOS(os: OrdemServico) {
@@ -237,6 +249,8 @@ export function OrdensServicoPanel() {
   function valorColuna(os: OrdemServico, chave: string): unknown {
     if (chave === 'status_os') return os.status_os ?? '';
     if (chave === 'data_abertura') return os.data_abertura;
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(os.id) ?? '';
+    if (chave === 'numero_orcamento') return orcamentoPorOS.get(os.id)?.numero ?? '';
     return (os as unknown as Record<string, unknown>)[chave];
   }
 
@@ -274,12 +288,10 @@ export function OrdensServicoPanel() {
       <table className="tabela-crud">
         <thead>
           <tr>
-            <th>Entrada</th>
-            <ThOrdenavel chave="numero_os" colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
-              OS
-            </ThOrdenavel>
-            <th>Orçamento</th>
             {[
+              ['codigo_entrada', 'Entrada'],
+              ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['cliente_nome', 'Cliente'],
               ['optica_desc', 'Equipamento'],
               ['optica_sn', 'Nº de série'],
@@ -293,89 +305,94 @@ export function OrdensServicoPanel() {
             <th></th>
           </tr>
           <tr>
-            <th style={{ padding: '2px 6px' }}></th>
-            {COLUNAS_FILTRAVEIS.map((chave, i) => {
+            {COLUNAS_FILTRAVEIS.map((chave) => {
               const valoresDisponiveis = Array.from(
                 new Set((query.data ?? []).map((os) => String(valorColuna(os, chave) ?? ''))),
               ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
               return (
-                <Fragment key={chave}>
-                  <th style={{ padding: '2px 6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <input
-                        type="text"
-                        className="campo-filtro-coluna"
-                        placeholder="Filtrar..."
-                        value={filtrosColuna[chave] ?? ''}
-                        onChange={(e) => setFiltroTexto(chave, e.target.value)}
-                      />
-                      <FiltroColunaValores
-                        valores={valoresDisponiveis}
-                        selecionados={filtrosValores[chave] ?? new Set()}
-                        onChange={(v) => setValoresColuna(chave, v)}
-                      />
-                    </div>
-                  </th>
-                  {/* coluna Orçamento (sem filtro) entra logo após a de numero_os */}
-                  {i === 0 && <th style={{ padding: '2px 6px' }}></th>}
-                </Fragment>
+                <th key={chave} style={{ padding: '2px 6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="campo-filtro-coluna"
+                      placeholder="Filtrar..."
+                      value={filtrosColuna[chave] ?? ''}
+                      onChange={(e) => setFiltroTexto(chave, e.target.value)}
+                    />
+                    <FiltroColunaValores
+                      valores={valoresDisponiveis}
+                      selecionados={filtrosValores[chave] ?? new Set()}
+                      onChange={(v) => setValoresColuna(chave, v)}
+                    />
+                  </div>
+                </th>
               );
             })}
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {linhas.map((os) => (
-            <tr key={os.id}>
-              <td>
-                <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${os.id}`)}>
-                  {codigoEntradaPorOS.get(os.id) ?? '-'}
-                </span>
-              </td>
-              <td>
-                <span
-                  className="link-numero mono"
-                  title="Ficha de acompanhamento"
-                  onClick={() => imprimirFicha(os)}
-                >
-                  {os.numero_os}
-                </span>
-              </td>
-              <td>
-                {numeroOrcamentoPorOS.has(os.id) ? (
+          {linhas.map((os) => {
+            const orcamento = orcamentoPorOS.get(os.id);
+            return (
+              <tr key={os.id}>
+                <td>
+                  <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${os.id}`)}>
+                    {codigoEntradaPorOS.get(os.id) ?? '-'}
+                  </span>
+                </td>
+                <td>
                   <span
                     className="link-numero mono"
+                    title="Abrir orçamento técnico desta OS"
                     onClick={() => navigate(`/orcamento-tecnico?os=${os.id}`)}
                   >
-                    {numeroOrcamentoPorOS.get(os.id)}
+                    {os.numero_os}
                   </span>
-                ) : (
-                  <span className="mono" style={{ color: 'var(--ink-400)' }}>
-                    -
-                  </span>
-                )}
-              </td>
-              <td>{os.cliente_nome}</td>
-              <td>{os.optica_desc}</td>
-              <td className="mono">{os.optica_sn}</td>
-              <td>
-                <Badge tono={tonoDoStatusOS(os.status_os)}>{os.status_os ?? '-'}</Badge>
-              </td>
-              <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
-              <td className="acoes-tabela">
-                {funcionario?.nivel_acesso === 'Administrador' && STATUS_EXCLUIVEIS.includes(os.status_os ?? '') && (
+                </td>
+                <td>
+                  {orcamento ? (
+                    <span
+                      className="link-numero mono"
+                      onClick={() => navigate(`/orcamento-tecnico?os=${os.id}&orcamento=${orcamento.id}`)}
+                    >
+                      {orcamento.numero}
+                    </span>
+                  ) : (
+                    <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                      -
+                    </span>
+                  )}
+                </td>
+                <td>{os.cliente_nome}</td>
+                <td>{os.optica_desc}</td>
+                <td className="mono">{os.optica_sn}</td>
+                <td>
+                  <Badge tono={tonoDoStatusOS(os.status_os)}>{os.status_os ?? '-'}</Badge>
+                </td>
+                <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
+                <td className="acoes-tabela">
                   <button
-                    className="botao-icone perigo"
-                    title="Excluir OS por completo"
-                    disabled={excluindo === os.id}
-                    onClick={() => excluirOS(os)}
+                    className="botao-icone"
+                    title="Imprimir ficha de acompanhamento"
+                    onClick={() => imprimirFicha(os)}
                   >
-                    <IconTrash size={16} />
+                    <IconPrinter size={16} />
                   </button>
-                )}
-              </td>
-            </tr>
-          ))}
+                  {funcionario?.nivel_acesso === 'Administrador' && STATUS_EXCLUIVEIS.includes(os.status_os ?? '') && (
+                    <button
+                      className="botao-icone perigo"
+                      title="Excluir OS por completo"
+                      disabled={excluindo === os.id}
+                      onClick={() => excluirOS(os)}
+                    >
+                      <IconTrash size={16} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
           {linhas.length === 0 && (
             <tr>
               <td colSpan={9}>Nenhuma OS encontrada.</td>
