@@ -6,6 +6,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 // Teste de luz / transmissão (interno, NÃO-normativo pela ISO 8600).
 // Mede o lux emitido vs um baseline por diâmetro; corte em 70% -> propor
@@ -29,6 +30,7 @@ export function TesteLuz() {
   // janela do Checkpoint A/B) - sem isso o combobox listava OS de qualquer
   // etapa do pipeline, inclusive já entregues ou ainda em triagem.
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B]);
+  const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   const padroesQuery = useQuery({
     queryKey: ['padroes-calibracao-ativos-luz'],
     queryFn: async () => {
@@ -52,6 +54,16 @@ export function TesteLuz() {
         camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
         colunas={[
           {
+            chave: 'codigo_entrada',
+            label: 'Entrada',
+            render: (r) => (
+              <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${r.ordem_servico_id}`)}>
+                {codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-'}
+              </span>
+            ),
+            valorFiltro: (r) => codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-',
+          },
+          {
             chave: 'ordem_servico_id',
             label: 'OS',
             render: (r) => (
@@ -60,6 +72,26 @@ export function TesteLuz() {
               </span>
             ),
             valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
+          },
+          {
+            chave: 'numero_orcamento',
+            label: 'Orçamento',
+            render: (r) => {
+              const orc = orcamentoPorOS.get(r.ordem_servico_id);
+              return orc ? (
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}&orcamento=${orc.id}`)}
+                >
+                  {orc.numero}
+                </span>
+              ) : (
+                <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                  -
+                </span>
+              );
+            },
+            valorFiltro: (r) => orcamentoPorOS.get(r.ordem_servico_id)?.numero ?? '-',
           },
           {
             chave: 'cliente_nome',

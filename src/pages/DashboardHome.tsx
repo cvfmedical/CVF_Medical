@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { ThOrdenavel } from '../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../lib/useOrdenacao';
 import { useFiltrosColuna } from '../lib/useFiltrosColuna';
@@ -7,8 +8,18 @@ import { supabase } from '../lib/supabaseClient';
 import { CarregandoTela } from '../components/CarregandoTela';
 import { Badge } from '../components/Badge';
 import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO } from '../lib/statusOS';
+import { useEntradaOrcamentoPorOS } from '../lib/useEntradaOrcamentoPorOS';
 
-const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'equipamento', 'optica_sn', 'status_os', 'data_abertura'];
+const COLUNAS_FILTRAVEIS = [
+  'codigo_entrada',
+  'numero_os',
+  'numero_orcamento',
+  'cliente_nome',
+  'equipamento',
+  'optica_sn',
+  'status_os',
+  'data_abertura',
+];
 
 interface OrdemServicoResumo {
   id: number;
@@ -27,6 +38,8 @@ interface OrdemServicoResumo {
 const STATUS_FINALIZADOS = [STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO];
 
 export function DashboardHome() {
+  const navigate = useNavigate();
+  const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -52,6 +65,8 @@ export function DashboardHome() {
   function valorColuna(os: OrdemServicoResumo, chave: string): unknown {
     if (chave === 'equipamento') return [os.optica_desc, os.optica_fab].filter(Boolean).join(' - ');
     if (chave === 'data_abertura') return os.data_abertura;
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(os.id) ?? '';
+    if (chave === 'numero_orcamento') return orcamentoPorOS.get(os.id)?.numero ?? '';
     return (os as unknown as Record<string, unknown>)[chave];
   }
 
@@ -83,7 +98,9 @@ export function DashboardHome() {
         <thead>
           <tr>
             {[
-              ['numero_os', 'Nº OS'],
+              ['codigo_entrada', 'Entrada'],
+              ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['cliente_nome', 'Cliente'],
               ['equipamento', 'Equipamento'],
               ['optica_sn', 'Nº de série'],
@@ -122,21 +139,51 @@ export function DashboardHome() {
           </tr>
         </thead>
         <tbody>
-          {linhas.map((os) => (
-            <tr key={os.id}>
-              <td className="mono">{os.numero_os}</td>
-              <td>{os.cliente_nome}</td>
-              <td>{[os.optica_desc, os.optica_fab].filter(Boolean).join(' - ') || '-'}</td>
-              <td className="mono">{os.optica_sn || '-'}</td>
-              <td>
-                <Badge tono={tonoDoStatusOS(os.status_os)}>{os.status_os ?? '-'}</Badge>
-              </td>
-              <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
-            </tr>
-          ))}
+          {linhas.map((os) => {
+            const orcamento = orcamentoPorOS.get(os.id);
+            return (
+              <tr key={os.id}>
+                <td>
+                  <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${os.id}`)}>
+                    {codigoEntradaPorOS.get(os.id) ?? '-'}
+                  </span>
+                </td>
+                <td>
+                  <span
+                    className="link-numero mono"
+                    title="Abrir orçamento técnico desta OS"
+                    onClick={() => navigate(`/orcamento-tecnico?os=${os.id}`)}
+                  >
+                    {os.numero_os}
+                  </span>
+                </td>
+                <td>
+                  {orcamento ? (
+                    <span
+                      className="link-numero mono"
+                      onClick={() => navigate(`/orcamento-tecnico?os=${os.id}&orcamento=${orcamento.id}`)}
+                    >
+                      {orcamento.numero}
+                    </span>
+                  ) : (
+                    <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                      -
+                    </span>
+                  )}
+                </td>
+                <td>{os.cliente_nome}</td>
+                <td>{[os.optica_desc, os.optica_fab].filter(Boolean).join(' - ') || '-'}</td>
+                <td className="mono">{os.optica_sn || '-'}</td>
+                <td>
+                  <Badge tono={tonoDoStatusOS(os.status_os)}>{os.status_os ?? '-'}</Badge>
+                </td>
+                <td>{new Date(os.data_abertura).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            );
+          })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhuma OS em execução encontrada.</td>
+              <td colSpan={8}>Nenhuma OS em execução encontrada.</td>
             </tr>
           )}
         </tbody>

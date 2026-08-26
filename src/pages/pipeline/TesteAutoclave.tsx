@@ -5,6 +5,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { STATUS_VOLTA_MANUTENCAO, STATUS_TESTE_AUTOCLAVE, STATUS_CHECKPOINT_B } from '../../lib/statusOS';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface TesteAutoclaveRow {
   id: number;
@@ -18,6 +19,7 @@ interface TesteAutoclaveRow {
 export function TesteAutoclave() {
   const navigate = useNavigate();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_AUTOCLAVE]);
+  const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   if (isLoading) return <CarregandoTela />;
 
   return (
@@ -30,6 +32,16 @@ export function TesteAutoclave() {
         valorInicial={{ temperatura_celsius: 134, tempo_minutos: 15 }}
         colunas={[
           {
+            chave: 'codigo_entrada',
+            label: 'Entrada',
+            render: (r) => (
+              <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${r.ordem_servico_id}`)}>
+                {codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-'}
+              </span>
+            ),
+            valorFiltro: (r) => codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-',
+          },
+          {
             chave: 'ordem_servico_id',
             label: 'OS',
             render: (r) => (
@@ -38,6 +50,26 @@ export function TesteAutoclave() {
               </span>
             ),
             valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
+          },
+          {
+            chave: 'numero_orcamento',
+            label: 'Orçamento',
+            render: (r) => {
+              const orc = orcamentoPorOS.get(r.ordem_servico_id);
+              return orc ? (
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}&orcamento=${orc.id}`)}
+                >
+                  {orc.numero}
+                </span>
+              ) : (
+                <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                  -
+                </span>
+              );
+            },
+            valorFiltro: (r) => orcamentoPorOS.get(r.ordem_servico_id)?.numero ?? '-',
           },
           {
             chave: 'cliente_nome',

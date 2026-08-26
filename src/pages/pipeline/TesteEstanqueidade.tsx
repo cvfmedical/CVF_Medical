@@ -6,6 +6,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
 import { STATUS_VOLTA_MANUTENCAO, STATUS_TESTE_ESTANQUEIDADE, STATUS_TESTE_AUTOCLAVE } from '../../lib/statusOS';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface TesteEstanqueidadeRow {
   id: number;
@@ -30,6 +31,7 @@ const METODO_CAMARA = 'Câmara pré-pressurizada (desvio da norma)';
 export function TesteEstanqueidade() {
   const navigate = useNavigate();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_ESTANQUEIDADE]);
+  const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   // Pressão máxima segura do fabricante, por modelo - cadastrada em
   // "Catálogo de óticas". Usada só pra pré-preencher/sugerir a trava de
   // sobrepressão quando a OS já tem o modelo identificado (catalogo_otica_id);
@@ -71,6 +73,16 @@ export function TesteEstanqueidade() {
         valorInicial={{ imersao_total: false, pressao_aplicada_kpa: 20, tempo_segundos: 60 }}
         colunas={[
           {
+            chave: 'codigo_entrada',
+            label: 'Entrada',
+            render: (r) => (
+              <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${r.ordem_servico_id}`)}>
+                {codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-'}
+              </span>
+            ),
+            valorFiltro: (r) => codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-',
+          },
+          {
             chave: 'ordem_servico_id',
             label: 'OS',
             render: (r) => (
@@ -79,6 +91,26 @@ export function TesteEstanqueidade() {
               </span>
             ),
             valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
+          },
+          {
+            chave: 'numero_orcamento',
+            label: 'Orçamento',
+            render: (r) => {
+              const orc = orcamentoPorOS.get(r.ordem_servico_id);
+              return orc ? (
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}&orcamento=${orc.id}`)}
+                >
+                  {orc.numero}
+                </span>
+              ) : (
+                <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                  -
+                </span>
+              );
+            },
+            valorFiltro: (r) => orcamentoPorOS.get(r.ordem_servico_id)?.numero ?? '-',
           },
           {
             chave: 'cliente_nome',

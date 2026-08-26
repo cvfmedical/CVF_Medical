@@ -19,6 +19,7 @@ import { LaudoPdf } from './LaudoPdf';
 import { LaudoEquipamentoPdf } from './LaudoEquipamentoPdf';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { IconTrash } from '@tabler/icons-react';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface Laudo {
   id: number;
@@ -53,8 +54,10 @@ async function gerarNumeroLaudo(): Promise<string> {
 }
 
 const COLUNAS_FILTRAVEIS = [
-  'numero_laudo',
+  'codigo_entrada',
   'numero_os',
+  'numero_orcamento',
+  'numero_laudo',
   'cliente_nome',
   'tipo_laudo',
   'tipo_equipamento',
@@ -69,6 +72,7 @@ export function Laudos() {
   const { funcionario } = useAuth();
   const qc = useQueryClient();
   const { opcoes: opcoesOS, porId } = useOrdensServicoOpcoes();
+  const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   const [modalAberto, setModalAberto] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -210,6 +214,8 @@ export function Laudos() {
 
   function valorColuna(l: Laudo, chave: string): unknown {
     if (chave === 'numero_os') return porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`;
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(l.ordem_servico_id) ?? '';
+    if (chave === 'numero_orcamento') return orcamentoPorOS.get(l.ordem_servico_id)?.numero ?? '';
     if (chave === 'cliente_nome') return porId(l.ordem_servico_id)?.cliente_nome ?? '';
     if (chave === 'tipo_laudo') return l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : 'ISO 8600 / outro';
     if (chave === 'tipo_equipamento') return nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-';
@@ -412,8 +418,10 @@ export function Laudos() {
         <thead>
           <tr>
             {[
-              ['numero_laudo', 'Nº laudo'],
+              ['codigo_entrada', 'Entrada'],
               ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
+              ['numero_laudo', 'Nº laudo'],
               ['cliente_nome', 'Cliente'],
               ['tipo_laudo', 'Tipo'],
               ['tipo_equipamento', 'Equipamento'],
@@ -456,9 +464,18 @@ export function Laudos() {
           </tr>
         </thead>
         <tbody>
-          {linhas.map((l) => (
+          {linhas.map((l) => {
+            const orcamento = orcamentoPorOS.get(l.ordem_servico_id);
+            return (
             <tr key={l.id}>
-              <td className="mono">{l.numero_laudo}</td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/registro-entrada?os=${l.ordem_servico_id}`)}
+                >
+                  {codigoEntradaPorOS.get(l.ordem_servico_id) ?? '-'}
+                </span>
+              </td>
               <td>
                 <span
                   className="link-numero mono"
@@ -467,6 +484,21 @@ export function Laudos() {
                   {porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`}
                 </span>
               </td>
+              <td>
+                {orcamento ? (
+                  <span
+                    className="link-numero mono"
+                    onClick={() => navigate(`/orcamento-tecnico?os=${l.ordem_servico_id}&orcamento=${orcamento.id}`)}
+                  >
+                    {orcamento.numero}
+                  </span>
+                ) : (
+                  <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                    -
+                  </span>
+                )}
+              </td>
+              <td className="mono">{l.numero_laudo}</td>
               <td>{porId(l.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : <span style={{ color: 'var(--ink-400)' }}>ISO 8600 / outro</span>}</td>
               <td>{nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-'}</td>
@@ -485,10 +517,11 @@ export function Laudos() {
                 </button>
               </td>
             </tr>
-          ))}
+            );
+          })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={10}>Nenhum laudo encontrado.</td>
+              <td colSpan={12}>Nenhum laudo encontrado.</td>
             </tr>
           )}
         </tbody>

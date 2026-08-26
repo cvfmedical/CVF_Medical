@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 // Consulta para o técnico ver, em ordem de aprovação (quem aprovou
 // primeiro aparece primeiro), quais orçamentos já foram aprovados pelo
@@ -18,6 +19,7 @@ export function OrcamentosAprovados() {
   const { temPermissao } = useAuth();
   const podeVerValor = temPermissao('financeiro');
   const query = useOrcamentosAprovados();
+  const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -29,9 +31,10 @@ export function OrcamentosAprovados() {
   } = useFiltrosColuna();
 
   const COLUNAS_FILTRAVEIS = [
-    'data_resposta_cliente',
-    'numero_orcamento',
+    'codigo_entrada',
     'numero_os',
+    'numero_orcamento',
+    'data_resposta_cliente',
     'cliente_nome',
     'equipamento',
     ...(podeVerValor ? ['valor'] : []),
@@ -50,6 +53,7 @@ export function OrcamentosAprovados() {
   // pode ser chamado condicionalmente.
   function valorColuna(o: OrcamentoAprovado, chave: string): unknown {
     if (chave === 'data_resposta_cliente') return o.data_resposta_cliente;
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(o.ordem_servico_id) ?? '';
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
     if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
     if (chave === 'equipamento')
@@ -86,9 +90,10 @@ export function OrcamentosAprovados() {
         <thead>
           <tr>
             {[
-              ['data_resposta_cliente', 'Aprovado em'],
-              ['numero_orcamento', 'Nº orçamento'],
+              ['codigo_entrada', 'Entrada'],
               ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
+              ['data_resposta_cliente', 'Aprovado em'],
               ['cliente_nome', 'Cliente'],
               ['equipamento', 'Equipamento'],
               ...(podeVerValor ? [['valor', 'Valor']] : []),
@@ -129,14 +134,12 @@ export function OrcamentosAprovados() {
         <tbody>
           {linhas.map((o) => (
             <tr key={o.id}>
-              <td>{o.data_resposta_cliente ? new Date(o.data_resposta_cliente).toLocaleString('pt-BR') : '-'}</td>
               <td>
                 <span
                   className="link-numero mono"
-                  title="Abrir no Financeiro"
-                  onClick={() => navigate(`/orcamento-financeiro?orcamento=${o.id}`)}
+                  onClick={() => navigate(`/registro-entrada?os=${o.ordem_servico_id}`)}
                 >
-                  {o.numero_orcamento}
+                  {codigoEntradaPorOS.get(o.ordem_servico_id) ?? '-'}
                 </span>
               </td>
               <td>
@@ -148,6 +151,16 @@ export function OrcamentosAprovados() {
                   {o.ordens_servico?.numero_os}
                 </span>
               </td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  title="Abrir no Financeiro"
+                  onClick={() => navigate(`/orcamento-financeiro?orcamento=${o.id}`)}
+                >
+                  {o.numero_orcamento}
+                </span>
+              </td>
+              <td>{o.data_resposta_cliente ? new Date(o.data_resposta_cliente).toLocaleString('pt-BR') : '-'}</td>
               <td>{o.ordens_servico?.cliente_nome}</td>
               <td>
                 {o.ordens_servico?.optica_desc} ({o.ordens_servico?.optica_fab}) -{' '}
@@ -163,7 +176,7 @@ export function OrcamentosAprovados() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={podeVerValor ? 7 : 6}>Nenhum orçamento encontrado.</td>
+              <td colSpan={podeVerValor ? 8 : 7}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>

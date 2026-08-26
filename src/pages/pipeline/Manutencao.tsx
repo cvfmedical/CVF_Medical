@@ -14,6 +14,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus } from '@tabler/icons-react';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface ItemChecklist {
   item_id: number;
@@ -40,13 +41,23 @@ interface OSDetalhe {
   defeito_relatado: string | null;
 }
 
-const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'data_inicio', 'data_fim', 'itens_substituidos', 'observacoes'];
+const COLUNAS_FILTRAVEIS = [
+  'codigo_entrada',
+  'numero_os',
+  'numero_orcamento',
+  'cliente_nome',
+  'data_inicio',
+  'data_fim',
+  'itens_substituidos',
+  'observacoes',
+];
 
 export function Manutencao() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_VOLTA_MANUTENCAO]);
+  const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   const [modalAberto, setModalAberto] = useState(false);
   const [osId, setOsId] = useState('');
   const [dataInicio, setDataInicio] = useState('');
@@ -218,6 +229,8 @@ export function Manutencao() {
   // pode ser chamado condicionalmente.
   function valorColuna(m: ManutencaoRow, chave: string): unknown {
     if (chave === 'numero_os') return porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`;
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(m.ordem_servico_id) ?? '';
+    if (chave === 'numero_orcamento') return orcamentoPorOS.get(m.ordem_servico_id)?.numero ?? '';
     if (chave === 'cliente_nome') return porId(m.ordem_servico_id)?.cliente_nome ?? '';
     if (chave === 'data_inicio') return m.data_inicio;
     if (chave === 'data_fim') return m.data_fim;
@@ -257,7 +270,9 @@ export function Manutencao() {
         <thead>
           <tr>
             {[
+              ['codigo_entrada', 'Entrada'],
               ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['cliente_nome', 'Cliente'],
               ['data_inicio', 'Início'],
               ['data_fim', 'Fim'],
@@ -296,31 +311,56 @@ export function Manutencao() {
           </tr>
         </thead>
         <tbody>
-          {linhas.map((m) => (
-            <tr key={m.id}>
-              <td>
-                <span
-                  className="link-numero mono"
-                  onClick={() => navigate(`/orcamento-tecnico?os=${m.ordem_servico_id}`)}
-                >
-                  {porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`}
-                </span>
-              </td>
-              <td>{porId(m.ordem_servico_id)?.cliente_nome ?? '-'}</td>
-              <td>{m.data_inicio ? new Date(m.data_inicio).toLocaleDateString('pt-BR') : '-'}</td>
-              <td>{m.data_fim ? new Date(m.data_fim).toLocaleDateString('pt-BR') : '-'}</td>
-              <td>
-                {(m.checklist ?? [])
-                  .filter((i) => i.substituido)
-                  .map((i) => i.produto_nome)
-                  .join(', ') || '-'}
-              </td>
-              <td>{m.observacoes}</td>
-            </tr>
-          ))}
+          {linhas.map((m) => {
+            const orcamento = orcamentoPorOS.get(m.ordem_servico_id);
+            return (
+              <tr key={m.id}>
+                <td>
+                  <span
+                    className="link-numero mono"
+                    onClick={() => navigate(`/registro-entrada?os=${m.ordem_servico_id}`)}
+                  >
+                    {codigoEntradaPorOS.get(m.ordem_servico_id) ?? '-'}
+                  </span>
+                </td>
+                <td>
+                  <span
+                    className="link-numero mono"
+                    onClick={() => navigate(`/orcamento-tecnico?os=${m.ordem_servico_id}`)}
+                  >
+                    {porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`}
+                  </span>
+                </td>
+                <td>
+                  {orcamento ? (
+                    <span
+                      className="link-numero mono"
+                      onClick={() => navigate(`/orcamento-tecnico?os=${m.ordem_servico_id}&orcamento=${orcamento.id}`)}
+                    >
+                      {orcamento.numero}
+                    </span>
+                  ) : (
+                    <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                      -
+                    </span>
+                  )}
+                </td>
+                <td>{porId(m.ordem_servico_id)?.cliente_nome ?? '-'}</td>
+                <td>{m.data_inicio ? new Date(m.data_inicio).toLocaleDateString('pt-BR') : '-'}</td>
+                <td>{m.data_fim ? new Date(m.data_fim).toLocaleDateString('pt-BR') : '-'}</td>
+                <td>
+                  {(m.checklist ?? [])
+                    .filter((i) => i.substituido)
+                    .map((i) => i.produto_nome)
+                    .join(', ') || '-'}
+                </td>
+                <td>{m.observacoes}</td>
+              </tr>
+            );
+          })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={6}>Nenhum registro encontrado.</td>
+              <td colSpan={8}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>

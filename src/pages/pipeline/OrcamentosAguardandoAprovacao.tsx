@@ -8,8 +8,18 @@ import {
   useOrcamentosAguardandoAprovacao,
   type OrcamentoAguardandoAprovacao,
 } from '../../lib/useOrcamentosAguardandoAprovacao';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
-const COLUNAS_FILTRAVEIS = ['data_envio', 'dias', 'numero_orcamento', 'numero_os', 'cliente_nome', 'equipamento', 'valor'];
+const COLUNAS_FILTRAVEIS = [
+  'codigo_entrada',
+  'numero_os',
+  'numero_orcamento',
+  'data_envio',
+  'dias',
+  'cliente_nome',
+  'equipamento',
+  'valor',
+];
 
 // Orçamentos já enviados ao cliente, aguardando ele aprovar ou recusar -
 // útil pra saber quem cobrar/ligar. Ordenado do mais antigo pro mais
@@ -17,6 +27,7 @@ const COLUNAS_FILTRAVEIS = ['data_envio', 'dias', 'numero_orcamento', 'numero_os
 export function OrcamentosAguardandoAprovacao() {
   const navigate = useNavigate();
   const query = useOrcamentosAguardandoAprovacao();
+  const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -43,6 +54,7 @@ export function OrcamentosAguardandoAprovacao() {
   function valorColuna(o: OrcamentoAguardandoAprovacao, chave: string): unknown {
     if (chave === 'data_envio') return o.data_envio;
     if (chave === 'dias') return diasAguardando(o) ?? -1;
+    if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(o.ordem_servico_id) ?? '';
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
     if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
     if (chave === 'equipamento')
@@ -80,10 +92,11 @@ export function OrcamentosAguardandoAprovacao() {
         <thead>
           <tr>
             {[
+              ['codigo_entrada', 'Entrada'],
+              ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['data_envio', 'Enviado em'],
               ['dias', 'Dias aguardando'],
-              ['numero_orcamento', 'Nº orçamento'],
-              ['numero_os', 'OS'],
               ['cliente_nome', 'Cliente'],
               ['equipamento', 'Equipamento'],
               ['valor', 'Valor'],
@@ -126,23 +139,12 @@ export function OrcamentosAguardandoAprovacao() {
             const dias = diasAguardando(o);
             return (
               <tr key={o.id}>
-                <td>{o.data_envio ? new Date(o.data_envio).toLocaleString('pt-BR') : '-'}</td>
-                <td>
-                  {dias == null ? (
-                    '-'
-                  ) : (
-                    <span style={{ color: dias >= 5 ? 'var(--danger-500)' : dias >= 2 ? 'var(--ambar-800)' : 'inherit', fontWeight: dias >= 2 ? 600 : 400 }}>
-                      {dias} {dias === 1 ? 'dia' : 'dias'}
-                    </span>
-                  )}
-                </td>
                 <td>
                   <span
                     className="link-numero mono"
-                    title="Abrir no Financeiro"
-                    onClick={() => navigate(`/orcamento-financeiro?orcamento=${o.id}`)}
+                    onClick={() => navigate(`/registro-entrada?os=${o.ordem_servico_id}`)}
                   >
-                    {o.numero_orcamento}
+                    {codigoEntradaPorOS.get(o.ordem_servico_id) ?? '-'}
                   </span>
                 </td>
                 <td>
@@ -153,6 +155,25 @@ export function OrcamentosAguardandoAprovacao() {
                   >
                     {o.ordens_servico?.numero_os}
                   </span>
+                </td>
+                <td>
+                  <span
+                    className="link-numero mono"
+                    title="Abrir no Financeiro"
+                    onClick={() => navigate(`/orcamento-financeiro?orcamento=${o.id}`)}
+                  >
+                    {o.numero_orcamento}
+                  </span>
+                </td>
+                <td>{o.data_envio ? new Date(o.data_envio).toLocaleString('pt-BR') : '-'}</td>
+                <td>
+                  {dias == null ? (
+                    '-'
+                  ) : (
+                    <span style={{ color: dias >= 5 ? 'var(--danger-500)' : dias >= 2 ? 'var(--ambar-800)' : 'inherit', fontWeight: dias >= 2 ? 600 : 400 }}>
+                      {dias} {dias === 1 ? 'dia' : 'dias'}
+                    </span>
+                  )}
                 </td>
                 <td>{o.ordens_servico?.cliente_nome}</td>
                 <td>
@@ -174,7 +195,7 @@ export function OrcamentosAguardandoAprovacao() {
           })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={8}>Nenhum orçamento aguardando aprovação do cliente.</td>
+              <td colSpan={9}>Nenhum orçamento aguardando aprovação do cliente.</td>
             </tr>
           )}
         </tbody>

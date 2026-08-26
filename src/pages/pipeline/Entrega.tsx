@@ -12,6 +12,7 @@ import { mensagemErro } from '../../lib/erros';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface EntregaRow {
   id: number;
@@ -34,6 +35,7 @@ export function Entrega() {
   const navigate = useNavigate();
   const { funcionario } = useAuth();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
+  const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
   const [imprimindoLote, setImprimindoLote] = useState(false);
   const [selecionandoEtiquetas, setSelecionandoEtiquetas] = useState(false);
   const [osSelecionadas, setOsSelecionadas] = useState<Set<number>>(new Set());
@@ -280,6 +282,16 @@ export function Entrega() {
       ]}
       colunas={[
         {
+          chave: 'entrada',
+          label: 'Entrada',
+          render: (r) => (
+            <span className="link-numero mono" onClick={() => navigate(`/registro-entrada?os=${r.ordem_servico_id}`)}>
+              {codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-'}
+            </span>
+          ),
+          valorFiltro: (r) => codigoEntradaPorOS.get(r.ordem_servico_id) ?? '-',
+        },
+        {
           chave: 'ordem_servico_id',
           label: 'OS',
           render: (r) => (
@@ -288,20 +300,6 @@ export function Entrega() {
             </span>
           ),
           valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
-        },
-        {
-          chave: 'cliente',
-          label: 'Cliente',
-          render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
-          valorFiltro: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
-        },
-        {
-          chave: 'equipamento',
-          label: 'Equipamento',
-          render: (r) =>
-            [porId(r.ordem_servico_id)?.optica_desc, porId(r.ordem_servico_id)?.optica_fab].filter(Boolean).join(' - ') || '-',
-          valorFiltro: (r) =>
-            [porId(r.ordem_servico_id)?.optica_desc, porId(r.ordem_servico_id)?.optica_fab].filter(Boolean).join(' - ') || '-',
         },
         {
           chave: 'orcamento',
@@ -322,6 +320,20 @@ export function Entrega() {
             );
           },
           valorFiltro: (r) => orcamentoPorOS(r.ordem_servico_id)?.numero ?? '-',
+        },
+        {
+          chave: 'cliente',
+          label: 'Cliente',
+          render: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+          valorFiltro: (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '-',
+        },
+        {
+          chave: 'equipamento',
+          label: 'Equipamento',
+          render: (r) =>
+            [porId(r.ordem_servico_id)?.optica_desc, porId(r.ordem_servico_id)?.optica_fab].filter(Boolean).join(' - ') || '-',
+          valorFiltro: (r) =>
+            [porId(r.ordem_servico_id)?.optica_desc, porId(r.ordem_servico_id)?.optica_fab].filter(Boolean).join(' - ') || '-',
         },
         {
           chave: 'situacao',
