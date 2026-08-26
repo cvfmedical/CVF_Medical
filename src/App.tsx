@@ -58,6 +58,7 @@ import { Faturamento } from './pages/financeiro/Faturamento';
 import { ContratosManutencao } from './pages/comercial/ContratosManutencao';
 import { GarantiasAtivas } from './pages/comercial/GarantiasAtivas';
 import { RelatorioPecasUtilizadas } from './pages/comercial/RelatorioPecasUtilizadas';
+import { ComoOrcamentosForamAprovados } from './pages/comercial/ComoOrcamentosForamAprovados';
 import { ConfiguracoesUsuarios } from './pages/sistema/ConfiguracoesUsuarios';
 import { AcessoPortalCliente } from './pages/sistema/AcessoPortalCliente';
 import { ChatInterno } from './pages/ChatInterno';
@@ -117,6 +118,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/comercial/contratos': ContratosManutencao,
   '/comercial/garantias': GarantiasAtivas,
   '/comercial/relatorio-pecas': RelatorioPecasUtilizadas,
+  '/comercial/aprovacoes': ComoOrcamentosForamAprovados,
   '/sistema/config': ConfiguracoesUsuarios,
   '/sistema/portal-cliente': AcessoPortalCliente,
 };
