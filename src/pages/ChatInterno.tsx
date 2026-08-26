@@ -102,23 +102,30 @@ export function ChatInterno() {
     );
   }, [mensagensQuery.data, contatoSelecionadoId]);
 
+  // IDs não lidos como uma string estável (não o array em si, que troca de
+  // referência a cada poll de 4s mesmo sem mudança nenhuma) - sem isso, o
+  // efeito abaixo reagia à troca de referência e reinvalidava a query o
+  // tempo todo, travando a tela (inclusive impedindo digitar).
+  const idsNaoLidos = useMemo(
+    () => mensagensDaConversa.filter((m) => m.destinatario_id === meuId && !m.lida_em).map((m) => m.id),
+    [mensagensDaConversa, meuId],
+  );
+  const chaveIdsNaoLidos = idsNaoLidos.join(',');
+
   // Marca como lidas as mensagens recebidas dessa pessoa assim que a
   // conversa é aberta (ou assim que uma nova chega enquanto ela já está
-  // aberta, via o poll).
+  // aberta, via o poll) - só dispara quando o CONJUNTO de não lidas muda.
   useEffect(() => {
-    if (!contatoSelecionadoId || !meuId) return;
-    const naoLidas = mensagensDaConversa.filter((m) => m.destinatario_id === meuId && !m.lida_em);
-    if (naoLidas.length === 0) return;
+    if (!contatoSelecionadoId || idsNaoLidos.length === 0) return;
     supabase
       .from('mensagens_internas')
       .update({ lida_em: new Date().toISOString() })
-      .in(
-        'id',
-        naoLidas.map((m) => m.id),
-      )
-      .then(() => qc.invalidateQueries({ queryKey: ['chat-mensagens', meuId] }));
+      .in('id', idsNaoLidos)
+      .then(({ error }) => {
+        if (!error) qc.invalidateQueries({ queryKey: ['chat-mensagens', meuId] });
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contatoSelecionadoId, mensagensDaConversa, meuId]);
+  }, [contatoSelecionadoId, chaveIdsNaoLidos]);
 
   useEffect(() => {
     fimDaListaRef.current?.scrollIntoView({ block: 'end' });
