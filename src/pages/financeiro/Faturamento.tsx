@@ -13,6 +13,8 @@ import { STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
+import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -113,6 +115,13 @@ export function Faturamento() {
   // Evita reabrir sozinho se o usuário fechar o modal manualmente - só abre
   // uma vez por chegada vinda do link "Lançar NF" do Orçamento Financeiro.
   const abriuAutomaticoRef = useRef(false);
+  const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
+  // "Pular etapa": pra equipamentos cuja NF já foi emitida por fora do
+  // sistema (Nota Control) enquanto a OS ainda está presa numa etapa
+  // anterior do pipeline aqui dentro - marca como entregue e libera pra
+  // faturar, sem precisar passar pelas telas de teste/entrega uma a uma.
+  const [orcamentoParaPular, setOrcamentoParaPular] = useState('');
+  const [pulandoEtapa, setPulandoEtapa] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -226,6 +235,17 @@ export function Faturamento() {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? `#${id}` : '-';
   }
 
+  // Orçamentos aprovados que ficaram presos numa etapa anterior do
+  // pipeline mas que, na vida real, o equipamento já foi entregue e a NF
+  // já foi emitida por fora (Nota Control) - candidatos ao "Pular etapa".
+  const naoLiberadas = (orcamentosQuery.data ?? []).filter(
+    (o) => !orcamentosComConta.has(o.id) && !liberada(o.ordens_servico?.status_os ?? null),
+  );
+  const opcoesPular = naoLiberadas.map((o) => ({
+    value: String(o.id),
+    label: `${o.numero_orcamento} - OS ${o.ordens_servico?.numero_os ?? '?'} - ${nomeCliente(o.ordens_servico?.cliente_id ?? null)} (${o.ordens_servico?.status_os ?? '-'})`,
+  }));
+
   // Mesma lógica usada pro badge da coluna "Nota fiscal" - reaproveitada
   // aqui pra poder ordenar/filtrar por esse status derivado.
   function labelNotaFiscal(l: LinhaFaturamento): string {
@@ -266,6 +286,62 @@ export function Faturamento() {
     setParcelado(false);
     setParcelas([]);
     setErro(null);
+  }
+
+  // Marca a OS como entregue (sem passar pelas telas de teste/entrega) e
+  // já abre "Lançar NF" em seguida - pra equipamentos cuja entrega e NF
+  // já aconteceram na vida real, fora do sistema.
+  function pularEtapa() {
+    const orc = naoLiberadas.find((o) => String(o.id) === orcamentoParaPular);
+    if (!orc || !orc.ordens_servico) return;
+    const numeroOS = orc.ordens_servico.numero_os;
+    pedirConfirmacao(
+      async () => {
+        setPulandoEtapa(true);
+        setErro(null);
+        try {
+          const { error } = await supabase
+            .from('ordens_servico')
+            .update({ status_os: STATUS_ENTREGUE })
+            .eq('id', orc.ordem_servico_id);
+          if (error) throw error;
+          await qc.invalidateQueries({ queryKey: ['faturamento-orcamentos-aprovados'] });
+          qc.invalidateQueries({ queryKey: ['ordens-servico-painel'] });
+          qc.invalidateQueries({ queryKey: ['os-em-execucao'] });
+
+          const valor =
+            orc.valor_fixo_contrato ??
+            (orc.orcamento_itens ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
+          abrirLancarNota({
+            chave: `orc-${orc.id}`,
+            contaId: null,
+            orcamentoId: orc.id,
+            numero: orc.numero_orcamento,
+            clienteId: orc.ordens_servico!.cliente_id,
+            descricao: `Orçamento ${orc.numero_orcamento} - OS ${numeroOS}`,
+            valor,
+            statusOS: STATUS_ENTREGUE,
+            nf_tipo: null,
+            nf_numero: null,
+            nf_serie: null,
+            nf_chave_acesso: null,
+            nf_data_emissao: null,
+            boleto_numero: null,
+            boleto_linha_digitavel: null,
+            boleto_vencimento: null,
+          });
+          setOrcamentoParaPular('');
+        } catch (e) {
+          setErro(mensagemErro(e));
+        } finally {
+          setPulandoEtapa(false);
+        }
+      },
+      {
+        titulo: 'Pular etapa e liberar para faturamento',
+        mensagem: `Confirma que o equipamento da OS ${numeroOS} já foi entregue ao cliente e a NF já foi emitida fora do sistema? O status da OS vai virar "Entregue ao cliente" e a tela de lançar NF abre em seguida.`,
+      },
+    );
   }
 
   function adicionarParcela() {
@@ -456,6 +532,42 @@ export function Faturamento() {
         >
           {liberadas.length} conta{liberadas.length > 1 ? 's' : ''} liberada{liberadas.length > 1 ? 's' : ''} para
           faturamento (equipamento pronto/entregue, sem NF lançada).
+        </div>
+      )}
+
+      {naoLiberadas.length > 0 && (
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            marginBottom: 16,
+          }}
+        >
+          <strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
+            Pular etapa (equipamento já entregue e NF já emitida fora do sistema)
+          </strong>
+          <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 8 }}>
+            Pra orçamentos aprovados cuja OS ainda está numa etapa anterior aqui dentro, mas que na vida real já foi
+            entregue ao cliente. Marca a OS como entregue e já abre o lançamento de NF em seguida.
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 320 }}>
+              <ComboboxBusca
+                opcoes={opcoesPular}
+                valor={orcamentoParaPular}
+                onChange={setOrcamentoParaPular}
+                placeholder="Buscar orçamento/OS..."
+              />
+            </div>
+            <button
+              className="botao-secundario"
+              onClick={pularEtapa}
+              disabled={!orcamentoParaPular || pulandoEtapa}
+            >
+              {pulandoEtapa ? 'Processando...' : 'Pular etapa e lançar NF'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -735,6 +847,7 @@ export function Faturamento() {
             </div>
         </ModalJanela>
       )}
+      {ModalConfirmacao}
     </div>
   );
 }
