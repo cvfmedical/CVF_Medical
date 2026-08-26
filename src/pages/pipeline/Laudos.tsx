@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -64,6 +65,7 @@ const COLUNAS_FILTRAVEIS = [
 ];
 
 export function Laudos() {
+  const navigate = useNavigate();
   const { funcionario } = useAuth();
   const qc = useQueryClient();
   const { opcoes: opcoesOS, porId } = useOrdensServicoOpcoes();
@@ -457,7 +459,14 @@ export function Laudos() {
           {linhas.map((l) => (
             <tr key={l.id}>
               <td className="mono">{l.numero_laudo}</td>
-              <td className="mono">{porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`}</td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${l.ordem_servico_id}`)}
+                >
+                  {porId(l.ordem_servico_id)?.numero_os ?? `#${l.ordem_servico_id}`}
+                </span>
+              </td>
               <td>{porId(l.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{l.tipo_laudo ? (LABEL_TIPO_LAUDO[l.tipo_laudo] ?? l.tipo_laudo) : <span style={{ color: 'var(--ink-400)' }}>ISO 8600 / outro</span>}</td>
               <td>{nomeTipoEquipamento(l.tipo_equipamento_laudo_id) ?? '-'}</td>

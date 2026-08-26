@@ -130,8 +130,24 @@ export function OrcamentosAprovados() {
           {linhas.map((o) => (
             <tr key={o.id}>
               <td>{o.data_resposta_cliente ? new Date(o.data_resposta_cliente).toLocaleString('pt-BR') : '-'}</td>
-              <td className="mono">{o.numero_orcamento}</td>
-              <td className="mono">{o.ordens_servico?.numero_os}</td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  title="Abrir no Financeiro"
+                  onClick={() => navigate(`/orcamento-financeiro?orcamento=${o.id}`)}
+                >
+                  {o.numero_orcamento}
+                </span>
+              </td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  title="Abrir orçamento técnico desta OS"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${o.ordem_servico_id}`)}
+                >
+                  {o.ordens_servico?.numero_os}
+                </span>
+              </td>
               <td>{o.ordens_servico?.cliente_nome}</td>
               <td>
                 {o.ordens_servico?.optica_desc} ({o.ordens_servico?.optica_fab}) -{' '}

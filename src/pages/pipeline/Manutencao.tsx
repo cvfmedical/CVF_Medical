@@ -4,7 +4,7 @@ import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
 import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
@@ -44,6 +44,7 @@ const COLUNAS_FILTRAVEIS = ['numero_os', 'cliente_nome', 'data_inicio', 'data_fi
 
 export function Manutencao() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_VOLTA_MANUTENCAO]);
   const [modalAberto, setModalAberto] = useState(false);
@@ -297,7 +298,14 @@ export function Manutencao() {
         <tbody>
           {linhas.map((m) => (
             <tr key={m.id}>
-              <td className="mono">{porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`}</td>
+              <td>
+                <span
+                  className="link-numero mono"
+                  onClick={() => navigate(`/orcamento-tecnico?os=${m.ordem_servico_id}`)}
+                >
+                  {porId(m.ordem_servico_id)?.numero_os ?? `#${m.ordem_servico_id}`}
+                </span>
+              </td>
               <td>{porId(m.ordem_servico_id)?.cliente_nome ?? '-'}</td>
               <td>{m.data_inicio ? new Date(m.data_inicio).toLocaleDateString('pt-BR') : '-'}</td>
               <td>{m.data_fim ? new Date(m.data_fim).toLocaleDateString('pt-BR') : '-'}</td>

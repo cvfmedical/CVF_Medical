@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { CrudPage } from '../../components/CrudPage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -23,6 +24,7 @@ interface TesteLuzRow {
 }
 
 export function TesteLuz() {
+  const navigate = useNavigate();
   // Só faz sentido lançar teste de luz durante a bancada de visão (mesma
   // janela do Checkpoint A/B) - sem isso o combobox listava OS de qualquer
   // etapa do pipeline, inclusive já entregues ou ainda em triagem.
@@ -52,8 +54,11 @@ export function TesteLuz() {
           {
             chave: 'ordem_servico_id',
             label: 'OS',
-            mono: true,
-            render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+            render: (r) => (
+              <span className="link-numero mono" onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}`)}>
+                {porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`}
+              </span>
+            ),
             valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
           },
           {

@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { CrudPage } from '../../components/CrudPage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -15,6 +16,7 @@ interface TesteAutoclaveRow {
 }
 
 export function TesteAutoclave() {
+  const navigate = useNavigate();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_AUTOCLAVE]);
   if (isLoading) return <CarregandoTela />;
 
@@ -30,8 +32,11 @@ export function TesteAutoclave() {
           {
             chave: 'ordem_servico_id',
             label: 'OS',
-            mono: true,
-            render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+            render: (r) => (
+              <span className="link-numero mono" onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}`)}>
+                {porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`}
+              </span>
+            ),
             valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
           },
           {

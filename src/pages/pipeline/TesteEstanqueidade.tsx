@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { CrudPage } from '../../components/CrudPage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -27,6 +28,7 @@ const METODO_ISO = 'ISO 8600-7 (pressurizado e submerso)';
 const METODO_CAMARA = 'Câmara pré-pressurizada (desvio da norma)';
 
 export function TesteEstanqueidade() {
+  const navigate = useNavigate();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_TESTE_ESTANQUEIDADE]);
   // Pressão máxima segura do fabricante, por modelo - cadastrada em
   // "Catálogo de óticas". Usada só pra pré-preencher/sugerir a trava de
@@ -71,8 +73,11 @@ export function TesteEstanqueidade() {
           {
             chave: 'ordem_servico_id',
             label: 'OS',
-            mono: true,
-            render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+            render: (r) => (
+              <span className="link-numero mono" onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}`)}>
+                {porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`}
+              </span>
+            ),
             valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
           },
           {

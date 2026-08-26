@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { CrudPage } from '../../components/CrudPage';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -30,6 +31,7 @@ interface EntregaRow {
 
 export function Entrega() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { funcionario } = useAuth();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   const [imprimindoLote, setImprimindoLote] = useState(false);
@@ -50,8 +52,9 @@ export function Entrega() {
       return data as { id: number; numero_orcamento: string; ordem_servico_id: number }[];
     },
   });
-  function orcamentoPorOS(osId: number): string | null {
-    return orcamentosQuery.data?.find((o) => o.ordem_servico_id === osId)?.numero_orcamento ?? null;
+  function orcamentoPorOS(osId: number): { id: number; numero: string } | null {
+    const o = orcamentosQuery.data?.find((o) => o.ordem_servico_id === osId);
+    return o ? { id: o.id, numero: o.numero_orcamento } : null;
   }
 
   // OS's que já têm entrega registrada - precisam continuar selecionáveis
@@ -278,8 +281,11 @@ export function Entrega() {
         {
           chave: 'ordem_servico_id',
           label: 'OS',
-          mono: true,
-          render: (r) => porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`,
+          render: (r) => (
+            <span className="link-numero mono" onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}`)}>
+              {porId(r.ordem_servico_id)?.numero_os ?? `#${r.ordem_servico_id}`}
+            </span>
+          ),
           valorFiltro: (r) => porId(r.ordem_servico_id)?.numero_os ?? r.ordem_servico_id,
         },
         {
@@ -299,9 +305,22 @@ export function Entrega() {
         {
           chave: 'orcamento',
           label: 'Orçamento',
-          mono: true,
-          render: (r) => orcamentoPorOS(r.ordem_servico_id) ?? '-',
-          valorFiltro: (r) => orcamentoPorOS(r.ordem_servico_id) ?? '-',
+          render: (r) => {
+            const orc = orcamentoPorOS(r.ordem_servico_id);
+            return orc ? (
+              <span
+                className="link-numero mono"
+                onClick={() => navigate(`/orcamento-tecnico?os=${r.ordem_servico_id}&orcamento=${orc.id}`)}
+              >
+                {orc.numero}
+              </span>
+            ) : (
+              <span className="mono" style={{ color: 'var(--ink-400)' }}>
+                -
+              </span>
+            );
+          },
+          valorFiltro: (r) => orcamentoPorOS(r.ordem_servico_id)?.numero ?? '-',
         },
         {
           chave: 'situacao',
