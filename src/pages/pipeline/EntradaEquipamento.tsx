@@ -6,7 +6,7 @@ import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { proximoNumeroDeJob, sufixoNumerico } from '../../lib/numeroSequencial';
+import { proximoNumeroDeJob, sufixoNumerico, numeroHerdadoOuNovo } from '../../lib/numeroSequencial';
 import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
@@ -592,8 +592,16 @@ export function EntradaEquipamento() {
     try {
       const c = cliente(entrada.cliente_id);
       // Herda o mesmo número da entrada (só troca o prefixo) - Entrada e
-      // OS do mesmo equipamento não devem ter números diferentes.
-      const numeroOS = `OS-${sufixoNumerico(entrada.codigo_entrada)}`;
+      // OS do mesmo equipamento não devem ter números diferentes. Se esse
+      // número já estiver em uso por um registro antigo/avulso (a
+      // unificação não é retroativa), minta um número novo em vez de
+      // colidir.
+      const numeroOS = await numeroHerdadoOuNovo(
+        'OS',
+        'ordens_servico',
+        'numero_os',
+        `OS-${sufixoNumerico(entrada.codigo_entrada)}`,
+      );
       const { data: os, error } = await supabase
         .from('ordens_servico')
         .insert({

@@ -74,3 +74,21 @@ const FONTES_NUMERACAO_COMPARTILHADA = [
 export async function proximoNumeroDeJob(): Promise<number> {
   return proximoNumeroCompartilhado(FONTES_NUMERACAO_COMPARTILHADA);
 }
+
+// Confere se o número herdado (mesmo sufixo do elo anterior da cadeia
+// Entrada -> OS -> Orçamento) já está em uso antes de gravar. Pode
+// acontecer com registros antigos/avulsos cujo número nunca ficou
+// sincronizado entre as 3 tabelas (a unificação não é retroativa) - nesse
+// caso, em vez de colidir (erro de valor único), minta um número novo do
+// zero.
+export async function numeroHerdadoOuNovo(
+  prefixo: string,
+  tabela: string,
+  coluna: string,
+  numeroPreferido: string,
+): Promise<string> {
+  const { data, error } = await supabase.from(tabela).select(coluna).eq(coluna, numeroPreferido).limit(1);
+  if (error) throw error;
+  if (!data || data.length === 0) return numeroPreferido;
+  return `${prefixo}-${await proximoNumeroDeJob()}`;
+}

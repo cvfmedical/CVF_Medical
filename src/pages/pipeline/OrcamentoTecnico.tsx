@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { sufixoNumerico } from '../../lib/numeroSequencial';
+import { sufixoNumerico, numeroHerdadoOuNovo } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
@@ -310,8 +310,16 @@ export function OrcamentoTecnico() {
     setCriando(true);
     try {
       // Herda o mesmo número da OS (só troca o prefixo) - o primeiro
-      // orçamento de uma OS não deve ter um número diferente dela.
-      const numero = `ORC-${sufixoNumerico(osDetalheQuery.data.numero_os)}`;
+      // orçamento de uma OS não deve ter um número diferente dela. Se esse
+      // número já estiver em uso por um registro antigo/avulso (a
+      // unificação não é retroativa), minta um número novo em vez de
+      // colidir.
+      const numero = await numeroHerdadoOuNovo(
+        'ORC',
+        'orcamentos',
+        'numero_orcamento',
+        `ORC-${sufixoNumerico(osDetalheQuery.data.numero_os)}`,
+      );
       const { error } = await supabase.from('orcamentos').insert({
         numero_orcamento: numero,
         ordem_servico_id: Number(osId),
