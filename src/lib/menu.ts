@@ -128,6 +128,7 @@ export const MENU: CategoriaMenu[] = [
     itens: [
       { label: 'Contratos de manutenção', path: '/comercial/contratos', categoria: 'comercial', implementado: false },
       { label: 'Garantias ativas', path: '/comercial/garantias', categoria: 'comercial', implementado: false },
+      { label: 'Relatório de peças utilizadas', path: '/comercial/relatorio-pecas', categoria: 'comercial', implementado: false },
     ],
   },
   {
