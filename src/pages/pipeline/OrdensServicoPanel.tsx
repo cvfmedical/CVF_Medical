@@ -6,8 +6,6 @@ import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
-import { type ChecklistAvarias } from '../../lib/checklistAvarias';
-import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO, STATUS_OS_ORDENADOS } from '../../lib/statusOS';
@@ -46,9 +44,7 @@ interface OrdemServico {
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
-  defeito_relatado: string | null;
   status_os: string | null;
-  triagem_avarias: ChecklistAvarias | null;
   data_abertura: string;
 }
 
@@ -74,7 +70,6 @@ export function OrdensServicoPanel() {
     limparTudo,
     algumFiltroAtivo,
   } = useFiltrosColuna();
-  const avariasTriagemQuery = useAvariasTriagem();
   const [excluindo, setExcluindo] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -193,10 +188,6 @@ export function OrdensServicoPanel() {
         : '<p style="margin:0;color:var(--ink-400);">Nenhum item cadastrado no orçamento.</p>';
     }
 
-    const avariasMarcadas = (avariasTriagemQuery.data ?? [])
-      .filter((item) => os.triagem_avarias?.[String(item.id)])
-      .map((item) => item.descricao);
-
     const caixaCheck = '<span style="display:inline-block;width:8px;height:8px;border:1.2px solid #21201c;"></span>';
 
     // Só a tabela de etapas fica compacta (é a parte comprida, com 11
@@ -229,14 +220,6 @@ export function OrdensServicoPanel() {
             <strong>Nº controle interno / NF cliente:</strong> <span class="mono">${controleCliente}</span>
           </div>
         </div>
-      </div>
-
-      <div class="laudo-secao">Defeito relatado</div>
-      <div class="laudo-caixa"><p style="margin:0;">${os.defeito_relatado || '-'}</p></div>
-
-      <div class="laudo-secao">Avarias identificadas na triagem</div>
-      <div class="laudo-caixa">
-        ${avariasMarcadas.length ? `<p style="margin:0;">${avariasMarcadas.join(', ')}</p>` : '<p style="margin:0;color:var(--ink-400);">Nenhuma avaria marcada.</p>'}
       </div>
 
       <div class="laudo-secao">Peças a substituir (conforme orçamento aprovado)</div>

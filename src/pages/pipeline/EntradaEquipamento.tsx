@@ -12,8 +12,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { mensagemErro } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
-import { IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
+import { IconClipboardList, IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
 import { imprimirEtiquetaRastreio } from '../../lib/etiquetaRastreio';
+import { abrirImpressao } from '../../lib/imprimir';
+import { STATUS_OS_ORDENADOS } from '../../lib/statusOS';
 import { type ChecklistAvarias } from '../../lib/checklistAvarias';
 import { useAvariasTriagem } from '../../lib/useAvariasTriagem';
 import { imprimirRegistroEntrada } from '../../lib/relatorioEntrada';
@@ -660,6 +662,72 @@ export function EntradaEquipamento() {
     );
   }
 
+  // Mesmo documento impresso em "Ordem de serviço" (Ficha de
+  // Acompanhamento), só que disponível já na triagem - antes de virar OS -
+  // pra "caminhar" com o equipamento desde a chegada. Como ainda não tem
+  // OS/orçamento nesse ponto, a seção de peças sempre mostra o texto
+  // padrão de "ainda não aprovado".
+  async function imprimirFicha(entrada: Entrada) {
+    const c = cliente(entrada.cliente_id);
+    const controleCliente = entrada.numero_controle_cliente
+      ? entrada.numero_controle_cliente
+      : entrada.nf_remessa_numero
+        ? `NF ${entrada.nf_remessa_numero}${entrada.nf_remessa_serie ? '/' + entrada.nf_remessa_serie : ''}`
+        : '-';
+
+    const caixaCheck = '<span style="display:inline-block;width:8px;height:8px;border:1.2px solid #21201c;"></span>';
+
+    const corpo = `
+      <style>
+        .etapas-bloco .laudo-secao { margin-top: 6px; padding: 2px 14px; font-size: 10px; }
+        .etapas-compactas { margin-top: 1px; }
+        .etapas-compactas th, .etapas-compactas td { padding: 1px 5px; font-size: 8px; line-height: 1.1; }
+        table.etapas-compactas td:nth-child(3), table.etapas-compactas th:nth-child(3) { text-align: left; }
+      </style>
+      <h1>Ficha de Acompanhamento</h1>
+      <p class="subtitulo">Documento interno - acompanha o equipamento dentro da CVF, marcado à mão a cada etapa.</p>
+
+      <div class="laudo-secao">Identificação</div>
+      <div class="laudo-caixa">
+        <div class="laudo-linha-dupla">
+          <div><strong>Nº Entrada:</strong> <span class="mono">${entrada.codigo_entrada}</span></div>
+          <div><strong>Cliente:</strong> ${c?.razao_social ?? '-'}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Equipamento:</strong> ${entrada.equipamento_desc ?? '-'}${entrada.equipamento_fab ? ' (' + entrada.equipamento_fab + ')' : ''}</div>
+          <div><strong>Nº de série:</strong> <span class="mono">${entrada.equipamento_sn ?? '-'}</span></div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div style="border-right:0;">
+            <strong>Nº controle interno / NF cliente:</strong> <span class="mono">${controleCliente}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="laudo-secao">Peças a substituir (conforme orçamento aprovado)</div>
+      <div class="laudo-caixa"><p style="margin:0;color:var(--ink-400);">Orçamento ainda não aprovado.</p></div>
+
+      <div class="etapas-bloco">
+        <div class="laudo-secao">Etapas do processo</div>
+        <table class="dados etapas-compactas">
+          <thead>
+            <tr>
+              <th>Etapa</th>
+              <th style="width:32px;text-align:center;">OK</th>
+              <th style="width:220px;">Observação</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${STATUS_OS_ORDENADOS.map(
+              (etapa) => `<tr><td>${etapa}</td><td style="text-align:center;">${caixaCheck}</td><td></td></tr>`,
+            ).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    abrirImpressao(`Ficha de Acompanhamento - ${entrada.codigo_entrada}`, corpo, undefined, { semAssinaturas: true });
+  }
+
   // E-mail automático (via Resend, servidor) avisando o cliente que o
   // equipamento chegou e já passou pela triagem - diferente do botão
   // "Enviar link ao cliente" (que só abre um mailto:/WhatsApp manual).
@@ -935,6 +1003,13 @@ export function EntradaEquipamento() {
                 </button>
                 <button className="botao-icone" title="Imprimir relatório" onClick={() => imprimirRelatorio(e)}>
                   <IconPrinter size={16} />
+                </button>
+                <button
+                  className="botao-icone"
+                  title="Imprimir ficha de acompanhamento"
+                  onClick={() => imprimirFicha(e)}
+                >
+                  <IconClipboardList size={16} />
                 </button>
                 <button
                   className="botao-icone"
