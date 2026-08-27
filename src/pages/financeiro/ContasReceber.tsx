@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -13,6 +14,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
+import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface ContaReceber {
   id: number;
@@ -26,6 +28,14 @@ interface ContaReceber {
   forma_recebimento: string | null;
   status: string;
   observacoes: string | null;
+  nf_tipo: string | null;
+  nf_numero: string | null;
+  nf_serie: string | null;
+  orcamentos: {
+    numero_orcamento: string;
+    ordem_servico_id: number;
+    ordens_servico: { numero_os: string } | null;
+  } | null;
 }
 
 const STATUS_OPCOES = ['Em aberto', 'Recebido', 'Cancelado'];
@@ -42,10 +52,23 @@ const formVazio = {
   observacoes: '',
 };
 
-const COLUNAS_FILTRAVEIS = ['numero_conta', 'cliente', 'descricao', 'valor', 'data_vencimento', 'status'];
+const COLUNAS_FILTRAVEIS = [
+  'codigo_entrada',
+  'numero_os',
+  'numero_orcamento',
+  'numero_conta',
+  'cliente',
+  'descricao',
+  'valor',
+  'data_vencimento',
+  'status',
+  'nota_fiscal',
+];
 
 export function ContasReceber() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
   const [modalAberto, setModalAberto] = useState(false);
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
@@ -78,9 +101,12 @@ export function ContasReceber() {
   const query = useQuery({
     queryKey: ['contas-receber'],
     queryFn: async (): Promise<ContaReceber[]> => {
-      const { data, error } = await supabase.from('contas_receber').select('*').order('data_vencimento');
+      const { data, error } = await supabase
+        .from('contas_receber')
+        .select('*, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))')
+        .order('data_vencimento');
       if (error) throw error;
-      return data as ContaReceber[];
+      return data as unknown as ContaReceber[];
     },
   });
 
@@ -174,9 +200,13 @@ export function ContasReceber() {
   // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
   // pode ser chamado condicionalmente.
   function valorColuna(c: ContaReceber, chave: string): unknown {
+    if (chave === 'codigo_entrada') return c.orcamentos ? codigoEntradaPorOS.get(c.orcamentos.ordem_servico_id) ?? '' : '';
+    if (chave === 'numero_os') return c.orcamentos?.ordens_servico?.numero_os ?? '';
+    if (chave === 'numero_orcamento') return c.orcamentos?.numero_orcamento ?? '';
     if (chave === 'cliente') return nomeCliente(c.cliente_id);
     if (chave === 'data_vencimento') return c.data_vencimento;
     if (chave === 'status') return statusExibicao(c).texto;
+    if (chave === 'nota_fiscal') return c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '';
     return (c as unknown as Record<string, unknown>)[chave];
   }
 
@@ -214,12 +244,16 @@ export function ContasReceber() {
         <thead>
           <tr>
             {[
+              ['codigo_entrada', 'Entrada'],
+              ['numero_os', 'OS'],
+              ['numero_orcamento', 'Orçamento'],
               ['numero_conta', 'Nº conta'],
               ['cliente', 'Cliente'],
               ['descricao', 'Descrição'],
               ['valor', 'Valor'],
               ['data_vencimento', 'Vencimento'],
               ['status', 'Status'],
+              ['nota_fiscal', 'Nota fiscal'],
             ].map(([chave, label]) => (
               <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
                 {label}
@@ -259,6 +293,44 @@ export function ContasReceber() {
             const st = statusExibicao(c);
             return (
               <tr key={c.id}>
+                <td>
+                  {c.orcamentos ? (
+                    <span
+                      className="link-numero mono"
+                      onClick={() => navigate(`/registro-entrada?os=${c.orcamentos!.ordem_servico_id}`)}
+                    >
+                      {codigoEntradaPorOS.get(c.orcamentos.ordem_servico_id) ?? '-'}
+                    </span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
+                <td>
+                  {c.orcamentos ? (
+                    <span
+                      className="link-numero mono"
+                      title="Abrir orçamento técnico desta OS"
+                      onClick={() => navigate(`/orcamento-tecnico?os=${c.orcamentos!.ordem_servico_id}`)}
+                    >
+                      {c.orcamentos.ordens_servico?.numero_os ?? '-'}
+                    </span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
+                <td>
+                  {c.orcamentos ? (
+                    <span
+                      className="link-numero mono"
+                      title="Abrir no Financeiro"
+                      onClick={() => navigate(`/orcamento-financeiro?orcamento=${c.orcamento_id}`)}
+                    >
+                      {c.orcamentos.numero_orcamento}
+                    </span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
                 <td className="mono">{c.numero_conta}</td>
                 <td>{nomeCliente(c.cliente_id)}</td>
                 <td>{c.descricao}</td>
@@ -274,6 +346,7 @@ export function ContasReceber() {
                   </select>
                   <Badge tono={st.tono}>{st.texto}</Badge>
                 </td>
+                <td>{c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '-'}</td>
                 <td className="acoes-tabela">
                   <button className="botao-icone perigo" title="Excluir" onClick={() => excluir(c.id, c.numero_conta)}>
                     <IconTrash size={16} />
@@ -284,7 +357,7 @@ export function ContasReceber() {
           })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhuma conta encontrada.</td>
+              <td colSpan={11}>Nenhuma conta encontrada.</td>
             </tr>
           )}
         </tbody>
