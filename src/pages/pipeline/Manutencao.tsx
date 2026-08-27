@@ -13,7 +13,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
-import { IconPlus } from '@tabler/icons-react';
+import { IconPencil, IconPlus } from '@tabler/icons-react';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface ItemChecklist {
@@ -59,6 +59,7 @@ export function Manutencao() {
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes([STATUS_VOLTA_MANUTENCAO]);
   const { codigoEntradaPorOS, orcamentoPorOS } = useEntradaOrcamentoPorOS();
   const [modalAberto, setModalAberto] = useState(false);
+  const [editandoId, setEditandoId] = useState<number | null>(null);
   const [osId, setOsId] = useState('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
@@ -152,11 +153,27 @@ export function Manutencao() {
   });
 
   function abrirNova() {
+    setEditandoId(null);
     setOsId('');
     setDataInicio('');
     setDataFim('');
     setObservacoes('');
     setChecklist([]);
+    setErro(null);
+    setModalAberto(true);
+  }
+
+  // Edita um registro já salvo - carrega o checklist do jeito que foi
+  // gravado (não busca de novo os itens do orçamento, que poderiam ter
+  // mudado desde então). `editandoId` evita que o efeito abaixo sobrescreva
+  // esse checklist assim que a query de itens do orçamento responder.
+  function abrirEdicao(m: ManutencaoRow) {
+    setEditandoId(m.id);
+    setOsId(String(m.ordem_servico_id));
+    setDataInicio(m.data_inicio ?? '');
+    setDataFim(m.data_fim ?? '');
+    setObservacoes(m.observacoes ?? '');
+    setChecklist(m.checklist ?? []);
     setErro(null);
     setModalAberto(true);
   }
@@ -179,10 +196,12 @@ export function Manutencao() {
     setChecklist([]);
   }
 
-  // Assim que os itens do orçamento chegam (ou a OS muda), inicializa o checklist.
+  // Assim que os itens do orçamento chegam (ou a OS muda), inicializa o
+  // checklist - só quando é um registro NOVO (editando um já existente, o
+  // checklist vem do próprio registro, em abrirEdicao).
   useEffect(() => {
-    if (itensOrcamentoQuery.data) setChecklist(itensOrcamentoQuery.data);
-  }, [itensOrcamentoQuery.data]);
+    if (itensOrcamentoQuery.data && editandoId == null) setChecklist(itensOrcamentoQuery.data);
+  }, [itensOrcamentoQuery.data, editandoId]);
 
   function alternarItem(itemId: number) {
     setChecklist((lista) =>
@@ -198,14 +217,20 @@ export function Manutencao() {
     }
     setSalvando(true);
     try {
-      const { error } = await supabase.from('manutencoes').insert({
+      const campos = {
         ordem_servico_id: Number(osId),
         data_inicio: dataInicio || null,
         data_fim: dataFim || null,
         observacoes: observacoes || null,
         checklist,
-      });
-      if (error) throw error;
+      };
+      if (editandoId) {
+        const { error } = await supabase.from('manutencoes').update(campos).eq('id', editandoId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('manutencoes').insert(campos);
+        if (error) throw error;
+      }
 
       // Data de fim preenchida = manutenção concluída - avança para o
       // próximo checkpoint automaticamente.
@@ -217,6 +242,7 @@ export function Manutencao() {
       }
 
       setModalAberto(false);
+      setEditandoId(null);
       qc.invalidateQueries({ queryKey: ['manutencoes'] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -283,6 +309,7 @@ export function Manutencao() {
                 {label}
               </ThOrdenavel>
             ))}
+            <th></th>
           </tr>
           <tr>
             {COLUNAS_FILTRAVEIS.map((chave) => {
@@ -308,6 +335,7 @@ export function Manutencao() {
                 </th>
               );
             })}
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -355,12 +383,17 @@ export function Manutencao() {
                     .join(', ') || '-'}
                 </td>
                 <td>{m.observacoes}</td>
+                <td className="acoes-tabela">
+                  <button className="botao-icone" title="Editar manutenção" onClick={() => abrirEdicao(m)}>
+                    <IconPencil size={16} />
+                  </button>
+                </td>
               </tr>
             );
           })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={8}>Nenhum registro encontrado.</td>
+              <td colSpan={9}>Nenhum registro encontrado.</td>
             </tr>
           )}
         </tbody>
@@ -368,7 +401,7 @@ export function Manutencao() {
 
       {modalAberto && (
         <ModalJanela
-          titulo="Nova manutenção"
+          titulo={editandoId ? 'Editar manutenção' : 'Nova manutenção'}
           aoFechar={() => setModalAberto(false)}
           aoMinimizar={minimizarManutencao}
           larguraMax={560}
@@ -443,7 +476,7 @@ export function Manutencao() {
                 Cancelar
               </button>
               <button className="botao-primario" onClick={salvar} disabled={salvando}>
-                {salvando ? 'Salvando...' : 'Salvar'}
+                {salvando ? 'Salvando...' : editandoId ? 'Salvar' : 'Adicionar'}
               </button>
             </div>
         </ModalJanela>
