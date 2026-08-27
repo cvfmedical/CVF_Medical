@@ -217,7 +217,10 @@ export function Faturamento() {
       boleto_vencimento: c.boleto_vencimento,
     })),
     ...(orcamentosQuery.data ?? [])
-      .filter((o) => !orcamentosComConta.has(o.id))
+      // Garantia e bonificação (cortesia) somam R$ 0,00 - não há o que
+      // faturar, o processo termina na entrega ao cliente, sem passar
+      // por aqui.
+      .filter((o) => !orcamentosComConta.has(o.id) && totalOrcamento(o) > 0)
       .map((o): LinhaFaturamento => {
         const valor = totalOrcamento(o);
         return {
@@ -265,7 +268,7 @@ export function Faturamento() {
   // pipeline mas que, na vida real, o equipamento já foi entregue e a NF
   // já foi emitida por fora (Nota Control) - candidatos ao "Pular etapa".
   const naoLiberadas = (orcamentosQuery.data ?? []).filter(
-    (o) => !orcamentosComConta.has(o.id) && !liberada(o.ordens_servico?.status_os ?? null),
+    (o) => !orcamentosComConta.has(o.id) && !liberada(o.ordens_servico?.status_os ?? null) && totalOrcamento(o) > 0,
   );
   const opcoesPular = naoLiberadas.map((o) => ({
     value: String(o.id),

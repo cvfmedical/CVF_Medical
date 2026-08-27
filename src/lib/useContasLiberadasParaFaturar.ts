@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabaseClient';
 import { STATUS_PRONTO_ENTREGA } from './statusOS';
+import { totalOrcamento } from './valorOrcamento';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -22,7 +23,9 @@ export function useContasLiberadasParaFaturar(enabled = true) {
     queryFn: async (): Promise<OrcamentoLiberadoFaturar[]> => {
       const { data: orcamentos, error } = await supabase
         .from('orcamentos')
-        .select('id, numero_orcamento, ordens_servico!inner(status_os)')
+        .select(
+          'id, numero_orcamento, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade), ordens_servico!inner(status_os)',
+        )
         .eq('status', 'Aprovado')
         .in('ordens_servico.status_os', [STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE]);
       if (error) throw error;
@@ -37,8 +40,10 @@ export function useContasLiberadasParaFaturar(enabled = true) {
       if (erroContas) throw erroContas;
 
       const jaTemConta = new Set((contas ?? []).map((c) => c.orcamento_id));
+      // Garantia/bonificação (total R$ 0,00) não precisa de NF - o
+      // processo termina na entrega ao cliente.
       return (orcamentos ?? [])
-        .filter((o) => !jaTemConta.has(o.id))
+        .filter((o) => !jaTemConta.has(o.id) && totalOrcamento(o) > 0)
         .map((o) => ({ id: o.id, numero_orcamento: o.numero_orcamento }));
     },
   });
