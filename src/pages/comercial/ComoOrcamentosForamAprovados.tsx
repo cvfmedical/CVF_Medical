@@ -8,6 +8,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { supabase } from '../../lib/supabaseClient';
+import { totalOrcamento } from '../../lib/valorOrcamento';
 
 interface OrcamentoAprovadoDetalhe {
   id: number;
@@ -15,6 +16,8 @@ interface OrcamentoAprovadoDetalhe {
   ordem_servico_id: number;
   data_resposta_cliente: string | null;
   valor_fixo_contrato: number | null;
+  desconto: number | null;
+  bonificacao: boolean | null;
   aprovacao_manual: boolean | null;
   motivo_aprovacao_manual: string | null;
   aprovado_manualmente_por: number | null;
@@ -45,7 +48,7 @@ export function ComoOrcamentosForamAprovados() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, ordem_servico_id, data_resposta_cliente, valor_fixo_contrato, aprovacao_manual, motivo_aprovacao_manual, aprovado_manualmente_por, ordens_servico(numero_os, cliente_nome), orcamento_itens(quantidade, preco_unitario)',
+          'id, numero_orcamento, ordem_servico_id, data_resposta_cliente, valor_fixo_contrato, desconto, bonificacao, aprovacao_manual, motivo_aprovacao_manual, aprovado_manualmente_por, ordens_servico(numero_os, cliente_nome), orcamento_itens(quantidade, preco_unitario)',
         )
         .eq('status', 'Aprovado')
         .order('data_resposta_cliente', { ascending: false });
@@ -85,8 +88,7 @@ export function ComoOrcamentosForamAprovados() {
   }
 
   function total(o: OrcamentoAprovadoDetalhe): number {
-    if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
-    return o.orcamento_itens.reduce((soma, i) => soma + (i.preco_unitario ?? 0) * i.quantidade, 0);
+    return totalOrcamento(o);
   }
 
   const COLUNAS_FILTRAVEIS = [

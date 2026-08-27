@@ -9,6 +9,7 @@ import {
   type OrcamentoAguardandoAprovacao,
 } from '../../lib/useOrcamentosAguardandoAprovacao';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
+import { totalOrcamento } from '../../lib/valorOrcamento';
 
 const COLUNAS_FILTRAVEIS = [
   'codigo_entrada',
@@ -39,8 +40,7 @@ export function OrcamentosAguardandoAprovacao() {
   } = useFiltrosColuna();
 
   function total(o: OrcamentoAguardandoAprovacao) {
-    if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
-    return o.orcamento_itens.reduce((soma, i) => soma + (i.preco_unitario ?? 0) * i.quantidade, 0);
+    return totalOrcamento(o);
   }
 
   function diasAguardando(o: OrcamentoAguardandoAprovacao) {

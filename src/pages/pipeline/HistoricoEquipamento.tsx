@@ -5,6 +5,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { formatarMoeda } from '../../lib/formato';
 import { STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE, tonoDoStatusOS } from '../../lib/statusOS';
+import { totalOrcamento } from '../../lib/valorOrcamento';
 
 interface ResultadoBusca {
   id: number;
@@ -130,11 +131,16 @@ export function HistoricoEquipamento() {
   const d = detalheQuery.data;
   // Quando precificado por valor fixo (por modelo de ótica ou por
   // modalidade de manutenção), os itens ficam com preço zerado de
-  // propósito e o valor de verdade vem de orcamentos.valor_fixo_contrato.
-  const valorTotalOrcamento =
-    (d?.orcamento as { valor_fixo_contrato?: number | null } | null | undefined)?.valor_fixo_contrato ??
-    d?.itensOrcamento.reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0) ??
-    0;
+  // propósito e o valor de verdade vem de orcamentos.valor_fixo_contrato -
+  // e sempre precisa descontar orcamentos.desconto/bonificacao (senão
+  // mostra o valor cheio, sem o desconto negociado com o cliente).
+  const orcamentoParaTotal = d?.orcamento as
+    | { valor_fixo_contrato: number | null; desconto: number | null; bonificacao: boolean | null }
+    | null
+    | undefined;
+  const valorTotalOrcamento = orcamentoParaTotal
+    ? totalOrcamento({ ...orcamentoParaTotal, orcamento_itens: d?.itensOrcamento ?? [] })
+    : 0;
   const eventoFinalizacao = d?.statusHist.find((h) => h.status_novo === STATUS_PRONTO_ENTREGA);
 
   return (
@@ -246,7 +252,7 @@ export function HistoricoEquipamento() {
                 {d.orcamento.data_envio && (
                   <LinhaInfo rotulo="Enviado ao cliente em" valor={new Date(d.orcamento.data_envio).toLocaleString('pt-BR')} />
                 )}
-                <LinhaInfo rotulo="Valor total" valor={formatarMoeda(d.orcamento.valor_fixo_contrato ?? valorTotalOrcamento)} />
+                <LinhaInfo rotulo="Valor total" valor={formatarMoeda(valorTotalOrcamento)} />
                 {d.itensOrcamento.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: 3 }}>Itens:</div>

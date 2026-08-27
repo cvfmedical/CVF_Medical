@@ -7,6 +7,7 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { useOrcamentosAprovados, type OrcamentoAprovado } from '../../lib/useOrcamentosAprovados';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
+import { totalOrcamento } from '../../lib/valorOrcamento';
 
 // Consulta para o técnico ver, em ordem de aprovação (quem aprovou
 // primeiro aparece primeiro), quais orçamentos já foram aprovados pelo
@@ -41,8 +42,7 @@ export function OrcamentosAprovados() {
   ];
 
   function total(o: OrcamentoAprovado) {
-    if (o.valor_fixo_contrato != null) return o.valor_fixo_contrato;
-    return o.orcamento_itens.reduce((soma, i) => soma + (i.preco_unitario ?? 0) * i.quantidade, 0);
+    return totalOrcamento(o);
   }
 
   function iniciarManutencao(osId: number) {

@@ -11,6 +11,8 @@ export interface OrcamentoAguardandoAprovacao {
   ordem_servico_id: number;
   data_envio: string | null;
   valor_fixo_contrato: number | null;
+  desconto: number | null;
+  bonificacao: boolean | null;
   ordens_servico: {
     numero_os: string;
     cliente_nome: string;
@@ -30,7 +32,7 @@ export function useOrcamentosAguardandoAprovacao(enabled = true) {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, ordem_servico_id, data_envio, valor_fixo_contrato, ordens_servico(numero_os, cliente_nome, optica_desc, optica_fab, optica_sn), orcamento_itens(quantidade, preco_unitario)',
+          'id, numero_orcamento, ordem_servico_id, data_envio, valor_fixo_contrato, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, optica_desc, optica_fab, optica_sn), orcamento_itens(quantidade, preco_unitario)',
         )
         .eq('status', 'Enviado ao Cliente')
         .order('data_envio', { ascending: true });
