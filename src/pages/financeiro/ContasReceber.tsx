@@ -12,7 +12,7 @@ import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
-import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
@@ -31,6 +31,8 @@ interface ContaReceber {
   nf_tipo: string | null;
   nf_numero: string | null;
   nf_serie: string | null;
+  nf_chave_acesso: string | null;
+  nf_data_emissao: string | null;
   orcamentos: {
     numero_orcamento: string;
     ordem_servico_id: number;
@@ -73,6 +75,10 @@ export function ContasReceber() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [contaEditandoNF, setContaEditandoNF] = useState<ContaReceber | null>(null);
+  const [formNF, setFormNF] = useState({ nf_tipo: 'NFS-e', nf_numero: '', nf_serie: '', nf_chave_acesso: '', nf_data_emissao: '' });
+  const [erroNF, setErroNF] = useState<string | null>(null);
+  const [salvandoNF, setSalvandoNF] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -195,6 +201,50 @@ export function ContasReceber() {
       return;
     }
     qc.invalidateQueries({ queryKey: ['contas-receber'] });
+  }
+
+  // Edição rápida dos dados da NF direto daqui - útil pra corrigir uma NF
+  // já lançada (ex.: preencher a data de emissão que ficou em branco, sem
+  // a qual essa NF não aparece no Relatório de peças utilizadas).
+  function abrirEdicaoNF(c: ContaReceber) {
+    setContaEditandoNF(c);
+    setFormNF({
+      nf_tipo: c.nf_tipo ?? 'NFS-e',
+      nf_numero: c.nf_numero ?? '',
+      nf_serie: c.nf_serie ?? '',
+      nf_chave_acesso: c.nf_chave_acesso ?? '',
+      nf_data_emissao: c.nf_data_emissao ?? '',
+    });
+    setErroNF(null);
+  }
+
+  async function salvarNF() {
+    if (!contaEditandoNF) return;
+    if (!formNF.nf_numero) {
+      setErroNF('Informe o número da nota.');
+      return;
+    }
+    setErroNF(null);
+    setSalvandoNF(true);
+    try {
+      const { error } = await supabase
+        .from('contas_receber')
+        .update({
+          nf_tipo: formNF.nf_tipo,
+          nf_numero: formNF.nf_numero,
+          nf_serie: formNF.nf_serie || null,
+          nf_chave_acesso: formNF.nf_chave_acesso ? formNF.nf_chave_acesso.replace(/\D/g, '') : null,
+          nf_data_emissao: formNF.nf_data_emissao || null,
+        })
+        .eq('id', contaEditandoNF.id);
+      if (error) throw error;
+      setContaEditandoNF(null);
+      qc.invalidateQueries({ queryKey: ['contas-receber'] });
+    } catch (e) {
+      setErroNF(mensagemErro(e));
+    } finally {
+      setSalvandoNF(false);
+    }
   }
 
   // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
@@ -348,6 +398,9 @@ export function ContasReceber() {
                 </td>
                 <td>{c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '-'}</td>
                 <td className="acoes-tabela">
+                  <button className="botao-icone" title="Editar dados da NF" onClick={() => abrirEdicaoNF(c)}>
+                    <IconPencil size={16} />
+                  </button>
                   <button className="botao-icone perigo" title="Excluir" onClick={() => excluir(c.id, c.numero_conta)}>
                     <IconTrash size={16} />
                   </button>
@@ -406,6 +459,67 @@ export function ContasReceber() {
               </button>
               <button className="botao-primario" onClick={salvar} disabled={salvando}>
                 {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+        </ModalJanela>
+      )}
+
+      {contaEditandoNF && (
+        <ModalJanela titulo={`Editar NF - ${contaEditandoNF.numero_conta}`} aoFechar={() => setContaEditandoNF(null)}>
+            <div className="campo-form">
+              <label>Tipo</label>
+              <select value={formNF.nf_tipo} onChange={(e) => setFormNF((f) => ({ ...f, nf_tipo: e.target.value }))}>
+                <option value="NFS-e">NFS-e (serviço)</option>
+                <option value="NF-e">NF-e (produto)</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>Número *</label>
+                <input
+                  type="text"
+                  value={formNF.nf_numero}
+                  onChange={(e) => setFormNF((f) => ({ ...f, nf_numero: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>Série</label>
+                <input
+                  type="text"
+                  value={formNF.nf_serie}
+                  onChange={(e) => setFormNF((f) => ({ ...f, nf_serie: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="campo-form">
+              <label>Chave de acesso</label>
+              <input
+                type="text"
+                maxLength={44}
+                value={formNF.nf_chave_acesso}
+                onChange={(e) => setFormNF((f) => ({ ...f, nf_chave_acesso: e.target.value }))}
+              />
+            </div>
+            <div className="campo-form">
+              <label>Data de emissão *</label>
+              <input
+                type="date"
+                value={formNF.nf_data_emissao}
+                onChange={(e) => setFormNF((f) => ({ ...f, nf_data_emissao: e.target.value }))}
+              />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Sem essa data a NF não aparece no Relatório de peças utilizadas (Comercial).
+              </p>
+            </div>
+
+            {erroNF && <p className="erro-login">{erroNF}</p>}
+
+            <div className="modal-acoes">
+              <button className="botao-secundario" onClick={() => setContaEditandoNF(null)} disabled={salvandoNF}>
+                Cancelar
+              </button>
+              <button className="botao-primario" onClick={salvarNF} disabled={salvandoNF}>
+                {salvandoNF ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
         </ModalJanela>
