@@ -7,7 +7,7 @@ import { mensagemErro } from '../../lib/erros';
 import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
-import { IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconPencil, IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { STATUS_AGUARDANDO_ORCAMENTO } from '../../lib/statusOS';
 import { useOSAguardandoOrcamento } from '../../lib/useOSAguardandoOrcamento';
 import { imprimirRelatorioOS, type ItemRelatorioOS } from '../../lib/relatorioOrdemServico';
@@ -74,6 +74,7 @@ export function OrcamentoTecnico() {
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
+  const [editandoItemId, setEditandoItemId] = useState<number | null>(null);
   const [novoItem, setNovoItem] = useState({ produto_servico_id: '', quantidade: '1', descricao_servico: '' });
   const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
@@ -336,10 +337,31 @@ export function OrcamentoTecnico() {
   }
 
   function abrirModalItem() {
+    setEditandoItemId(null);
     setNovoItem({ produto_servico_id: '', quantidade: '1', descricao_servico: '' });
     setObservacoesSelecionadas([]);
     setObservacaoParaAdicionar('');
     setJustificativaLivre('');
+    setFotoItem(null);
+    setErro(null);
+    setModalAberto(true);
+  }
+
+  // Reaproveita o mesmo modal de "Adicionar item" pra editar um item já
+  // existente - a observação salva é um texto único (etiquetas + texto
+  // livre já combinados), então joga tudo em "Justificativa" pra edição
+  // livre, sem tentar adivinhar quais pedaços eram etiqueta ou texto
+  // livre originalmente.
+  function abrirModalEdicaoItem(item: ItemOrcamento) {
+    setEditandoItemId(item.id);
+    setNovoItem({
+      produto_servico_id: item.produto_servico_id ? String(item.produto_servico_id) : '',
+      quantidade: String(item.quantidade),
+      descricao_servico: item.descricao_servico ?? '',
+    });
+    setObservacoesSelecionadas([]);
+    setObservacaoParaAdicionar('');
+    setJustificativaLivre(item.observacao ?? '');
     setFotoItem(null);
     setErro(null);
     setModalAberto(true);
@@ -365,26 +387,40 @@ export function OrcamentoTecnico() {
     }
     setErro(null);
     try {
-      let fotoPath: string | null = null;
-      if (fotoItem) {
-        fotoPath = await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, fotoItem);
-      }
       // Junta as etiquetas de defeito (lista fixa) com a justificativa em
       // texto livre - o resultado vira a "Observação / motivo da troca" que
       // aparece no relatório da OS enviado ao cliente.
       const etiquetas = observacoesSelecionadas.join('; ');
       const justificativa = justificativaLivre.trim();
       const observacaoFinal = [etiquetas, justificativa].filter(Boolean).join(' — ') || null;
-      const { error } = await supabase.from('orcamento_itens').insert({
-        orcamento_id: orcamentoQuery.data.id,
+      const camposComuns = {
         produto_servico_id: novoItem.produto_servico_id ? Number(novoItem.produto_servico_id) : null,
         quantidade: Number(novoItem.quantidade) || 1,
         observacao: observacaoFinal,
         descricao_servico: novoItem.descricao_servico.trim() || null,
-        foto_peca_danificada_path: fotoPath,
-      });
-      if (error) throw error;
+      };
+      if (editandoItemId) {
+        // Só troca a foto se uma nova foi escolhida - sem isso, editar
+        // item sem mexer na foto apagaria a foto já anexada.
+        const fotoPath = fotoItem
+          ? await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, fotoItem)
+          : undefined;
+        const { error } = await supabase
+          .from('orcamento_itens')
+          .update({ ...camposComuns, ...(fotoPath !== undefined ? { foto_peca_danificada_path: fotoPath } : {}) })
+          .eq('id', editandoItemId);
+        if (error) throw error;
+      } else {
+        const fotoPath = fotoItem ? await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, fotoItem) : null;
+        const { error } = await supabase.from('orcamento_itens').insert({
+          orcamento_id: orcamentoQuery.data.id,
+          ...camposComuns,
+          foto_peca_danificada_path: fotoPath,
+        });
+        if (error) throw error;
+      }
       setModalAberto(false);
+      setEditandoItemId(null);
       qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data.id] });
     } catch (e) {
       setErro(mensagemErro(e));
@@ -626,6 +662,9 @@ export function OrcamentoTecnico() {
                       style={{ width: 130, fontSize: 11 }}
                       onChange={(e) => aoEscolherFotoItem(item.id, e)}
                     />
+                    <button className="botao-icone" title="Editar item" onClick={() => abrirModalEdicaoItem(item)} disabled={travado}>
+                      <IconPencil size={16} />
+                    </button>
                     <button className="botao-icone perigo" title="Remover" onClick={() => excluirItem(item.id)} disabled={travado}>
                       <IconTrash size={16} />
                     </button>
@@ -690,7 +729,7 @@ export function OrcamentoTecnico() {
       {ModalConfirmacao}
 
       {modalAberto && (
-        <ModalJanela titulo="Adicionar item" aoFechar={() => setModalAberto(false)}>
+        <ModalJanela titulo={editandoItemId ? 'Editar item' : 'Adicionar item'} aoFechar={() => setModalAberto(false)}>
             <div className="campo-form">
               <label>Peça ou serviço (deixe em branco se for só mão de obra)</label>
               <ComboboxBusca
@@ -778,11 +817,13 @@ export function OrcamentoTecnico() {
                 onChange={(e) => setJustificativaLivre(e.target.value)}
               />
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Complementa as etiquetas acima e aparece junto delas no relatório enviado ao cliente.
+                {editandoItemId
+                  ? 'Ao editar, a observação atual do item inteira aparece aqui pra edição livre.'
+                  : 'Complementa as etiquetas acima e aparece junto delas no relatório enviado ao cliente.'}
               </p>
             </div>
             <div className="campo-form">
-              <label>Foto da peça danificada (opcional)</label>
+              <label>Foto da peça danificada (opcional{editandoItemId ? ' - deixe em branco pra manter a foto atual' : ''})</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input type="file" accept="image/*" onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)} />
                 <CapturaFoto onCapturar={(arquivo) => setFotoItem(arquivo)} />
@@ -809,7 +850,7 @@ export function OrcamentoTecnico() {
                 Cancelar
               </button>
               <button className="botao-primario" onClick={adicionarItem}>
-                Adicionar item
+                {editandoItemId ? 'Salvar' : 'Adicionar item'}
               </button>
             </div>
         </ModalJanela>
