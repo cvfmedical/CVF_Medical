@@ -382,6 +382,13 @@ export function Faturamento() {
       setErro('Informe o número da nota.');
       return;
     }
+    if (!form.nf_data_emissao) {
+      // Sem isso, o "Relatório de peças utilizadas" (Comercial) não
+      // encontra essa NF na hora de filtrar por mês - a data de emissão é
+      // o campo usado pra saber em que mês a nota entra no relatório.
+      setErro('Informe a data de emissão da nota - sem ela a NF não aparece no Relatório de peças utilizadas.');
+      return;
+    }
     if (parcelado) {
       if (parcelas.length === 0) {
         setErro('Adicione pelo menos uma parcela, ou desmarque "Pagamento parcelado".');
@@ -770,7 +777,7 @@ export function Faturamento() {
               />
             </div>
             <div className="campo-form">
-              <label>Data de emissão</label>
+              <label>Data de emissão *</label>
               <input
                 type="date"
                 value={form.nf_data_emissao}
