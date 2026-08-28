@@ -125,6 +125,12 @@ export function Faturamento() {
   // separadamente dali pra frente, como qualquer outra conta.
   const [parcelado, setParcelado] = useState(false);
   const [parcelas, setParcelas] = useState<ParcelaForm[]>([]);
+  // Geração automática das parcelas - em vez do usuário calcular valor e
+  // vencimento de cada uma na mão, ele só diz quantas parcelas, o
+  // vencimento da 1ª e o intervalo entre elas (30 ou 28 dias, ou outro).
+  const [numParcelasAuto, setNumParcelasAuto] = useState('2');
+  const [primeiroVencimentoAuto, setPrimeiroVencimentoAuto] = useState('');
+  const [intervaloDiasAuto, setIntervaloDiasAuto] = useState('30');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   // Evita reabrir sozinho se o usuário fechar o modal manualmente - só abre
@@ -318,6 +324,9 @@ export function Faturamento() {
     });
     setParcelado(false);
     setParcelas([]);
+    setNumParcelasAuto('2');
+    setPrimeiroVencimentoAuto('');
+    setIntervaloDiasAuto('30');
     setErro(null);
   }
 
@@ -360,6 +369,44 @@ export function Faturamento() {
   }
   function removerParcela(i: number) {
     setParcelas((p) => p.filter((_, idx) => idx !== i));
+  }
+
+  // Gera todas as parcelas de uma vez - o usuário só informa quantas
+  // parcelas, o vencimento da 1ª e o intervalo entre elas (30 dias, 28
+  // dias, ou outro número); valor e data de cada parcela saem sozinhos.
+  // A última parcela absorve o resto do arredondamento em centavos, pra
+  // soma bater certinho com o valor total (mesma prática usada em boletos
+  // reais).
+  function gerarParcelasAutomatico() {
+    if (!linhaSelecionada) return;
+    const n = Number(numParcelasAuto);
+    if (!n || n < 1) {
+      setErro('Informe um número de parcelas válido.');
+      return;
+    }
+    if (!primeiroVencimentoAuto) {
+      setErro('Informe o vencimento da 1ª parcela.');
+      return;
+    }
+    const intervalo = Number(intervaloDiasAuto) || 30;
+    const totalCentavos = Math.round(linhaSelecionada.valor * 100);
+    const baseCentavos = Math.floor(totalCentavos / n);
+    const restoCentavos = totalCentavos - baseCentavos * n;
+
+    const novasParcelas: ParcelaForm[] = [];
+    for (let i = 0; i < n; i++) {
+      const valorCentavos = baseCentavos + (i === n - 1 ? restoCentavos : 0);
+      const vencimento = new Date(`${primeiroVencimentoAuto}T00:00:00`);
+      vencimento.setDate(vencimento.getDate() + intervalo * i);
+      novasParcelas.push({
+        valor: (valorCentavos / 100).toFixed(2),
+        boleto_numero: '',
+        boleto_linha_digitavel: '',
+        boleto_vencimento: vencimento.toISOString().slice(0, 10),
+      });
+    }
+    setParcelas(novasParcelas);
+    setErro(null);
   }
   function atualizarParcela(i: number, campo: keyof ParcelaForm, valor: string) {
     setParcelas((p) => p.map((parc, idx) => (idx === i ? { ...parc, [campo]: valor } : parc)));
@@ -865,10 +912,7 @@ export function Faturamento() {
                   type="checkbox"
                   id="parcelado"
                   checked={parcelado}
-                  onChange={(e) => {
-                    setParcelado(e.target.checked);
-                    if (e.target.checked && parcelas.length === 0) setParcelas([parcelaVazia()]);
-                  }}
+                  onChange={(e) => setParcelado(e.target.checked)}
                   style={{ width: 'auto' }}
                 />
                 <label htmlFor="parcelado" style={{ marginBottom: 0 }}>
@@ -879,6 +923,44 @@ export function Faturamento() {
 
             {parcelado ? (
               <>
+                <h2 style={{ fontSize: 13, marginTop: 16 }}>Gerar parcelas automaticamente</h2>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Nº de parcelas</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={numParcelasAuto}
+                      onChange={(e) => setNumParcelasAuto(e.target.value)}
+                    />
+                  </div>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Vencimento da 1ª parcela</label>
+                    <input
+                      type="date"
+                      value={primeiroVencimentoAuto}
+                      onChange={(e) => setPrimeiroVencimentoAuto(e.target.value)}
+                    />
+                  </div>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Intervalo entre parcelas</label>
+                    <select value={intervaloDiasAuto} onChange={(e) => setIntervaloDiasAuto(e.target.value)}>
+                      <option value="30">30 em 30 dias</option>
+                      <option value="28">28 em 28 dias</option>
+                      <option value="15">15 em 15 dias</option>
+                      <option value="7">7 em 7 dias</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="button" className="botao-primario botao-pequeno" onClick={gerarParcelasAutomatico}>
+                  Gerar {numParcelasAuto || ''} parcelas
+                </button>
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 6 }}>
+                  Divide o valor total em partes iguais (a última parcela absorve o centavo de arredondamento, se
+                  houver) e calcula o vencimento de cada uma. Depois de gerar, dá pra ajustar valor/vencimento/boleto
+                  de cada parcela abaixo, se precisar.
+                </p>
+
                 <h2 style={{ fontSize: 13, marginTop: 16 }}>Parcelas / boletos</h2>
                 {parcelas.map((p, i) => (
                   <div
