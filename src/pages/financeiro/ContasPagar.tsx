@@ -16,6 +16,8 @@ interface ContaPagar {
   forma_pagamento: string | null;
   status: string;
   observacoes: string | null;
+  tipo_custo: string;
+  socio: string | null;
 }
 
 async function gerarNumeroConta(): Promise<string> {
@@ -60,15 +62,30 @@ export function ContasPagar() {
       tabela="contas_pagar"
       ordenarPor="data_vencimento"
       camposFiltro={['descricao', 'numero_conta']}
-      valorInicial={{ status: 'Em aberto' }}
+      valorInicial={{ status: 'Em aberto', tipo_custo: 'Empresa' }}
+      resumo={(todas) => {
+        const totalEmpresa = todas.filter((r) => r.tipo_custo !== 'Pessoal' && r.status !== 'Cancelado').reduce((s, r) => s + Number(r.valor), 0);
+        const totalPessoal = todas.filter((r) => r.tipo_custo === 'Pessoal' && r.status !== 'Cancelado').reduce((s, r) => s + Number(r.valor), 0);
+        return (
+          <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
+            Total Empresa: R$ {totalEmpresa.toFixed(2)} · Total Pessoal: R$ {totalPessoal.toFixed(2)}
+          </p>
+        );
+      }}
       colunas={[
         { chave: 'numero_conta', label: 'Nº conta', mono: true },
+        {
+          chave: 'tipo_custo',
+          label: 'Tipo',
+          render: (r) => <Badge tono={r.tipo_custo === 'Pessoal' ? 'copper' : 'neutro'}>{r.tipo_custo}</Badge>,
+        },
         {
           chave: 'fornecedor_id',
           label: 'Fornecedor',
           render: (r) => nomeFornecedor(r.fornecedor_id),
           valorFiltro: (r) => nomeFornecedor(r.fornecedor_id),
         },
+        { chave: 'socio', label: 'Sócio', render: (r) => r.socio || '-' },
         { chave: 'descricao', label: 'Descrição' },
         { chave: 'valor', label: 'Valor', render: (r) => `R$ ${Number(r.valor).toFixed(2)}` },
         {
@@ -83,6 +100,18 @@ export function ContasPagar() {
         },
       ]}
       campos={[
+        {
+          name: 'tipo_custo',
+          label: 'Tipo',
+          type: 'select',
+          opcoes: ['Empresa', 'Pessoal'],
+          obrigatorio: true,
+        },
+        {
+          name: 'socio',
+          label: 'Sócio (quando for retirada pessoal)',
+          type: 'text',
+        },
         {
           name: 'fornecedor_id',
           label: 'Fornecedor',
@@ -108,6 +137,7 @@ export function ContasPagar() {
         fornecedor_id: d.fornecedor_id ? Number(d.fornecedor_id) : null,
         valor: Number(d.valor),
         numero_conta: (d as { numero_conta?: string }).numero_conta || numeroGerado,
+        socio: (d.socio as string)?.trim() || null,
       })}
       aposSalvar={async () => {
         setNumeroGerado(await gerarNumeroConta());

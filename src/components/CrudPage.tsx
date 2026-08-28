@@ -82,6 +82,10 @@ export interface CrudPageProps<Row extends { id: number }> {
   // sem precisar sair do formulário e sem depender de lembrar de fazer
   // isso antes de salvar (o que muda o status e tira a OS da fila).
   acoesFormularioExtras?: (formData: Record<string, unknown>) => React.ReactNode;
+  // Bloco de resumo (ex: totais por categoria) entre o cabeçalho e a
+  // tabela - recebe todas as linhas (sem filtro), mesmo padrão do "Total
+  // em aberto" já usado em Contas a Receber.
+  resumo?: (todasAsLinhas: Row[]) => React.ReactNode;
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -96,6 +100,7 @@ export function CrudPage<Row extends { id: number }>({
   aposSalvar,
   acoesExtras,
   acoesFormularioExtras,
+  resumo,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -236,6 +241,8 @@ export function CrudPage<Row extends { id: number }>({
           </button>
         </div>
       </div>
+
+      {resumo && !listQuery.isLoading && !listQuery.isError && resumo(listQuery.data ?? [])}
 
       {listQuery.isLoading && <CarregandoTela />}
       {listQuery.isError && <p className="erro-login">{mensagemErro(listQuery.error)}</p>}
