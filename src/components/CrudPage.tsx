@@ -32,6 +32,10 @@ export interface CampoConfig {
   // outros campos do formulário (ex: escolher um modelo do catálogo
   // preenche fabricante/modelo/tipo/descrição). Retorne nada para não mexer.
   aoMudar?: (valor: string, form: Record<string, unknown>) => Record<string, unknown> | void;
+  // Só pra type 'combobox' cujo valor é o próprio texto (não um id de
+  // outra tabela) - permite digitar uma opção nova que não está na lista
+  // fixa, em vez de só escolher entre as existentes.
+  permiteNovo?: boolean;
 }
 
 function normalizarOpcoes(opcoes: string[] | OpcaoSelect[] | undefined): OpcaoSelect[] {
@@ -353,11 +357,26 @@ export function CrudPage<Row extends { id: number }>({
                   ))}
                 </select>
               ) : campo.type === 'combobox' ? (
-                <ComboboxBusca
-                  opcoes={normalizarOpcoes(campo.opcoes)}
-                  valor={String(formData[campo.name] ?? '')}
-                  onChange={(valor) => atualizarCampo(campo, valor)}
-                />
+                (() => {
+                  const opcoesBase = normalizarOpcoes(campo.opcoes);
+                  const valorAtual = String(formData[campo.name] ?? '');
+                  // Com permiteNovo, o valor pode ser um texto digitado que não
+                  // está na lista fixa - inclui ele como opção pra continuar
+                  // aparecendo selecionado (senão o combobox mostra vazio).
+                  const opcoesFinal =
+                    campo.permiteNovo && valorAtual && !opcoesBase.some((o) => o.value === valorAtual)
+                      ? [...opcoesBase, { value: valorAtual, label: valorAtual }]
+                      : opcoesBase;
+                  return (
+                    <ComboboxBusca
+                      opcoes={opcoesFinal}
+                      valor={valorAtual}
+                      onChange={(valor) => atualizarCampo(campo, valor)}
+                      aoCriarNovo={campo.permiteNovo ? (texto) => atualizarCampo(campo, texto) : undefined}
+                      textoCriarNovo="Usar"
+                    />
+                  );
+                })()
               ) : campo.type === 'checkbox' ? (
                 <input
                   type="checkbox"

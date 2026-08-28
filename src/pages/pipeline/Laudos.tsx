@@ -147,7 +147,7 @@ export function Laudos() {
   // identificação completa do cliente, não só o nome.
   const dadosOSQuery = useQuery({
     queryKey: ['laudo-dados-os', form.ordem_servico_id],
-    enabled: !!form.ordem_servico_id && tipoLaudo !== 'nota',
+    enabled: !!form.ordem_servico_id,
     queryFn: async () => {
       const osId = Number(form.ordem_servico_id);
       const { data: os, error: errOS } = await supabase
@@ -335,6 +335,7 @@ export function Laudos() {
               numeroLaudo,
               numeroOS: os?.numero_os ?? '',
               clienteNome: os?.cliente_nome ?? '',
+              clienteFinalNome,
               equipamentoDesc: '',
               tecnicoResponsavel: funcionario?.nome ?? '',
               resultado: form.resultado,

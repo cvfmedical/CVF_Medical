@@ -25,6 +25,7 @@ interface OSItem {
   numero_os: string;
   cliente_id: number;
   cliente_nome: string;
+  cliente_final_id: number | null;
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
@@ -66,7 +67,7 @@ export function TesteResolucao() {
       // qualquer etapa do pipeline, inclusive já entregues ou em triagem.
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn')
+        .select('id, numero_os, cliente_id, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn')
         .in('status_os', [STATUS_CHECKPOINT_A, STATUS_CHECKPOINT_B])
         .order('data_abertura', { ascending: false })
         .limit(200);
@@ -98,6 +99,22 @@ export function TesteResolucao() {
         .single();
       if (error) throw error;
       return data as { cnpj: string | null; nome_fantasia: string | null; cidade: string | null; email: string | null };
+    },
+  });
+
+  // Nome da unidade atendida (cliente_final_id), quando a OS for de um
+  // terceirizado que atende outro cliente.
+  const clienteFinalQuery = useQuery({
+    queryKey: ['cliente-final-resolucao', os?.cliente_final_id],
+    enabled: !!os?.cliente_final_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('razao_social')
+        .eq('id', os!.cliente_final_id!)
+        .single();
+      if (error) throw error;
+      return data as { razao_social: string };
     },
   });
 
@@ -260,6 +277,7 @@ export function TesteResolucao() {
             clienteFantasia: cliente?.nome_fantasia ?? '',
             clienteCidade: cliente?.cidade ?? '',
             clienteEmail: cliente?.email ?? '',
+            clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
             equipamentoDesc: os.optica_desc ?? '',
             equipamentoFab: os.optica_fab ?? '',
             equipamentoSn: os.optica_sn ?? '',

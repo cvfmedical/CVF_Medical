@@ -18,7 +18,19 @@ interface ContaPagar {
   observacoes: string | null;
   tipo_custo: string;
   socio: string | null;
+  categoria: string | null;
 }
+
+const CATEGORIAS_SUGERIDAS = [
+  'Aluguel',
+  'Água/Luz',
+  'Salários',
+  'Combustível',
+  'Peças/Insumos',
+  'Impostos',
+  'Retirada sócio',
+  'Outros',
+];
 
 async function gerarNumeroConta(): Promise<string> {
   return gerarNumeroSequencial('CP', 'contas_pagar', 'numero_conta');
@@ -86,6 +98,7 @@ export function ContasPagar() {
           valorFiltro: (r) => nomeFornecedor(r.fornecedor_id),
         },
         { chave: 'socio', label: 'Sócio', render: (r) => r.socio || '-' },
+        { chave: 'categoria', label: 'Categoria', render: (r) => r.categoria || '-' },
         { chave: 'descricao', label: 'Descrição' },
         { chave: 'valor', label: 'Valor', render: (r) => `R$ ${Number(r.valor).toFixed(2)}` },
         {
@@ -113,6 +126,13 @@ export function ContasPagar() {
           type: 'text',
         },
         {
+          name: 'categoria',
+          label: 'Categoria',
+          type: 'combobox',
+          opcoes: CATEGORIAS_SUGERIDAS,
+          permiteNovo: true,
+        },
+        {
           name: 'fornecedor_id',
           label: 'Fornecedor',
           type: 'combobox',
@@ -138,6 +158,7 @@ export function ContasPagar() {
         valor: Number(d.valor),
         numero_conta: (d as { numero_conta?: string }).numero_conta || numeroGerado,
         socio: (d.socio as string)?.trim() || null,
+        categoria: (d.categoria as string)?.trim() || null,
       })}
       aposSalvar={async () => {
         setNumeroGerado(await gerarNumeroConta());

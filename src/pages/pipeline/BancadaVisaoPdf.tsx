@@ -59,6 +59,7 @@ export interface DadosBancadaPdf {
   clienteFantasia: string;
   clienteCidade: string;
   clienteEmail: string;
+  clienteFinalNome?: string | null;
   equipamentoDesc: string;
   equipamentoFab: string;
   equipamentoSn: string;
@@ -180,6 +181,14 @@ export function BancadaVisaoPdf({ dados }: { dados: DadosBancadaPdf }) {
               {dados.clienteEmail || '-'}
             </Text>
           </View>
+          {dados.clienteFinalNome && (
+            <View style={[styles.linhaDupla, styles.linhaBorda]}>
+              <Text style={{ padding: 4 }}>
+                <Text style={styles.bold}>Unidade atendida: </Text>
+                {dados.clienteFinalNome}
+              </Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.faixa}>2. IDENTIFICAÇÃO DO ITEM ENSAIADO</Text>

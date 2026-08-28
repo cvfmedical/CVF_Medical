@@ -34,6 +34,7 @@ interface OSResumo {
   numero_os: string;
   cliente_id: number;
   cliente_nome: string;
+  cliente_final_id: number | null;
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
@@ -157,7 +158,7 @@ export function BancadaVisao() {
     queryFn: async (): Promise<OSResumo[]> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, eh_otica, catalogo_otica_id')
+        .select('id, numero_os, cliente_id, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn, eh_otica, catalogo_otica_id')
         .eq('status_os', statusAlvo)
         .order('data_abertura', { ascending: false });
       if (error) throw error;
@@ -181,6 +182,23 @@ export function BancadaVisao() {
         .single();
       if (error) throw error;
       return data as { id: number; cnpj: string | null; nome_fantasia: string | null; cidade: string | null; email: string | null };
+    },
+  });
+
+  // Nome da unidade atendida (cliente_final_id), quando a OS for de um
+  // terceirizado que atende outro cliente - mesmo padrão já usado no
+  // laudo de manutenção (LaudoEquipamentoPdf) e no Orçamento Financeiro.
+  const clienteFinalQuery = useQuery({
+    queryKey: ['cliente-final-bancada-visao', osSelecionada?.cliente_final_id],
+    enabled: !!osSelecionada?.cliente_final_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('razao_social')
+        .eq('id', osSelecionada!.cliente_final_id!)
+        .single();
+      if (error) throw error;
+      return data as { razao_social: string };
     },
   });
 
@@ -636,6 +654,7 @@ export function BancadaVisao() {
               clienteFantasia: clienteQuery.data?.nome_fantasia ?? '',
               clienteCidade: clienteQuery.data?.cidade ?? '',
               clienteEmail: clienteQuery.data?.email ?? '',
+              clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
               equipamentoDesc: osSelecionada.optica_desc ?? '',
               equipamentoFab: osSelecionada.optica_fab ?? '',
               equipamentoSn: osSelecionada.optica_sn ?? '',

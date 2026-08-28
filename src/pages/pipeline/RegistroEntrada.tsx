@@ -16,6 +16,7 @@ interface OSResumo {
   numero_os: string;
   cliente_id: number;
   cliente_nome: string;
+  cliente_final_id: number | null;
   optica_desc: string | null;
   optica_fab: string | null;
   optica_sn: string | null;
@@ -72,11 +73,25 @@ export function RegistroEntrada() {
     queryFn: async (): Promise<OSResumo> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('id, numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega, grupo, subgrupo, eh_otica')
+        .select('id, numero_os, cliente_id, cliente_nome, cliente_final_id, optica_desc, optica_fab, optica_sn, defeito_relatado, triagem_avarias, prazo_entrega, grupo, subgrupo, eh_otica')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;
       return data as OSResumo;
+    },
+  });
+
+  const clienteFinalQuery = useQuery({
+    queryKey: ['cliente-final-registro-entrada', osQuery.data?.cliente_final_id],
+    enabled: !!osQuery.data?.cliente_final_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('razao_social')
+        .eq('id', osQuery.data!.cliente_final_id!)
+        .single();
+      if (error) throw error;
+      return data as { razao_social: string };
     },
   });
 
@@ -307,6 +322,11 @@ export function RegistroEntrada() {
         <div>
           <strong>Cliente:</strong> {osQuery.data.cliente_nome}
         </div>
+        {clienteFinalQuery.data && (
+          <div>
+            <strong>Unidade atendida:</strong> {clienteFinalQuery.data.razao_social}
+          </div>
+        )}
         <div>
           <strong>Equipamento:</strong> {osQuery.data.optica_desc} ({osQuery.data.optica_fab})
         </div>

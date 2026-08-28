@@ -704,6 +704,7 @@ export function EntradaEquipamento() {
           <div><strong>Nº Entrada:</strong> <span class="mono">${entrada.codigo_entrada}</span></div>
           <div><strong>Cliente:</strong> ${c?.razao_social ?? '-'}</div>
         </div>
+        ${entrada.cliente_final_id ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${cliente(entrada.cliente_final_id)?.razao_social ?? '-'}</div></div>` : ''}
         <div class="laudo-linha-dupla">
           <div><strong>Equipamento:</strong> ${entrada.equipamento_desc ?? '-'}${entrada.equipamento_fab ? ' (' + entrada.equipamento_fab + ')' : ''}</div>
           <div><strong>Nº de série:</strong> <span class="mono">${entrada.equipamento_sn ?? '-'}</span></div>

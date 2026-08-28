@@ -46,6 +46,7 @@ interface OrdemServico {
   optica_sn: string | null;
   status_os: string | null;
   data_abertura: string;
+  cliente_final_id: number | null;
 }
 
 // Une o que antes eram duas telas separadas (Fila de Triagem + Histórico
@@ -188,6 +189,10 @@ export function OrdensServicoPanel() {
         : '<p style="margin:0;color:var(--ink-400);">Nenhum item cadastrado no orçamento.</p>';
     }
 
+    const { data: clienteFinal } = os.cliente_final_id
+      ? await supabase.from('clientes').select('razao_social').eq('id', os.cliente_final_id).maybeSingle()
+      : { data: null };
+
     const caixaCheck = '<span style="display:inline-block;width:8px;height:8px;border:1.2px solid #21201c;"></span>';
 
     // Só a tabela de etapas fica compacta (é a parte comprida, com 11
@@ -211,6 +216,7 @@ export function OrdensServicoPanel() {
           <div><strong>Nº OS:</strong> <span class="mono">${os.numero_os}</span></div>
           <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
         </div>
+        ${clienteFinal ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${clienteFinal.razao_social}</div></div>` : ''}
         <div class="laudo-linha-dupla">
           <div><strong>Equipamento:</strong> ${os.optica_desc ?? '-'}${os.optica_fab ? ' (' + os.optica_fab + ')' : ''}</div>
           <div><strong>Nº de série:</strong> <span class="mono">${os.optica_sn ?? '-'}</span></div>

@@ -39,6 +39,7 @@ export interface DadosLaudoPdf {
   numeroLaudo: string;
   numeroOS: string;
   clienteNome: string;
+  clienteFinalNome?: string | null;
   equipamentoDesc: string;
   tecnicoResponsavel: string;
   resultado: string;
@@ -91,6 +92,14 @@ export function LaudoPdf({ dados: d }: { dados: DadosLaudoPdf }) {
               {d.equipamentoDesc || '-'}
             </Text>
           </View>
+          {d.clienteFinalNome && (
+            <View style={[styles.linhaDupla, styles.linhaBorda]}>
+              <Text style={{ padding: 4 }}>
+                <Text style={styles.bold}>Unidade atendida: </Text>
+                {d.clienteFinalNome}
+              </Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.faixa}>OBSERVAÇÕES TÉCNICAS</Text>
