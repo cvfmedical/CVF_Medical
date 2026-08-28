@@ -17,6 +17,7 @@ import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { totalOrcamento } from '../../lib/valorOrcamento';
+import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -184,9 +185,9 @@ export function Faturamento() {
   const clientesQuery = useQuery({
     queryKey: ['clientes-opcoes-faturamento'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('clientes').select('id, razao_social, email');
+      const { data, error } = await supabase.from('clientes').select('id, razao_social, email, faturamento_pecas_diferido');
       if (error) throw error;
-      return data as { id: number; razao_social: string; email: string | null }[];
+      return data as { id: number; razao_social: string; email: string | null; faturamento_pecas_diferido: boolean }[];
     },
   });
 
@@ -408,6 +409,9 @@ export function Faturamento() {
         return;
       }
     }
+    const clientePecasDiferido =
+      clientesQuery.data?.find((c) => c.id === linhaSelecionada.clienteId)?.faturamento_pecas_diferido ?? false;
+
     setSalvando(true);
     try {
       const camposNota = {
@@ -464,6 +468,73 @@ export function Faturamento() {
           })
           .eq('id', linhaSelecionada.contaId);
         if (error) throw error;
+      } else if (clientePecasDiferido) {
+        // Grupo Cortical (e outros clientes com faturamento diferido de
+        // peças): a NF de serviço emitida agora cobre só a mão de obra;
+        // as peças usadas nessa OS só são pagas no 5º dia útil do mês
+        // seguinte, apuradas à parte no Relatório de peças utilizadas -
+        // por isso vira DUAS contas, não uma, pra não mostrar como "a
+        // receber" agora um valor que só cai no caixa mês que vem.
+        const { data: orcamentoRow, error: erroOrc } = await supabase
+          .from('orcamentos')
+          .select('valor_fixo_contrato')
+          .eq('id', linhaSelecionada.orcamentoId)
+          .single();
+        if (erroOrc) throw erroOrc;
+        const { data: itens, error: erroItens } = await supabase
+          .from('orcamento_itens')
+          .select('preco_unitario, quantidade, produtos_servicos(tipo)')
+          .eq('orcamento_id', linhaSelecionada.orcamentoId);
+        if (erroItens) throw erroItens;
+
+        let valorServico = orcamentoRow?.valor_fixo_contrato ? Number(orcamentoRow.valor_fixo_contrato) : 0;
+        let valorPecas = 0;
+        for (const it of (itens ?? []) as unknown as {
+          preco_unitario: number | null;
+          quantidade: number;
+          produtos_servicos: { tipo: string | null } | null;
+        }[]) {
+          const totalItem = (it.preco_unitario ?? 0) * it.quantidade;
+          if (it.produtos_servicos?.tipo === 'Peça' || it.produtos_servicos?.tipo === 'Produto') {
+            valorPecas += totalItem;
+          } else {
+            valorServico += totalItem;
+          }
+        }
+
+        const numeroContaServico = await gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
+        const vencimentoServico = new Date();
+        vencimentoServico.setDate(vencimentoServico.getDate() + 30);
+        const { error: erroServico } = await supabase.from('contas_receber').insert({
+          numero_conta: numeroContaServico,
+          orcamento_id: linhaSelecionada.orcamentoId,
+          cliente_id: linhaSelecionada.clienteId,
+          descricao: `${linhaSelecionada.descricao} (mão de obra)`,
+          valor: valorServico,
+          data_vencimento: vencimentoServico.toISOString().slice(0, 10),
+          status: 'Em aberto',
+          ...camposNota,
+          boleto_numero: form.boleto_numero || null,
+          boleto_linha_digitavel: form.boleto_linha_digitavel || null,
+          boleto_vencimento: form.boleto_vencimento || null,
+        });
+        if (erroServico) throw erroServico;
+
+        if (valorPecas > 0.01) {
+          const numeroContaPecas = await gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
+          const dataEmissao = form.nf_data_emissao ? new Date(`${form.nf_data_emissao}T00:00:00`) : new Date();
+          const vencimentoPecas = quintoDiaUtilMesSeguinte(dataEmissao);
+          const { error: erroPecas } = await supabase.from('contas_receber').insert({
+            numero_conta: numeroContaPecas,
+            orcamento_id: linhaSelecionada.orcamentoId,
+            cliente_id: linhaSelecionada.clienteId,
+            descricao: `${linhaSelecionada.descricao} (peças)`,
+            valor: valorPecas,
+            data_vencimento: vencimentoPecas.toISOString().slice(0, 10),
+            status: 'Em aberto',
+          });
+          if (erroPecas) throw erroPecas;
+        }
       } else {
         // Ainda não existe conta pra esse orçamento - cria agora, com os
         // dados de NF/boleto já preenchidos de uma vez.

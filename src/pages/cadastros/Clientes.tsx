@@ -42,6 +42,10 @@ interface Cliente {
   // sozinho o preço de itens que têm tabela cadastrada em Produtos e
   // serviços, na hora de montar o orçamento.
   tabela_preco_padrao: string | null;
+  // Faturamento diferido de peças (ex.: Grupo Cortical) - a mão de obra é
+  // faturada na hora (NF de serviço) e as peças usadas são cobradas à
+  // parte, vencendo no 5º dia útil do mês seguinte.
+  faturamento_pecas_diferido: boolean;
 }
 
 const formVazio = {
@@ -67,6 +71,7 @@ const formVazio = {
   data_abertura: '',
   porte: '',
   tabela_preco_padrao: '',
+  faturamento_pecas_diferido: false,
 };
 
 const COLUNAS_FILTRAVEIS = ['razao_social', 'eh_terceirizado', 'nome_fantasia', 'cnpj', 'cidade', 'telefone', 'email'];
@@ -327,6 +332,7 @@ export function Clientes() {
       data_abertura: c.data_abertura ?? '',
       porte: c.porte ?? '',
       tabela_preco_padrao: c.tabela_preco_padrao ?? '',
+      faturamento_pecas_diferido: c.faturamento_pecas_diferido,
     });
     setErro(null);
     setModalAberto(true);
@@ -619,6 +625,19 @@ export function Clientes() {
                 Define qual coluna de preço (cadastro de Produtos e serviços) entra sozinha ao montar orçamento pra
                 este cliente.
               </p>
+            </div>
+
+            <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                id="faturamento_pecas_diferido"
+                checked={form.faturamento_pecas_diferido}
+                onChange={(e) => setForm((f) => ({ ...f, faturamento_pecas_diferido: e.target.checked }))}
+                style={{ width: 'auto' }}
+              />
+              <label htmlFor="faturamento_pecas_diferido" style={{ marginBottom: 0 }}>
+                Peças com faturamento diferido (5º dia útil do mês seguinte)
+              </label>
             </div>
 
             <div className="campo-form">
