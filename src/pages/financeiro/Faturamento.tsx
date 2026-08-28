@@ -37,6 +37,8 @@ interface ContaReceber {
   boleto_numero: string | null;
   boleto_linha_digitavel: string | null;
   boleto_vencimento: string | null;
+  nfse_status: string | null;
+  nfse_erro_detalhe: string | null;
   orcamentos: {
     numero_orcamento: string;
     ordem_servico_id: number;
@@ -83,6 +85,8 @@ interface LinhaFaturamento {
   boleto_numero: string | null;
   boleto_linha_digitavel: string | null;
   boleto_vencimento: string | null;
+  nfseStatus: string | null;
+  nfseErroDetalhe: string | null;
 }
 
 const formVazio = {
@@ -133,6 +137,7 @@ export function Faturamento() {
   const [intervaloDiasAuto, setIntervaloDiasAuto] = useState('30');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [emitindoNfseId, setEmitindoNfseId] = useState<number | null>(null);
   // Evita reabrir sozinho se o usuário fechar o modal manualmente - só abre
   // uma vez por chegada vinda do link "Lançar NF" do Orçamento Financeiro.
   const abriuAutomaticoRef = useRef(false);
@@ -162,7 +167,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('contas_receber')
         .select(
-          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, nfse_status, nfse_erro_detalhe, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
         )
         .neq('status', 'Cancelado')
         .order('id', { ascending: false });
@@ -222,6 +227,8 @@ export function Faturamento() {
       boleto_numero: c.boleto_numero,
       boleto_linha_digitavel: c.boleto_linha_digitavel,
       boleto_vencimento: c.boleto_vencimento,
+      nfseStatus: c.nfse_status,
+      nfseErroDetalhe: c.nfse_erro_detalhe,
     })),
     ...(orcamentosQuery.data ?? [])
       // Garantia e bonificação (cortesia) somam R$ 0,00 - não há o que
@@ -250,6 +257,8 @@ export function Faturamento() {
           boleto_numero: null,
           boleto_linha_digitavel: null,
           boleto_vencimento: null,
+          nfseStatus: null,
+          nfseErroDetalhe: null,
         };
       }),
   ];
@@ -637,6 +646,47 @@ export function Faturamento() {
     qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
   }
 
+  // Emissão automática de NFS-e pela Focus NFe - alternativa ao "Lançar
+  // NF" manual (que continua existindo pra quando for preciso lançar uma
+  // nota emitida por fora, ex.: Focus NFe fora do ar). Enquanto
+  // "processando", o técnico usa "Verificar status" pra puxar o resultado
+  // final (autorizada/erro) da Focus NFe.
+  async function emitirNFSe(l: LinhaFaturamento) {
+    if (!l.contaId) return;
+    setEmitindoNfseId(l.contaId);
+    setErro(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfse', {
+        body: { contaId: l.contaId, acao: 'emitir' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao emitir NFS-e.');
+      qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setEmitindoNfseId(null);
+    }
+  }
+
+  async function consultarStatusNFSe(l: LinhaFaturamento) {
+    if (!l.contaId) return;
+    setEmitindoNfseId(l.contaId);
+    setErro(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfse', {
+        body: { contaId: l.contaId, acao: 'consultar' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar status.');
+      qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setEmitindoNfseId(null);
+    }
+  }
+
   // mailto: não anexa arquivo - igual a todo resto do sistema (WhatsApp/
   // e-mail em outras telas), quem envia precisa anexar o PDF da nota,
   // laudo e boleto manualmente no próprio cliente de e-mail.
@@ -830,8 +880,39 @@ export function Faturamento() {
                 ) : (
                   <Badge tono="ambar">Não faturado</Badge>
                 )}
+                {!l.nf_numero && l.nfseStatus === 'processando' && (
+                  <>
+                    {' '}
+                    <Badge tono="copper">NFS-e processando</Badge>
+                  </>
+                )}
+                {!l.nf_numero && l.nfseStatus === 'erro' && (
+                  <span title={l.nfseErroDetalhe ?? undefined}>
+                    {' '}
+                    <Badge tono="danger">Erro na NFS-e</Badge>
+                  </span>
+                )}
               </td>
               <td className="acoes-tabela">
+                {l.contaId != null && !l.nf_numero && (!l.nfseStatus || l.nfseStatus === 'erro') && (
+                  <button
+                    className="botao-secundario"
+                    onClick={() => emitirNFSe(l)}
+                    disabled={emitindoNfseId === l.contaId}
+                    title={l.nfseErroDetalhe ?? undefined}
+                  >
+                    {emitindoNfseId === l.contaId ? 'Emitindo...' : 'Emitir NFS-e'}
+                  </button>
+                )}
+                {l.contaId != null && !l.nf_numero && l.nfseStatus === 'processando' && (
+                  <button
+                    className="botao-secundario"
+                    onClick={() => consultarStatusNFSe(l)}
+                    disabled={emitindoNfseId === l.contaId}
+                  >
+                    {emitindoNfseId === l.contaId ? 'Verificando...' : 'Verificar status'}
+                  </button>
+                )}
                 <button
                   className="botao-secundario"
                   onClick={() => abrirLancarNota(l)}
