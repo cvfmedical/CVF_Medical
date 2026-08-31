@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { mensagemErro } from '../../lib/erros';
 import { exportarRelatorioPecasXlsx, type LinhaRelatorioPecas } from '../../lib/exportarXlsx';
+import { exportarTabelaPdf } from '../../lib/exportarPdf';
 
 interface ClienteOpcao {
   id: number;
@@ -205,6 +206,40 @@ export function RelatorioPecasUtilizadas() {
     await exportarRelatorioPecasXlsx(tituloMes(), linhas);
   }
 
+  async function exportarPdf() {
+    if (!linhas || linhas.length === 0) return;
+    const totalGeral = linhas.reduce((soma, l) => soma + (l.total ?? 0), 0);
+    await exportarTabelaPdf({
+      titulo: 'Controle de peças utilizadas',
+      subtitulo: tituloMes(),
+      colunas: [
+        { label: 'Empresa', flex: 2 },
+        { label: 'NF' },
+        { label: 'OS/KIT', flex: 1.5 },
+        { label: 'Nº orç.' },
+        { label: 'Valor', alinhamento: 'right' },
+        { label: 'Descrição', flex: 2 },
+        { label: 'Qtd', alinhamento: 'right' },
+        { label: 'Valor unit.', alinhamento: 'right' },
+        { label: 'Total', alinhamento: 'right' },
+      ],
+      linhas: linhas.map((l) => [
+        l.empresa,
+        l.nf,
+        l.osKit,
+        l.numeroOrcamento,
+        l.valorFixo != null ? `R$ ${l.valorFixo.toFixed(2)}` : '',
+        l.descricao,
+        l.quantidade != null ? String(l.quantidade) : '',
+        l.valorUnitario != null ? `R$ ${l.valorUnitario.toFixed(2)}` : '',
+        l.total != null ? `R$ ${l.total.toFixed(2)}` : '',
+      ]),
+      totalLabel: 'TOTAL',
+      totalValor: `R$ ${totalGeral.toFixed(2)}`,
+      nomeArquivo: `pecas-utilizadas-${tituloMes().replace('/', '-')}`,
+    });
+  }
+
   if (clientesQuery.isLoading) return <CarregandoTela />;
 
   return (
@@ -258,9 +293,14 @@ export function RelatorioPecasUtilizadas() {
                 ? 'Nenhuma nota fiscal encontrada pra esse período/clientes.'
                 : `${linhas.length} linha(s) - ${tituloMes()}`}
             </p>
-            <button className="botao-primario" onClick={exportar} disabled={linhas.length === 0}>
-              Exportar .xlsx
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="botao-secundario" onClick={exportarPdf} disabled={linhas.length === 0}>
+                Exportar PDF
+              </button>
+              <button className="botao-primario" onClick={exportar} disabled={linhas.length === 0}>
+                Exportar .xlsx
+              </button>
+            </div>
           </div>
 
           {linhas.length > 0 && (

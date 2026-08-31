@@ -12,9 +12,10 @@ import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
-import { IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconFileTypePdf, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
+import { exportarTabelaPdf } from '../../lib/exportarPdf';
 
 interface ContaReceber {
   id: number;
@@ -79,6 +80,7 @@ export function ContasReceber() {
   const [formNF, setFormNF] = useState({ nf_tipo: 'NFS-e', nf_numero: '', nf_serie: '', nf_chave_acesso: '', nf_data_emissao: '' });
   const [erroNF, setErroNF] = useState<string | null>(null);
   const [salvandoNF, setSalvandoNF] = useState(false);
+  const [exportandoPdf, setExportandoPdf] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -271,6 +273,45 @@ export function ContasReceber() {
     .filter((c) => c.status === 'Em aberto')
     .reduce((soma, c) => soma + Number(c.valor), 0);
 
+  async function exportarPdf() {
+    setExportandoPdf(true);
+    try {
+      await exportarTabelaPdf({
+        titulo: 'Contas a receber',
+        subtitulo: `Total em aberto: R$ ${totalEmAberto.toFixed(2)}`,
+        colunas: [
+          { label: 'Entrada' },
+          { label: 'OS' },
+          { label: 'Orçamento' },
+          { label: 'Nº conta' },
+          { label: 'Cliente', flex: 2 },
+          { label: 'Descrição', flex: 2 },
+          { label: 'Valor', alinhamento: 'right' },
+          { label: 'Vencimento' },
+          { label: 'Status' },
+          { label: 'Nota fiscal' },
+        ],
+        linhas: linhas.map((c) => [
+          String(valorColuna(c, 'codigo_entrada') || '-'),
+          String(valorColuna(c, 'numero_os') || '-'),
+          String(valorColuna(c, 'numero_orcamento') || '-'),
+          c.numero_conta,
+          nomeCliente(c.cliente_id),
+          c.descricao ?? '',
+          `R$ ${Number(c.valor).toFixed(2)}`,
+          new Date(c.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR'),
+          statusExibicao(c).texto,
+          c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '-',
+        ]),
+        nomeArquivo: 'contas-a-receber',
+      });
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setExportandoPdf(false);
+    }
+  }
+
   return (
     <div>
       <div className="crud-cabecalho">
@@ -281,6 +322,9 @@ export function ContasReceber() {
               Limpar filtros
             </button>
           )}
+          <button className="botao-secundario botao-pequeno" onClick={exportarPdf} disabled={exportandoPdf}>
+            <IconFileTypePdf size={16} /> {exportandoPdf ? 'Gerando PDF...' : 'Exportar PDF'}
+          </button>
           <button className="botao-primario botao-pequeno" onClick={abrirNova}>
             <IconPlus size={16} /> Novo lançamento
           </button>

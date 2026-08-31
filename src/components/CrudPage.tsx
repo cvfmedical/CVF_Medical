@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { isValidElement, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconPencil, IconTrash, IconFileTypePdf } from '@tabler/icons-react';
 import { useCrud } from '../lib/useCrud';
 import { mensagemErro } from '../lib/erros';
 import { useRascunhos } from '../contexts/RascunhosContext';
@@ -11,6 +11,7 @@ import { ThOrdenavel } from './ThOrdenavel';
 import { useLinhasOrdenadas } from '../lib/useOrdenacao';
 import { useFiltrosColuna } from '../lib/useFiltrosColuna';
 import { FiltroColunaValores } from './FiltroColunaValores';
+import { exportarTabelaPdf } from '../lib/exportarPdf';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'combobox' | 'checkbox' | 'date';
 
@@ -60,6 +61,31 @@ export interface ColunaConfig<Row> {
   // "Cliente" via porId(ordem_servico_id)) - sem isso o filtro compara
   // contra `linha[chave]`, que fica undefined e nunca bate com nada.
   valorFiltro?: (row: Row) => unknown;
+  // Texto usado na exportação em PDF, quando `render` devolve um JSX
+  // complexo demais pra extrair um texto simples automaticamente (ex:
+  // ícones, múltiplos elementos). Sem isso, tenta extrair o texto do
+  // `render` (ou o valor cru da linha) - ver `textoColunaPdf`.
+  textoPdf?: (row: Row) => string;
+}
+
+// Extrai um texto simples de uma coluna pra exportação em PDF: usa
+// `textoPdf` se veio explícito; senão tenta puxar do que `render` devolve
+// (string/number direto, ou os filhos de um elemento simples tipo
+// <Badge>texto</Badge>); na falta de tudo isso, cai no valor cru da linha.
+function textoColunaPdf<Row>(col: ColunaConfig<Row>, row: Row): string {
+  if (col.textoPdf) return col.textoPdf(row);
+  if (col.render) {
+    const valor = col.render(row);
+    if (typeof valor === 'string' || typeof valor === 'number') return String(valor);
+    if (isValidElement(valor)) {
+      const filhos = (valor.props as { children?: unknown }).children;
+      if (typeof filhos === 'string' || typeof filhos === 'number') return String(filhos);
+      if (Array.isArray(filhos)) {
+        return filhos.filter((f) => typeof f === 'string' || typeof f === 'number').join('');
+      }
+    }
+  }
+  return String((row as Record<string, unknown>)[col.chave] ?? '');
 }
 
 export interface CrudPageProps<Row extends { id: number }> {
@@ -90,6 +116,11 @@ export interface CrudPageProps<Row extends { id: number }> {
   // tabela - recebe todas as linhas (sem filtro), mesmo padrão do "Total
   // em aberto" já usado em Contas a Receber.
   resumo?: (todasAsLinhas: Row[]) => React.ReactNode;
+  // "Exportar PDF" no cabeçalho, com as linhas filtradas/ordenadas
+  // visíveis na tela. Ligado por padrão em toda tela baseada em CrudPage;
+  // passe `false` só se a tabela não fizer sentido impressa (ex: muitas
+  // colunas com HTML complexo sem `textoPdf`).
+  permitirExportarPdf?: boolean;
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -105,6 +136,7 @@ export function CrudPage<Row extends { id: number }>({
   acoesExtras,
   acoesFormularioExtras,
   resumo,
+  permitirExportarPdf = true,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -230,6 +262,23 @@ export function CrudPage<Row extends { id: number }>({
     }
   }
 
+  const [exportandoPdf, setExportandoPdf] = useState(false);
+  async function handleExportarPdf() {
+    setExportandoPdf(true);
+    try {
+      await exportarTabelaPdf({
+        titulo,
+        colunas: colunas.map((c) => ({ label: c.label })),
+        linhas: linhas.map((row) => colunas.map((c) => textoColunaPdf(c, row))),
+        nomeArquivo: titulo,
+      });
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setExportandoPdf(false);
+    }
+  }
+
   return (
     <div>
       <div className="crud-cabecalho">
@@ -238,6 +287,11 @@ export function CrudPage<Row extends { id: number }>({
           {algumFiltroAtivo && (
             <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
               Limpar filtros
+            </button>
+          )}
+          {permitirExportarPdf && (
+            <button className="botao-secundario botao-pequeno" onClick={handleExportarPdf} disabled={exportandoPdf}>
+              <IconFileTypePdf size={16} /> {exportandoPdf ? 'Gerando PDF...' : 'Exportar PDF'}
             </button>
           )}
           <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
