@@ -17,8 +17,10 @@ const corsHeaders = {
 };
 
 const CNPJ_PRESTADOR = '46948692000103';
+const INSCRICAO_MUNICIPAL_PRESTADOR = '20147606'; // confirmado no Nota Control/contador
 const CODIGO_MUNICIPIO_RIBEIRAO_PRETO = 3543402; // IBGE - serviço sempre prestado na oficina da CVF
 const CODIGO_TRIBUTACAO_NACIONAL_ISS = '140201'; // Assistência técnica (confirmado no Nota Control)
+const TIPO_RETENCAO_ISS = 1; // tpRetISSQN: 1 = Não Retido (confirmado no Nota Control)
 
 // Grupo IBS/CBS (Reforma Tributária, obrigatório na NFS-e nacional desde
 // 01/07/2026) - nomes de campo confirmados pelo suporte da Focus NFe e
@@ -181,6 +183,7 @@ Deno.serve(async (req: Request) => {
     emitente_dps: 1,
     codigo_municipio_emissora: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
     cnpj_prestador: CNPJ_PRESTADOR,
+    inscricao_municipal_prestador: INSCRICAO_MUNICIPAL_PRESTADOR,
     codigo_opcao_simples_nacional: 1,
     regime_especial_tributacao: 0,
     ...(documentoTomador.length === 14 ? { cnpj_tomador: documentoTomador } : { cpf_tomador: documentoTomador }),
@@ -190,6 +193,7 @@ Deno.serve(async (req: Request) => {
     descricao_servico: descricaoServico,
     valor_servico: conta.valor,
     tributacao_iss: 1,
+    tipo_retencao_iss: TIPO_RETENCAO_ISS,
     // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
     finalidade_emissao: 0,
     consumidor_final: 0,
