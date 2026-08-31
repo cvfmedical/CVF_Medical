@@ -187,6 +187,16 @@ export function ContasReceber() {
     }
   }
 
+  async function alterarVencimento(c: ContaReceber, novaData: string) {
+    if (!novaData || novaData === c.data_vencimento) return;
+    const { error } = await supabase.from('contas_receber').update({ data_vencimento: novaData }).eq('id', c.id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['contas-receber'] });
+  }
+
   async function mudarStatus(c: ContaReceber, novoStatus: string) {
     const { error } = await supabase
       .from('contas_receber')
@@ -465,7 +475,14 @@ export function ContasReceber() {
                 <td>{nomeCliente(c.cliente_id)}</td>
                 <td>{c.descricao}</td>
                 <td>R$ {Number(c.valor).toFixed(2)}</td>
-                <td>{new Date(c.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                <td>
+                  <input
+                    type="date"
+                    value={c.data_vencimento}
+                    onChange={(e) => alterarVencimento(c, e.target.value)}
+                    style={{ width: 140 }}
+                  />
+                </td>
                 <td>
                   <select value={c.status} onChange={(e) => mudarStatus(c, e.target.value)} style={{ marginRight: 6 }}>
                     {STATUS_OPCOES.map((op) => (
