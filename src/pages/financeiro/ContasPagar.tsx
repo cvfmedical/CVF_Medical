@@ -6,7 +6,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
-import { IconCalendar, IconCheck, IconPlus } from '@tabler/icons-react';
+import { IconCalendar, IconCheck } from '@tabler/icons-react';
 
 interface ContaPagar {
   id: number;
@@ -138,81 +138,120 @@ export function ContasPagar() {
     }
   }
 
-  // ---- Lançamento parcelado ----
-  const [modalParceladoAberto, setModalParceladoAberto] = useState(false);
-  const [formParcelado, setFormParcelado] = useState({
+  // ---- "+ Novo" unificado - lançamento único OU parcelado, no mesmo
+  // formulário (checkbox "Pagamento parcelado" troca Valor/Vencimento
+  // por Valor total/Nº de parcelas/Intervalo). Substitui o formulário
+  // genérico do CrudPage só pra criação - "Editar" continua usando o
+  // formulário genérico normalmente (um título já lançado é sempre uma
+  // linha só, mesmo que tenha nascido de um parcelamento).
+  const formNovoVazio = {
     tipo_custo: 'Empresa',
     socio: '',
     categoria: '',
     fornecedor_id: '',
     descricao: '',
+    parcelado: false,
+    valor: '',
+    data_vencimento: '',
+    forma_pagamento: '',
+    status: 'Em aberto',
+    data_pagamento: '',
+    observacoes: '',
     valorTotal: '',
     numParcelas: '2',
     primeiroVencimento: '',
     intervaloDias: '30',
-  });
-  const [erroParcelado, setErroParcelado] = useState<string | null>(null);
-  const [salvandoParcelado, setSalvandoParcelado] = useState(false);
+  };
+  const [modalNovoAberto, setModalNovoAberto] = useState(false);
+  const [formNovo, setFormNovo] = useState(formNovoVazio);
+  const [erroNovo, setErroNovo] = useState<string | null>(null);
+  const [salvandoNovo, setSalvandoNovo] = useState(false);
 
-  function abrirModalParcelado() {
-    setFormParcelado({
-      tipo_custo: 'Empresa',
-      socio: '',
-      categoria: '',
-      fornecedor_id: '',
-      descricao: '',
-      valorTotal: '',
-      numParcelas: '2',
-      primeiroVencimento: '',
-      intervaloDias: '30',
-    });
-    setErroParcelado(null);
-    setModalParceladoAberto(true);
+  function abrirModalNovo() {
+    setFormNovo(formNovoVazio);
+    setErroNovo(null);
+    setModalNovoAberto(true);
   }
 
-  async function salvarParcelado() {
-    setErroParcelado(null);
-    if (!formParcelado.descricao) return setErroParcelado('Informe a descrição.');
-    const total = Number(formParcelado.valorTotal);
-    if (!total || total <= 0) return setErroParcelado('Informe um valor total válido.');
-    const n = Number(formParcelado.numParcelas);
-    if (!n || n < 1) return setErroParcelado('Informe um número de parcelas válido.');
-    if (!formParcelado.primeiroVencimento) return setErroParcelado('Informe o vencimento da 1ª parcela.');
+  async function salvarNovo() {
+    setErroNovo(null);
+    if (!formNovo.descricao) return setErroNovo('Informe a descrição.');
+    const categoria = formNovo.categoria.trim() || null;
+    const fornecedorId = formNovo.fornecedor_id ? Number(formNovo.fornecedor_id) : null;
+    const socio = formNovo.socio.trim() || null;
 
-    setSalvandoParcelado(true);
-    try {
-      const intervalo = Number(formParcelado.intervaloDias) || 30;
-      const totalCentavos = Math.round(total * 100);
-      const baseCentavos = Math.floor(totalCentavos / n);
-      const restoCentavos = totalCentavos - baseCentavos * n;
-      const categoria = formParcelado.categoria.trim() || null;
-      if (categoria) talvezCadastrarCategoriaNova(categoria);
+    if (formNovo.parcelado) {
+      const total = Number(formNovo.valorTotal);
+      if (!total || total <= 0) return setErroNovo('Informe um valor total válido.');
+      const n = Number(formNovo.numParcelas);
+      if (!n || n < 1) return setErroNovo('Informe um número de parcelas válido.');
+      if (!formNovo.primeiroVencimento) return setErroNovo('Informe o vencimento da 1ª parcela.');
 
-      for (let i = 0; i < n; i++) {
-        const valorCentavos = baseCentavos + (i === n - 1 ? restoCentavos : 0);
-        const vencimento = new Date(`${formParcelado.primeiroVencimento}T00:00:00`);
-        vencimento.setDate(vencimento.getDate() + intervalo * i);
-        const numeroConta = await gerarNumeroConta();
-        const { error } = await supabase.from('contas_pagar').insert({
-          numero_conta: numeroConta,
-          tipo_custo: formParcelado.tipo_custo,
-          socio: formParcelado.socio.trim() || null,
-          categoria,
-          fornecedor_id: formParcelado.fornecedor_id ? Number(formParcelado.fornecedor_id) : null,
-          descricao: `${formParcelado.descricao} - Parcela ${i + 1}/${n}`,
-          valor: valorCentavos / 100,
-          data_vencimento: vencimento.toISOString().slice(0, 10),
-          status: 'Em aberto',
-        });
-        if (error) throw error;
+      setSalvandoNovo(true);
+      try {
+        const intervalo = Number(formNovo.intervaloDias) || 30;
+        const totalCentavos = Math.round(total * 100);
+        const baseCentavos = Math.floor(totalCentavos / n);
+        const restoCentavos = totalCentavos - baseCentavos * n;
+        if (categoria) talvezCadastrarCategoriaNova(categoria);
+
+        for (let i = 0; i < n; i++) {
+          const valorCentavos = baseCentavos + (i === n - 1 ? restoCentavos : 0);
+          const vencimento = new Date(`${formNovo.primeiroVencimento}T00:00:00`);
+          vencimento.setDate(vencimento.getDate() + intervalo * i);
+          const numeroConta = await gerarNumeroConta();
+          const { error } = await supabase.from('contas_pagar').insert({
+            numero_conta: numeroConta,
+            tipo_custo: formNovo.tipo_custo,
+            socio,
+            categoria,
+            fornecedor_id: fornecedorId,
+            descricao: `${formNovo.descricao} - Parcela ${i + 1}/${n}`,
+            valor: valorCentavos / 100,
+            data_vencimento: vencimento.toISOString().slice(0, 10),
+            status: 'Em aberto',
+          });
+          if (error) throw error;
+        }
+        setModalNovoAberto(false);
+        setNumeroGerado(await gerarNumeroConta());
+        qc.invalidateQueries({ queryKey: ['contas_pagar'] });
+      } catch (e) {
+        setErroNovo(mensagemErro(e));
+      } finally {
+        setSalvandoNovo(false);
       }
-      setModalParceladoAberto(false);
+      return;
+    }
+
+    if (!formNovo.valor || Number(formNovo.valor) <= 0) return setErroNovo('Informe um valor válido.');
+    if (!formNovo.data_vencimento) return setErroNovo('Informe a data de vencimento.');
+
+    setSalvandoNovo(true);
+    try {
+      if (categoria) talvezCadastrarCategoriaNova(categoria);
+      const { error } = await supabase.from('contas_pagar').insert({
+        numero_conta: numeroGerado,
+        tipo_custo: formNovo.tipo_custo,
+        socio,
+        categoria,
+        fornecedor_id: fornecedorId,
+        descricao: formNovo.descricao,
+        valor: Number(formNovo.valor),
+        data_vencimento: formNovo.data_vencimento,
+        data_pagamento: formNovo.data_pagamento || null,
+        forma_pagamento: formNovo.forma_pagamento || null,
+        status: formNovo.status,
+        observacoes: formNovo.observacoes || null,
+      });
+      if (error) throw error;
+      setModalNovoAberto(false);
       setNumeroGerado(await gerarNumeroConta());
       qc.invalidateQueries({ queryKey: ['contas_pagar'] });
     } catch (e) {
-      setErroParcelado(mensagemErro(e));
+      setErroNovo(mensagemErro(e));
     } finally {
-      setSalvandoParcelado(false);
+      setSalvandoNovo(false);
     }
   }
 
@@ -223,19 +262,14 @@ export function ContasPagar() {
         tabela="contas_pagar"
         ordenarPor="data_vencimento"
         camposFiltro={['descricao', 'numero_conta']}
-        valorInicial={{ status: 'Em aberto', tipo_custo: 'Empresa' }}
+        aoClicarNovo={abrirModalNovo}
         resumo={(todas) => {
           const totalEmpresa = todas.filter((r) => r.tipo_custo !== 'Pessoal' && r.status !== 'Cancelado').reduce((s, r) => s + Number(r.valor), 0);
           const totalPessoal = todas.filter((r) => r.tipo_custo === 'Pessoal' && r.status !== 'Cancelado').reduce((s, r) => s + Number(r.valor), 0);
           return (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: -8, marginBottom: 16 }}>
-              <p style={{ fontSize: 13, color: 'var(--ink-400)', margin: 0 }}>
-                Total Empresa: R$ {totalEmpresa.toFixed(2)} · Total Pessoal: R$ {totalPessoal.toFixed(2)}
-              </p>
-              <button className="botao-secundario botao-pequeno" onClick={abrirModalParcelado}>
-                <IconPlus size={16} /> Lançar parcelado
-              </button>
-            </div>
+            <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
+              Total Empresa: R$ {totalEmpresa.toFixed(2)} · Total Pessoal: R$ {totalPessoal.toFixed(2)}
+            </p>
           );
         }}
         colunas={[
@@ -334,33 +368,26 @@ export function ContasPagar() {
         }
       />
 
-      {modalParceladoAberto && (
-        <ModalJanela titulo="Lançar parcelado — Contas a pagar" aoFechar={() => setModalParceladoAberto(false)}>
+      {modalNovoAberto && (
+        <ModalJanela titulo="Novo — Contas a pagar" aoFechar={() => setModalNovoAberto(false)}>
           <div className="campo-form">
             <label>Tipo *</label>
-            <select
-              value={formParcelado.tipo_custo}
-              onChange={(e) => setFormParcelado((f) => ({ ...f, tipo_custo: e.target.value }))}
-            >
+            <select value={formNovo.tipo_custo} onChange={(e) => setFormNovo((f) => ({ ...f, tipo_custo: e.target.value }))}>
               <option value="Empresa">Empresa</option>
               <option value="Pessoal">Pessoal</option>
             </select>
           </div>
           <div className="campo-form">
             <label>Sócio (quando for retirada pessoal)</label>
-            <input
-              type="text"
-              value={formParcelado.socio}
-              onChange={(e) => setFormParcelado((f) => ({ ...f, socio: e.target.value }))}
-            />
+            <input type="text" value={formNovo.socio} onChange={(e) => setFormNovo((f) => ({ ...f, socio: e.target.value }))} />
           </div>
           <div className="campo-form">
             <label>Categoria</label>
             <input
               type="text"
               list="categorias-custo-lista"
-              value={formParcelado.categoria}
-              onChange={(e) => setFormParcelado((f) => ({ ...f, categoria: e.target.value }))}
+              value={formNovo.categoria}
+              onChange={(e) => setFormNovo((f) => ({ ...f, categoria: e.target.value }))}
             />
             <datalist id="categorias-custo-lista">
               {(categoriasQuery.data ?? []).map((c) => (
@@ -370,10 +397,7 @@ export function ContasPagar() {
           </div>
           <div className="campo-form">
             <label>Fornecedor</label>
-            <select
-              value={formParcelado.fornecedor_id}
-              onChange={(e) => setFormParcelado((f) => ({ ...f, fornecedor_id: e.target.value }))}
-            >
+            <select value={formNovo.fornecedor_id} onChange={(e) => setFormNovo((f) => ({ ...f, fornecedor_id: e.target.value }))}>
               <option value="">Sem fornecedor</option>
               {(fornecedoresQuery.data ?? []).map((f) => (
                 <option key={f.id} value={String(f.id)}>
@@ -384,64 +408,119 @@ export function ContasPagar() {
           </div>
           <div className="campo-form">
             <label>Descrição *</label>
-            <textarea
-              value={formParcelado.descricao}
-              onChange={(e) => setFormParcelado((f) => ({ ...f, descricao: e.target.value }))}
-            />
+            <textarea value={formNovo.descricao} onChange={(e) => setFormNovo((f) => ({ ...f, descricao: e.target.value }))} />
           </div>
-          <div className="campo-form">
-            <label>Valor total (R$) *</label>
-            <input
-              type="number"
-              step="0.01"
-              value={formParcelado.valorTotal}
-              onChange={(e) => setFormParcelado((f) => ({ ...f, valorTotal: e.target.value }))}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div className="campo-form" style={{ flex: 1 }}>
-              <label>Nº de parcelas *</label>
-              <input
-                type="number"
-                min="1"
-                value={formParcelado.numParcelas}
-                onChange={(e) => setFormParcelado((f) => ({ ...f, numParcelas: e.target.value }))}
-              />
-            </div>
-            <div className="campo-form" style={{ flex: 1 }}>
-              <label>Vencimento da 1ª parcela *</label>
-              <input
-                type="date"
-                value={formParcelado.primeiroVencimento}
-                onChange={(e) => setFormParcelado((f) => ({ ...f, primeiroVencimento: e.target.value }))}
-              />
-            </div>
-            <div className="campo-form" style={{ flex: 1 }}>
-              <label>Intervalo</label>
-              <select
-                value={formParcelado.intervaloDias}
-                onChange={(e) => setFormParcelado((f) => ({ ...f, intervaloDias: e.target.value }))}
-              >
-                <option value="30">30 em 30 dias</option>
-                <option value="28">28 em 28 dias</option>
-                <option value="15">15 em 15 dias</option>
-                <option value="7">7 em 7 dias</option>
-              </select>
-            </div>
-          </div>
-          <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-            Divide o valor total em partes iguais (a última parcela absorve o centavo de arredondamento, se houver) e
-            cria um lançamento de "Contas a pagar" pra cada parcela.
-          </p>
 
-          {erroParcelado && <p className="erro-login">{erroParcelado}</p>}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '12px 0' }}>
+            <input
+              type="checkbox"
+              checked={formNovo.parcelado}
+              onChange={(e) => setFormNovo((f) => ({ ...f, parcelado: e.target.checked }))}
+            />
+            Pagamento parcelado
+          </label>
+
+          {formNovo.parcelado ? (
+            <>
+              <div className="campo-form">
+                <label>Valor total (R$) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formNovo.valorTotal}
+                  onChange={(e) => setFormNovo((f) => ({ ...f, valorTotal: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div className="campo-form" style={{ flex: 1 }}>
+                  <label>Nº de parcelas *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formNovo.numParcelas}
+                    onChange={(e) => setFormNovo((f) => ({ ...f, numParcelas: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form" style={{ flex: 1 }}>
+                  <label>Vencimento da 1ª parcela *</label>
+                  <input
+                    type="date"
+                    value={formNovo.primeiroVencimento}
+                    onChange={(e) => setFormNovo((f) => ({ ...f, primeiroVencimento: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form" style={{ flex: 1 }}>
+                  <label>Intervalo</label>
+                  <select
+                    value={formNovo.intervaloDias}
+                    onChange={(e) => setFormNovo((f) => ({ ...f, intervaloDias: e.target.value }))}
+                  >
+                    <option value="30">30 em 30 dias</option>
+                    <option value="28">28 em 28 dias</option>
+                    <option value="15">15 em 15 dias</option>
+                    <option value="7">7 em 7 dias</option>
+                  </select>
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Divide o valor total em partes iguais (a última parcela absorve o centavo de arredondamento, se
+                houver) e cria um lançamento de "Contas a pagar" pra cada parcela, todas como "Em aberto".
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="campo-form">
+                <label>Valor (R$) *</label>
+                <input type="number" value={formNovo.valor} onChange={(e) => setFormNovo((f) => ({ ...f, valor: e.target.value }))} />
+              </div>
+              <div className="campo-form">
+                <label>Data de vencimento *</label>
+                <input
+                  type="date"
+                  value={formNovo.data_vencimento}
+                  onChange={(e) => setFormNovo((f) => ({ ...f, data_vencimento: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form">
+                <label>Data de pagamento</label>
+                <input
+                  type="date"
+                  value={formNovo.data_pagamento}
+                  onChange={(e) => setFormNovo((f) => ({ ...f, data_pagamento: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form">
+                <label>Forma de pagamento</label>
+                <input
+                  type="text"
+                  value={formNovo.forma_pagamento}
+                  onChange={(e) => setFormNovo((f) => ({ ...f, forma_pagamento: e.target.value }))}
+                />
+              </div>
+              <div className="campo-form">
+                <label>Status *</label>
+                <select value={formNovo.status} onChange={(e) => setFormNovo((f) => ({ ...f, status: e.target.value }))}>
+                  <option value="Em aberto">Em aberto</option>
+                  <option value="Pago">Pago</option>
+                  <option value="Cancelado">Cancelado</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          <div className="campo-form">
+            <label>Observações</label>
+            <textarea value={formNovo.observacoes} onChange={(e) => setFormNovo((f) => ({ ...f, observacoes: e.target.value }))} />
+          </div>
+
+          {erroNovo && <p className="erro-login">{erroNovo}</p>}
 
           <div className="modal-acoes">
-            <button className="botao-secundario" onClick={() => setModalParceladoAberto(false)} disabled={salvandoParcelado}>
+            <button className="botao-secundario" onClick={() => setModalNovoAberto(false)} disabled={salvandoNovo}>
               Cancelar
             </button>
-            <button className="botao-primario" onClick={salvarParcelado} disabled={salvandoParcelado}>
-              {salvandoParcelado ? 'Salvando...' : 'Gerar parcelas'}
+            <button className="botao-primario" onClick={salvarNovo} disabled={salvandoNovo}>
+              {salvandoNovo ? 'Salvando...' : formNovo.parcelado ? 'Gerar parcelas' : 'Salvar'}
             </button>
           </div>
         </ModalJanela>

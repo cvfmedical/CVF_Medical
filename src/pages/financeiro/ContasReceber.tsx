@@ -50,9 +50,14 @@ async function gerarNumeroConta(): Promise<string> {
 const formVazio = {
   cliente_id: '',
   descricao: '',
+  parcelado: false,
   valor: '',
   data_vencimento: '',
   observacoes: '',
+  valorTotal: '',
+  numParcelas: '2',
+  primeiroVencimento: '',
+  intervaloDias: '30',
 };
 
 const COLUNAS_FILTRAVEIS = [
@@ -157,6 +162,47 @@ export function ContasReceber() {
       setErro('Selecione o cliente.');
       return;
     }
+
+    if (form.parcelado) {
+      const total = Number(form.valorTotal);
+      if (!total || total <= 0) return setErro('Informe um valor total válido.');
+      const n = Number(form.numParcelas);
+      if (!n || n < 1) return setErro('Informe um número de parcelas válido.');
+      if (!form.primeiroVencimento) return setErro('Informe o vencimento da 1ª parcela.');
+
+      setSalvando(true);
+      try {
+        const intervalo = Number(form.intervaloDias) || 30;
+        const totalCentavos = Math.round(total * 100);
+        const baseCentavos = Math.floor(totalCentavos / n);
+        const restoCentavos = totalCentavos - baseCentavos * n;
+
+        for (let i = 0; i < n; i++) {
+          const valorCentavos = baseCentavos + (i === n - 1 ? restoCentavos : 0);
+          const vencimento = new Date(`${form.primeiroVencimento}T00:00:00`);
+          vencimento.setDate(vencimento.getDate() + intervalo * i);
+          const numero = await gerarNumeroConta();
+          const { error } = await supabase.from('contas_receber').insert({
+            numero_conta: numero,
+            cliente_id: Number(form.cliente_id),
+            descricao: form.descricao ? `${form.descricao} - Parcela ${i + 1}/${n}` : `Parcela ${i + 1}/${n}`,
+            valor: valorCentavos / 100,
+            data_vencimento: vencimento.toISOString().slice(0, 10),
+            observacoes: form.observacoes || null,
+            status: 'Em aberto',
+          });
+          if (error) throw error;
+        }
+        setModalAberto(false);
+        qc.invalidateQueries({ queryKey: ['contas-receber'] });
+      } catch (e) {
+        setErro(mensagemErro(e));
+      } finally {
+        setSalvando(false);
+      }
+      return;
+    }
+
     if (!form.valor || Number(form.valor) <= 0) {
       setErro('Informe um valor válido.');
       return;
@@ -536,18 +582,80 @@ export function ContasReceber() {
               <label>Descrição</label>
               <textarea value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} />
             </div>
-            <div className="campo-form">
-              <label>Valor (R$) *</label>
-              <input type="number" value={form.valor} onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))} />
-            </div>
-            <div className="campo-form">
-              <label>Data de vencimento *</label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '12px 0' }}>
               <input
-                type="date"
-                value={form.data_vencimento}
-                onChange={(e) => setForm((f) => ({ ...f, data_vencimento: e.target.value }))}
+                type="checkbox"
+                checked={form.parcelado}
+                onChange={(e) => setForm((f) => ({ ...f, parcelado: e.target.checked }))}
               />
-            </div>
+              Pagamento parcelado
+            </label>
+
+            {form.parcelado ? (
+              <>
+                <div className="campo-form">
+                  <label>Valor total (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={form.valorTotal}
+                    onChange={(e) => setForm((f) => ({ ...f, valorTotal: e.target.value }))}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Nº de parcelas *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.numParcelas}
+                      onChange={(e) => setForm((f) => ({ ...f, numParcelas: e.target.value }))}
+                    />
+                  </div>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Vencimento da 1ª parcela *</label>
+                    <input
+                      type="date"
+                      value={form.primeiroVencimento}
+                      onChange={(e) => setForm((f) => ({ ...f, primeiroVencimento: e.target.value }))}
+                    />
+                  </div>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Intervalo</label>
+                    <select
+                      value={form.intervaloDias}
+                      onChange={(e) => setForm((f) => ({ ...f, intervaloDias: e.target.value }))}
+                    >
+                      <option value="30">30 em 30 dias</option>
+                      <option value="28">28 em 28 dias</option>
+                      <option value="15">15 em 15 dias</option>
+                      <option value="7">7 em 7 dias</option>
+                    </select>
+                  </div>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                  Divide o valor total em partes iguais (a última parcela absorve o centavo de arredondamento, se
+                  houver) e cria um lançamento de "Contas a receber" pra cada parcela, todas como "Em aberto".
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="campo-form">
+                  <label>Valor (R$) *</label>
+                  <input type="number" value={form.valor} onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))} />
+                </div>
+                <div className="campo-form">
+                  <label>Data de vencimento *</label>
+                  <input
+                    type="date"
+                    value={form.data_vencimento}
+                    onChange={(e) => setForm((f) => ({ ...f, data_vencimento: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
+
             <div className="campo-form">
               <label>Observações</label>
               <textarea value={form.observacoes} onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))} />
@@ -560,7 +668,7 @@ export function ContasReceber() {
                 Cancelar
               </button>
               <button className="botao-primario" onClick={salvar} disabled={salvando}>
-                {salvando ? 'Salvando...' : 'Salvar'}
+                {salvando ? 'Salvando...' : form.parcelado ? 'Gerar parcelas' : 'Salvar'}
               </button>
             </div>
         </ModalJanela>

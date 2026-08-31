@@ -121,6 +121,13 @@ export interface CrudPageProps<Row extends { id: number }> {
   // passe `false` só se a tabela não fizer sentido impressa (ex: muitas
   // colunas com HTML complexo sem `textoPdf`).
   permitirExportarPdf?: boolean;
+  // Substitui o que o botão "+ Novo" faz (em vez de abrir o formulário
+  // genérico já preenchido com `valorInicial`) - útil quando "criar um
+  // registro novo" precisa de um modal próprio, com campos que o
+  // formulário genérico não modela (ex: alternar entre lançamento único e
+  // parcelado em Contas a pagar/receber). Não afeta "Editar" - continua
+  // usando o formulário genérico normalmente.
+  aoClicarNovo?: () => void;
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -137,6 +144,7 @@ export function CrudPage<Row extends { id: number }>({
   acoesFormularioExtras,
   resumo,
   permitirExportarPdf = true,
+  aoClicarNovo,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -294,7 +302,7 @@ export function CrudPage<Row extends { id: number }>({
               <IconFileTypePdf size={16} /> {exportandoPdf ? 'Gerando PDF...' : 'Exportar PDF'}
             </button>
           )}
-          <button className="botao-primario botao-pequeno" onClick={abrirNovo}>
+          <button className="botao-primario botao-pequeno" onClick={aoClicarNovo ?? abrirNovo}>
             <IconPlus size={16} /> Novo
           </button>
         </div>
