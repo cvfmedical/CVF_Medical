@@ -12,7 +12,7 @@ import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
-import { IconFileTypePdf, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconCalendar, IconFileTypePdf, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
@@ -81,6 +81,13 @@ export function ContasReceber() {
   const [erroNF, setErroNF] = useState<string | null>(null);
   const [salvandoNF, setSalvandoNF] = useState(false);
   const [exportandoPdf, setExportandoPdf] = useState(false);
+  // Alterar a data de recebimento de um título já baixado, sem precisar
+  // mexer em status/valor - mesmo padrão de "Alterar data de pagamento"
+  // já usado em Contas a Pagar.
+  const [contaEditandoData, setContaEditandoData] = useState<ContaReceber | null>(null);
+  const [novaDataRecebimento, setNovaDataRecebimento] = useState('');
+  const [erroData, setErroData] = useState<string | null>(null);
+  const [salvandoData, setSalvandoData] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -193,6 +200,35 @@ export function ContasReceber() {
       return;
     }
     qc.invalidateQueries({ queryKey: ['contas-receber'] });
+  }
+
+  function abrirEdicaoData(c: ContaReceber) {
+    setContaEditandoData(c);
+    setNovaDataRecebimento(c.data_recebimento ?? '');
+    setErroData(null);
+  }
+
+  async function salvarDataRecebimento() {
+    if (!contaEditandoData) return;
+    if (!novaDataRecebimento) {
+      setErroData('Informe a data de recebimento.');
+      return;
+    }
+    setErroData(null);
+    setSalvandoData(true);
+    try {
+      const { error } = await supabase
+        .from('contas_receber')
+        .update({ data_recebimento: novaDataRecebimento })
+        .eq('id', contaEditandoData.id);
+      if (error) throw error;
+      setContaEditandoData(null);
+      qc.invalidateQueries({ queryKey: ['contas-receber'] });
+    } catch (e) {
+      setErroData(mensagemErro(e));
+    } finally {
+      setSalvandoData(false);
+    }
   }
 
   async function excluir(id: number, numero: string) {
@@ -442,6 +478,11 @@ export function ContasReceber() {
                 </td>
                 <td>{c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '-'}</td>
                 <td className="acoes-tabela">
+                  {c.status === 'Recebido' && (
+                    <button className="botao-icone" title="Alterar data de recebimento" onClick={() => abrirEdicaoData(c)}>
+                      <IconCalendar size={16} />
+                    </button>
+                  )}
                   <button className="botao-icone" title="Editar dados da NF" onClick={() => abrirEdicaoNF(c)}>
                     <IconPencil size={16} />
                   </button>
@@ -566,6 +607,26 @@ export function ContasReceber() {
                 {salvandoNF ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
+        </ModalJanela>
+      )}
+
+      {contaEditandoData && (
+        <ModalJanela titulo={`Alterar data de recebimento — ${contaEditandoData.numero_conta}`} aoFechar={() => setContaEditandoData(null)}>
+          <div className="campo-form">
+            <label>Data de recebimento *</label>
+            <input type="date" value={novaDataRecebimento} onChange={(e) => setNovaDataRecebimento(e.target.value)} />
+          </div>
+
+          {erroData && <p className="erro-login">{erroData}</p>}
+
+          <div className="modal-acoes">
+            <button className="botao-secundario" onClick={() => setContaEditandoData(null)} disabled={salvandoData}>
+              Cancelar
+            </button>
+            <button className="botao-primario" onClick={salvarDataRecebimento} disabled={salvandoData}>
+              {salvandoData ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
         </ModalJanela>
       )}
     </div>

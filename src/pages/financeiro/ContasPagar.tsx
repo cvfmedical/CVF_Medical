@@ -6,7 +6,7 @@ import { ModalJanela } from '../../components/ModalJanela';
 import { supabase } from '../../lib/supabaseClient';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
-import { IconCheck, IconPlus } from '@tabler/icons-react';
+import { IconCalendar, IconCheck, IconPlus } from '@tabler/icons-react';
 
 interface ContaPagar {
   id: number;
@@ -98,6 +98,44 @@ export function ContasPagar() {
       return;
     }
     qc.invalidateQueries({ queryKey: ['contas_pagar'] });
+  }
+
+  // Alterar a data de pagamento de um título já baixado, sem precisar
+  // abrir o formulário inteiro (e sem risco de mexer em status/valor por
+  // engano) - útil pra corrigir data digitada errado ou lançada com a
+  // data de hoje em vez da data real da compensação do boleto.
+  const [contaEditandoData, setContaEditandoData] = useState<ContaPagar | null>(null);
+  const [novaDataPagamento, setNovaDataPagamento] = useState('');
+  const [erroData, setErroData] = useState<string | null>(null);
+  const [salvandoData, setSalvandoData] = useState(false);
+
+  function abrirEdicaoData(c: ContaPagar) {
+    setContaEditandoData(c);
+    setNovaDataPagamento(c.data_pagamento ?? '');
+    setErroData(null);
+  }
+
+  async function salvarDataPagamento() {
+    if (!contaEditandoData) return;
+    if (!novaDataPagamento) {
+      setErroData('Informe a data de pagamento.');
+      return;
+    }
+    setErroData(null);
+    setSalvandoData(true);
+    try {
+      const { error } = await supabase
+        .from('contas_pagar')
+        .update({ data_pagamento: novaDataPagamento })
+        .eq('id', contaEditandoData.id);
+      if (error) throw error;
+      setContaEditandoData(null);
+      qc.invalidateQueries({ queryKey: ['contas_pagar'] });
+    } catch (e) {
+      setErroData(mensagemErro(e));
+    } finally {
+      setSalvandoData(false);
+    }
   }
 
   // ---- Lançamento parcelado ----
@@ -288,6 +326,10 @@ export function ContasPagar() {
             <button className="botao-icone" title="Baixar título (marcar como pago hoje)" onClick={() => baixarTitulo(r)}>
               <IconCheck size={16} />
             </button>
+          ) : r.status === 'Pago' ? (
+            <button className="botao-icone" title="Alterar data de pagamento" onClick={() => abrirEdicaoData(r)}>
+              <IconCalendar size={16} />
+            </button>
           ) : null
         }
       />
@@ -400,6 +442,26 @@ export function ContasPagar() {
             </button>
             <button className="botao-primario" onClick={salvarParcelado} disabled={salvandoParcelado}>
               {salvandoParcelado ? 'Salvando...' : 'Gerar parcelas'}
+            </button>
+          </div>
+        </ModalJanela>
+      )}
+
+      {contaEditandoData && (
+        <ModalJanela titulo={`Alterar data de pagamento — ${contaEditandoData.numero_conta}`} aoFechar={() => setContaEditandoData(null)}>
+          <div className="campo-form">
+            <label>Data de pagamento *</label>
+            <input type="date" value={novaDataPagamento} onChange={(e) => setNovaDataPagamento(e.target.value)} />
+          </div>
+
+          {erroData && <p className="erro-login">{erroData}</p>}
+
+          <div className="modal-acoes">
+            <button className="botao-secundario" onClick={() => setContaEditandoData(null)} disabled={salvandoData}>
+              Cancelar
+            </button>
+            <button className="botao-primario" onClick={salvarDataPagamento} disabled={salvandoData}>
+              {salvandoData ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </ModalJanela>
