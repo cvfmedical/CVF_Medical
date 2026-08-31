@@ -6,6 +6,7 @@ import { AlertaOrcamentosAprovados } from './AlertaOrcamentosAprovados';
 import { AlertaFaturamentoLiberado } from './AlertaFaturamentoLiberado';
 import { AlertaEmailFalhou } from './AlertaEmailFalhou';
 import { AlertaChatNovaMensagem } from './AlertaChatNovaMensagem';
+import { AlertaContasPagarHoje } from './AlertaContasPagarHoje';
 import { ContextoAlertasAtivos } from '../lib/useRegistrarAlertaAtivo';
 
 const CHAVE_POSICAO = 'alertas-flutuantes-posicao';
@@ -124,6 +125,7 @@ export function AlertasFlutuantes() {
             <AlertaOrcamentosAprovados />
             <AlertaFaturamentoLiberado />
             <AlertaEmailFalhou />
+            <AlertaContasPagarHoje />
             <AlertaChatNovaMensagem />
           </ContextoAlertasAtivos.Provider>
         </div>

@@ -27,6 +27,7 @@ import { CategoriasProdutosServicos } from './pages/cadastros/CategoriasProdutos
 import { SubgruposProdutosServicos } from './pages/cadastros/SubgruposProdutosServicos';
 import { TiposOtica } from './pages/cadastros/TiposOtica';
 import { CondicoesPagamento } from './pages/cadastros/CondicoesPagamento';
+import { CategoriasCusto } from './pages/cadastros/CategoriasCusto';
 import { CondicoesChegada } from './pages/cadastros/CondicoesChegada';
 import { TiposEquipamentoLaudo } from './pages/cadastros/TiposEquipamentoLaudo';
 import { ModalidadesManutencao } from './pages/cadastros/ModalidadesManutencao';
@@ -87,6 +88,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/subgrupos-produtos-servicos': SubgruposProdutosServicos,
   '/tipos-otica': TiposOtica,
   '/condicoes-pagamento': CondicoesPagamento,
+  '/categorias-custo': CategoriasCusto,
   '/condicoes-chegada': CondicoesChegada,
   '/tipos-equipamento-laudo': TiposEquipamentoLaudo,
   '/modalidades-manutencao': ModalidadesManutencao,
