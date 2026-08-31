@@ -20,6 +20,17 @@ const CNPJ_PRESTADOR = '46948692000103';
 const CODIGO_MUNICIPIO_RIBEIRAO_PRETO = 3543402; // IBGE - serviço sempre prestado na oficina da CVF
 const CODIGO_TRIBUTACAO_NACIONAL_ISS = '140201'; // Assistência técnica (confirmado no Nota Control)
 
+// Grupo IBS/CBS (Reforma Tributária, obrigatório na NFS-e nacional desde
+// 01/07/2026) - nomes de campo confirmados pelo suporte da Focus NFe e
+// pela documentação oficial (campos.focusnfe.com.br/nfse_nacional) em
+// 31/08/2026: são campos soltos no nível raiz do payload, sem grupo
+// aninhado. As ALÍQUOTAS (IBS/CBS) não são enviadas pelo emissor - são
+// calculadas automaticamente pela plataforma Sefin Nacional a partir de
+// CST + cClassTrib + localidade.
+const CODIGO_INDICADOR_OPERACAO = '050101'; // cIndOp - confirmado no Nota Control
+const CST_IBS_CBS = '000'; // CST - "Tributação integral" (confirmado no Nota Control)
+const CLASSIFICACAO_TRIBUTARIA_IBS_CBS = '000001'; // cClassTrib - "Situações tributadas integralmente" (confirmado no Nota Control)
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -143,7 +154,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: cliente, error: erroCliente } = await supabaseAdmin
     .from('clientes')
-    .select('cnpj')
+    .select('cnpj, razao_social')
     .eq('id', conta.cliente_id)
     .single();
   if (erroCliente || !cliente) return json({ error: 'Cliente da conta não encontrado.' }, 404);
@@ -151,6 +162,9 @@ Deno.serve(async (req: Request) => {
   const documentoTomador = apenasDigitos(cliente.cnpj);
   if (documentoTomador.length !== 14 && documentoTomador.length !== 11) {
     return json({ error: 'CNPJ/CPF do cliente inválido ou não cadastrado - corrija em Cadastros → Clientes.' }, 400);
+  }
+  if (!cliente.razao_social) {
+    return json({ error: 'Razão social do cliente não cadastrada - corrija em Cadastros → Clientes.' }, 400);
   }
 
   const orc = (conta as unknown as { orcamentos: { numero_orcamento: string; ordens_servico: { numero_os: string } | null } | null }).orcamentos;
@@ -170,11 +184,19 @@ Deno.serve(async (req: Request) => {
     codigo_opcao_simples_nacional: 1,
     regime_especial_tributacao: 0,
     ...(documentoTomador.length === 14 ? { cnpj_tomador: documentoTomador } : { cpf_tomador: documentoTomador }),
+    razao_social_tomador: cliente.razao_social,
     codigo_municipio_prestacao: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
     codigo_tributacao_nacional_iss: CODIGO_TRIBUTACAO_NACIONAL_ISS,
     descricao_servico: descricaoServico,
     valor_servico: conta.valor,
     tributacao_iss: 1,
+    // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
+    finalidade_emissao: 0,
+    consumidor_final: 0,
+    indicador_destinatario: 0,
+    codigo_indicador_operacao: CODIGO_INDICADOR_OPERACAO,
+    ibs_cbs_situacao_tributaria: CST_IBS_CBS,
+    ibs_cbs_classificacao_tributaria: CLASSIFICACAO_TRIBUTARIA_IBS_CBS,
   };
 
   const resp = await fetch(`${focusBaseUrl}/v2/nfsen?ref=${encodeURIComponent(ref)}`, {
