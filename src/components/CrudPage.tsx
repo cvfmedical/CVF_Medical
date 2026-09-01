@@ -131,7 +131,9 @@ export interface CrudPageProps<Row extends { id: number }> {
   // Filtro "Período" (De/Até) por uma coluna de data (formato YYYY-MM-DD)
   // no cabeçalho, além dos filtros por coluna já existentes - útil pra
   // telas de lançamento (ex: Contas a pagar, por data_vencimento).
-  filtroPeriodo?: { campo: string; label?: string };
+  // `campoValor`, quando informado, soma esse campo numérico das linhas
+  // filtradas e mostra "Total filtrado" logo abaixo do cabeçalho.
+  filtroPeriodo?: { campo: string; label?: string; campoValor?: string };
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -339,6 +341,13 @@ export function CrudPage<Row extends { id: number }>({
           </button>
         </div>
       </div>
+
+      {filtroPeriodo?.campoValor && !listQuery.isLoading && !listQuery.isError && (
+        <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 12 }}>
+          Total filtrado: <strong>R$ {linhasFiltradas.reduce((s, l) => s + Number((l as Record<string, unknown>)[filtroPeriodo.campoValor!] ?? 0), 0).toFixed(2)}</strong>{' '}
+          ({linhasFiltradas.length} registro{linhasFiltradas.length === 1 ? '' : 's'})
+        </p>
+      )}
 
       {resumo && !listQuery.isLoading && !listQuery.isError && resumo(listQuery.data ?? [])}
 

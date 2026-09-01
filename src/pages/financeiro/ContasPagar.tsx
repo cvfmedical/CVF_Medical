@@ -261,7 +261,7 @@ export function ContasPagar() {
         titulo="Contas a pagar"
         tabela="contas_pagar"
         ordenarPor="data_vencimento"
-        filtroPeriodo={{ campo: 'data_vencimento', label: 'Vencimento' }}
+        filtroPeriodo={{ campo: 'data_vencimento', label: 'Vencimento', campoValor: 'valor' }}
         camposFiltro={['descricao', 'numero_conta']}
         aoClicarNovo={abrirModalNovo}
         resumo={(todas) => {

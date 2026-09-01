@@ -1515,6 +1515,7 @@ export function OrcamentoFinanceiro() {
     if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(o.ordem_servico_id) ?? '';
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
     if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
+    if (chave === 'material') return `${o.ordens_servico?.optica_fab ?? ''} ${o.ordens_servico?.optica_desc ?? ''}`.trim();
     return (o as unknown as Record<string, unknown>)[chave];
   }
   const algumFiltroListaAtivo = Object.values(filtrosColunaLista).some((v) => v.trim());
@@ -1597,6 +1598,7 @@ export function OrcamentoFinanceiro() {
               ['numero_os', 'OS'],
               ['numero_orcamento', 'Orçamento'],
               ['cliente_nome', 'Cliente'],
+              ['material', 'Material'],
               ['status', 'Status'],
             ].map(([chave, label]) => (
               <ThOrdenavel key={chave} chave={chave} colunaAtiva={colunaLista} direcao={direcaoLista} onClick={ordenarListaPor}>
@@ -1607,7 +1609,7 @@ export function OrcamentoFinanceiro() {
           </tr>
           <tr>
             <th></th>
-            {['codigo_entrada', 'numero_os', 'numero_orcamento', 'cliente_nome', 'status'].map((chave) => (
+            {['codigo_entrada', 'numero_os', 'numero_orcamento', 'cliente_nome', 'material', 'status'].map((chave) => (
               <th key={chave} style={{ padding: '2px 6px' }}>
                 <input
                   type="text"
@@ -1664,6 +1666,7 @@ export function OrcamentoFinanceiro() {
                 </span>
               </td>
               <td>{o.ordens_servico?.cliente_nome}</td>
+              <td>{valorColunaLista(o, 'material') as string || '-'}</td>
               <td>
                 <Badge tono={TONO_STATUS[o.status] ?? 'neutro'}>{o.status}</Badge>
               </td>
@@ -1678,7 +1681,7 @@ export function OrcamentoFinanceiro() {
           ))}
           {linhasLista.length === 0 && (
             <tr>
-              <td colSpan={7}>Nenhum orçamento encontrado.</td>
+              <td colSpan={8}>Nenhum orçamento encontrado.</td>
             </tr>
           )}
         </tbody>

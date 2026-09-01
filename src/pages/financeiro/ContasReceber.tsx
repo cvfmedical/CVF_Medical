@@ -484,7 +484,11 @@ export function ContasReceber() {
           </button>
         </div>
       </div>
-      <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
+      <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 4 }}>
+        Total filtrado: <strong>R$ {linhas.reduce((s, c) => s + Number(c.valor), 0).toFixed(2)}</strong> ({linhas.length} título
+        {linhas.length === 1 ? '' : 's'})
+      </p>
+      <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: 0, marginBottom: 16 }}>
         Contas de orçamentos aprovados são lançadas automaticamente aqui. Total em aberto: R$ {totalEmAberto.toFixed(2)}
         {' · '}
         <span style={{ color: '#dc2626' }}>Em vermelho: vence amanhã (D+1)</span>
