@@ -7,11 +7,17 @@ import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
 
-interface SaldoCaixa {
+interface ContaCaixa {
   id: number;
   nome: string;
-  valor: number;
-  atualizado_em: string;
+}
+
+interface SaldoMensal {
+  id: number;
+  saldo_caixa_id: number;
+  mes_ano: string;
+  saldo_inicial: number;
+  criado_em: string;
 }
 
 interface LinhaConta {
@@ -43,38 +49,24 @@ function formatarMoeda(v: number): string {
   return `R$ ${v.toFixed(2)}`;
 }
 
-// Quando o saldo acumulado de um dia fica negativo, sugere de qual(is)
-// conta(s) de caixa sairia o dinheiro pra cobrir - preenche na ordem em
-// que os saldos aparecem (Banco Inter antes de Banco Itaú, por padrão),
-// usando o valor ATUAL cadastrado em cada conta (não simula transferência
-// entre contas dia a dia, é só uma referência rápida de "por onde começar
-// a olhar"). "Peças Cortical" fica de fora por não ser dinheiro em caixa
-// de fato - é um valor a receber, não dá pra pagar conta com ele.
-function sugestaoCobertura(deficit: number, contas: SaldoCaixa[]): { nome: string; valor: number }[] {
-  let restante = deficit;
-  const resultado: { nome: string; valor: number }[] = [];
-  for (const c of contas) {
-    if (restante <= 0.001) break;
-    const disponivel = Number(c.valor);
-    if (disponivel <= 0) continue;
-    const usado = Math.min(disponivel, restante);
-    resultado.push({ nome: c.nome, valor: usado });
-    restante -= usado;
-  }
-  if (restante > 0.001) resultado.push({ nome: 'Falta cobrir (sem saldo cadastrado suficiente)', valor: restante });
-  return resultado;
-}
-
 // Painel do fluxo de caixa mensal - substitui o controle que era feito à
 // mão numa planilha à parte, cruzando dia a dia o que já está lançado em
-// Contas a pagar/Contas a receber (não duplica dado, só visualiza). Os
-// "saldos de caixa" (ex.: saldo em banco, peças a receber do Grupo
-// Cortical) são o único dado digitado manualmente aqui - o resto é
-// puxado ao vivo das duas telas de lançamento.
+// Contas a pagar/Contas a receber (não duplica dado, só visualiza).
+//
+// Os saldos de caixa (Banco Inter, Banco Itaú etc.) são informados UMA
+// VEZ por mês (o saldo do início do mês) e ficam travados depois disso -
+// não são "o saldo de hoje", editável a qualquer momento. A partir daí o
+// sistema SIMULA dia a dia: cada dia negativo (paga mais do que recebe)
+// vai descontando das contas na ordem cadastrada, permanentemente, até o
+// fim do mês - por isso "de onde sai o dinheiro" reflete o que já foi
+// consumido nos dias anteriores, não um cálculo isolado por dia. "Peças
+// Cortical" é a única exceção automática (não é dinheiro em caixa, é um
+// valor a receber) e fica de fora dessa simulação bancária.
 export function FluxoCaixaMensal() {
   const qc = useQueryClient();
   const [mesAno, setMesAno] = useState(mesAtualISO());
-  const [novoSaldoNome, setNovoSaldoNome] = useState('');
+  const [novaContaNome, setNovaContaNome] = useState('');
+  const [novosSaldosIniciais, setNovosSaldosIniciais] = useState<Record<number, string>>({});
   const [exportandoPdf, setExportandoPdf] = useState(false);
 
   const [ano, mes] = mesAno.split('-').map(Number);
@@ -82,12 +74,21 @@ export function FluxoCaixaMensal() {
   const fim = new Date(ano, mes, 0).toISOString().slice(0, 10);
   const diasNoMes = new Date(ano, mes, 0).getDate();
 
-  const saldosQuery = useQuery({
-    queryKey: ['saldos-caixa'],
-    queryFn: async (): Promise<SaldoCaixa[]> => {
-      const { data, error } = await supabase.from('saldos_caixa').select('*').order('id');
+  const contasCaixaQuery = useQuery({
+    queryKey: ['contas-caixa'],
+    queryFn: async (): Promise<ContaCaixa[]> => {
+      const { data, error } = await supabase.from('saldos_caixa').select('id, nome').order('id');
       if (error) throw error;
-      return data as SaldoCaixa[];
+      return data as ContaCaixa[];
+    },
+  });
+
+  const saldosMensaisQuery = useQuery({
+    queryKey: ['saldos-caixa-mensal', mesAno],
+    queryFn: async (): Promise<SaldoMensal[]> => {
+      const { data, error } = await supabase.from('saldos_caixa_mensal').select('*').eq('mes_ano', mesAno);
+      if (error) throw error;
+      return data as SaldoMensal[];
     },
   });
 
@@ -169,44 +170,61 @@ export function FluxoCaixaMensal() {
     return id ? clientesQuery.data?.find((c) => c.id === id)?.razao_social ?? null : null;
   }
 
-  async function salvarSaldo(s: SaldoCaixa, novoValor: number) {
+  async function confirmarSaldoInicial(conta: ContaCaixa) {
+    const valor = Number(novosSaldosIniciais[conta.id] ?? '0') || 0;
+    if (
+      !confirm(
+        `Confirma o saldo inicial de ${formatarMoeda(valor)} para "${conta.nome}" em ${NOMES_MES[mes - 1]}/${ano}? Depois de confirmado, não pode mais ser alterado - só um novo lançamento de Contas a pagar/receber muda o saldo daqui pra frente.`,
+      )
+    )
+      return;
     const { error } = await supabase
-      .from('saldos_caixa')
-      .update({ valor: novoValor, atualizado_em: new Date().toISOString().slice(0, 10) })
-      .eq('id', s.id);
+      .from('saldos_caixa_mensal')
+      .insert({ saldo_caixa_id: conta.id, mes_ano: mesAno, saldo_inicial: valor });
     if (error) {
       alert(mensagemErro(error));
       return;
     }
-    qc.invalidateQueries({ queryKey: ['saldos-caixa'] });
+    qc.invalidateQueries({ queryKey: ['saldos-caixa-mensal', mesAno] });
   }
 
-  async function adicionarSaldo() {
-    const nome = novoSaldoNome.trim();
+  async function adicionarConta() {
+    const nome = novaContaNome.trim();
     if (!nome) return;
-    const { error } = await supabase.from('saldos_caixa').insert({ nome, valor: 0 });
+    const { error } = await supabase.from('saldos_caixa').insert({ nome });
     if (error) {
       alert(mensagemErro(error));
       return;
     }
-    setNovoSaldoNome('');
-    qc.invalidateQueries({ queryKey: ['saldos-caixa'] });
+    setNovaContaNome('');
+    qc.invalidateQueries({ queryKey: ['contas-caixa'] });
   }
 
-  async function excluirSaldo(s: SaldoCaixa) {
-    if (!confirm(`Remover "${s.nome}" dos saldos de caixa?`)) return;
-    const { error } = await supabase.from('saldos_caixa').delete().eq('id', s.id);
+  async function excluirConta(conta: ContaCaixa) {
+    if (!confirm(`Remover a conta "${conta.nome}"? Isso apaga também o histórico de saldos iniciais dela em todos os meses.`)) return;
+    const { error } = await supabase.from('saldos_caixa').delete().eq('id', conta.id);
     if (error) {
       alert(mensagemErro(error));
       return;
     }
-    qc.invalidateQueries({ queryKey: ['saldos-caixa'] });
+    qc.invalidateQueries({ queryKey: ['contas-caixa'] });
+    qc.invalidateQueries({ queryKey: ['saldos-caixa-mensal', mesAno] });
   }
 
-  if (saldosQuery.isLoading || pagarQuery.isLoading || receberQuery.isLoading || pecasCorticalQuery.isLoading) return <CarregandoTela />;
+  if (
+    contasCaixaQuery.isLoading ||
+    saldosMensaisQuery.isLoading ||
+    pagarQuery.isLoading ||
+    receberQuery.isLoading ||
+    pecasCorticalQuery.isLoading
+  )
+    return <CarregandoTela />;
 
   const pecasCorticalPendente = pecasCorticalQuery.data ?? 0;
-  const saldoInicial = (saldosQuery.data ?? []).reduce((s, r) => s + Number(r.valor), 0) + pecasCorticalPendente;
+  const contas = contasCaixaQuery.data ?? [];
+  const saldoInicialPorConta = new Map((saldosMensaisQuery.data ?? []).map((s) => [s.saldo_caixa_id, Number(s.saldo_inicial)]));
+  const contasDefinidas = contas.filter((c) => saldoInicialPorConta.has(c.id));
+  const contasPendentes = contas.filter((c) => !saldoInicialPorConta.has(c.id));
 
   const dias = Array.from({ length: diasNoMes }, (_, i) => {
     const dataStr = `${mesAno}-${String(i + 1).padStart(2, '0')}`;
@@ -221,14 +239,48 @@ export function FluxoCaixaMensal() {
     };
   });
 
-  let acumulado = saldoInicial;
+  // Simulação real: cada dia negativo desconta das contas na ordem
+  // cadastrada, permanentemente (o que sai de uma conta num dia reflete
+  // no saldo dela nos dias seguintes) - não é um cálculo isolado por dia.
+  const saldoCorrentePorConta = new Map(contasDefinidas.map((c) => [c.id, saldoInicialPorConta.get(c.id) ?? 0]));
   const linhas = dias.map((d) => {
-    acumulado += d.receberTotal - d.pagarTotal;
-    return { ...d, saldoAcumulado: acumulado };
+    const net = d.receberTotal - d.pagarTotal;
+    const retiradas: { nome: string; valor: number }[] = [];
+    if (net >= 0) {
+      if (contasDefinidas.length > 0) {
+        const primeira = contasDefinidas[0];
+        saldoCorrentePorConta.set(primeira.id, (saldoCorrentePorConta.get(primeira.id) ?? 0) + net);
+      }
+    } else {
+      let faltante = -net;
+      for (const c of contasDefinidas) {
+        if (faltante <= 0.001) break;
+        const disponivel = saldoCorrentePorConta.get(c.id) ?? 0;
+        if (disponivel <= 0) continue;
+        const retirado = Math.min(disponivel, faltante);
+        saldoCorrentePorConta.set(c.id, disponivel - retirado);
+        retiradas.push({ nome: c.nome, valor: retirado });
+        faltante -= retirado;
+      }
+      if (faltante > 0.001) {
+        const ultima = contasDefinidas[contasDefinidas.length - 1];
+        if (ultima) {
+          saldoCorrentePorConta.set(ultima.id, (saldoCorrentePorConta.get(ultima.id) ?? 0) - faltante);
+          retiradas.push({ nome: `${ultima.nome} (fica negativa)`, valor: faltante });
+        } else {
+          retiradas.push({ nome: 'Nenhuma conta com saldo inicial definido neste mês', valor: faltante });
+        }
+      }
+    }
+    const saldoBancosDia = Array.from(saldoCorrentePorConta.values()).reduce((s, v) => s + v, 0);
+    return { ...d, retiradas, saldoBancosDia, negativo: saldoBancosDia < 0, saldoAcumulado: saldoBancosDia + pecasCorticalPendente };
   });
 
+  const saldoInicialBancos = contasDefinidas.reduce((s, c) => s + (saldoInicialPorConta.get(c.id) ?? 0), 0);
+  const saldoInicial = saldoInicialBancos + pecasCorticalPendente;
   const totalPagarMes = linhas.reduce((s, l) => s + l.pagarTotal, 0);
   const totalReceberMes = linhas.reduce((s, l) => s + l.receberTotal, 0);
+  const saldoFinalPorConta = contasDefinidas.map((c) => ({ nome: c.nome, saldo: saldoCorrentePorConta.get(c.id) ?? 0 }));
   const hojeISO = new Date().toISOString().slice(0, 10);
 
   async function exportarPdf() {
@@ -251,14 +303,14 @@ export function FluxoCaixaMensal() {
           l.receberTotal ? formatarMoeda(l.receberTotal) : '',
           formatarMoeda(l.receberTotal - l.pagarTotal),
           formatarMoeda(l.saldoAcumulado),
-          l.saldoAcumulado < 0
-            ? `Negativo - cobrir com ${sugestaoCobertura(-l.saldoAcumulado, saldosQuery.data ?? [])
-                .map((c) => `${formatarMoeda(c.valor)} (${c.nome})`)
-                .join(' + ')}`
+          l.negativo
+            ? `Negativo - saiu de ${l.retiradas.map((r) => `${formatarMoeda(r.valor)} (${r.nome})`).join(' + ')}`
             : 'Positivo',
         ]),
         totalLabel: 'TOTAL DO MÊS',
-        totalValor: `A pagar ${formatarMoeda(totalPagarMes)} · A receber ${formatarMoeda(totalReceberMes)} · Saldo final ${formatarMoeda(linhas[linhas.length - 1]?.saldoAcumulado ?? saldoInicial)}`,
+        totalValor: `A pagar ${formatarMoeda(totalPagarMes)} · A receber ${formatarMoeda(totalReceberMes)} · Saldo final ${formatarMoeda(
+          linhas[linhas.length - 1]?.saldoAcumulado ?? saldoInicial,
+        )}`,
         nomeArquivo: `fluxo-caixa-${mesAno}`,
       });
     } catch (e) {
@@ -281,8 +333,8 @@ export function FluxoCaixaMensal() {
       </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Visualização dia a dia do que já está lançado em Contas a pagar e Contas a receber - não lança nada novo, só
-        cruza os dois. O saldo acumulado parte da soma de "Peças Cortical" (calculado automaticamente) com os saldos
-        de caixa abaixo (esses sim, digitados).
+        cruza os dois. O saldo de cada conta abaixo é informado uma vez no início do mês e fica travado; dali em
+        diante o sistema simula o consumo dia a dia.
       </p>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -291,52 +343,70 @@ export function FluxoCaixaMensal() {
           <div style={{ fontWeight: 600 }}>{formatarMoeda(pecasCorticalPendente)}</div>
           <span style={{ fontSize: 10, color: 'var(--ink-400)' }}>Automático - peças com faturamento diferido ainda em aberto</span>
         </div>
-        {(saldosQuery.data ?? []).map((s) => (
-          <div
-            key={s.id}
-            style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, minWidth: 180, position: 'relative' }}
-          >
+
+        {contasDefinidas.map((c) => {
+          const registro = (saldosMensaisQuery.data ?? []).find((s) => s.saldo_caixa_id === c.id)!;
+          return (
+            <div key={c.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, minWidth: 180, position: 'relative' }}>
+              <button
+                className="botao-icone perigo"
+                title="Remover conta (apaga o histórico dela)"
+                onClick={() => excluirConta(c)}
+                style={{ position: 'absolute', top: 4, right: 4, padding: 2 }}
+              >
+                <IconTrash size={13} />
+              </button>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-400)', marginBottom: 4 }}>{c.nome}</label>
+              <div style={{ fontWeight: 600 }}>{formatarMoeda(Number(registro.saldo_inicial))}</div>
+              <span style={{ fontSize: 10, color: 'var(--ink-400)' }}>
+                Saldo inicial de {NOMES_MES[mes - 1]} · travado em {new Date(registro.criado_em).toLocaleDateString('pt-BR')}
+              </span>
+            </div>
+          );
+        })}
+
+        {contasPendentes.map((c) => (
+          <div key={c.id} style={{ border: '1px solid var(--copper-500, #b45309)', borderRadius: 8, padding: 10, minWidth: 200, position: 'relative' }}>
             <button
               className="botao-icone perigo"
-              title="Remover"
-              onClick={() => excluirSaldo(s)}
+              title="Remover conta"
+              onClick={() => excluirConta(c)}
               style={{ position: 'absolute', top: 4, right: 4, padding: 2 }}
             >
               <IconTrash size={13} />
             </button>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-400)', marginBottom: 4 }}>{s.nome}</label>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-400)', marginBottom: 4 }}>{c.nome}</label>
             <input
               type="number"
               step="0.01"
-              defaultValue={s.valor}
-              onBlur={(e) => {
-                const novo = Number(e.target.value);
-                if (!Number.isNaN(novo) && novo !== Number(s.valor)) salvarSaldo(s, novo);
-              }}
-              style={{ width: '100%', fontWeight: 600 }}
+              placeholder="Saldo inicial do mês"
+              value={novosSaldosIniciais[c.id] ?? ''}
+              onChange={(e) => setNovosSaldosIniciais((s) => ({ ...s, [c.id]: e.target.value }))}
+              style={{ width: '100%', marginBottom: 6 }}
             />
-            <span style={{ fontSize: 10, color: 'var(--ink-400)' }}>
-              Atualizado em {new Date(s.atualizado_em + 'T00:00:00').toLocaleDateString('pt-BR')}
-            </span>
+            <button className="botao-secundario botao-pequeno" onClick={() => confirmarSaldoInicial(c)}>
+              Confirmar saldo de {NOMES_MES[mes - 1]}
+            </button>
           </div>
         ))}
+
         <div style={{ border: '1px dashed var(--border)', borderRadius: 8, padding: 10, minWidth: 180, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
           <input
             type="text"
-            placeholder="Novo saldo (ex: Caixa)"
-            value={novoSaldoNome}
-            onChange={(e) => setNovoSaldoNome(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && adicionarSaldo()}
+            placeholder="Nova conta (ex: Caixa)"
+            value={novaContaNome}
+            onChange={(e) => setNovaContaNome(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && adicionarConta()}
           />
-          <button className="botao-secundario botao-pequeno" onClick={adicionarSaldo}>
-            <IconPlus size={14} /> Adicionar
+          <button className="botao-secundario botao-pequeno" onClick={adicionarConta}>
+            <IconPlus size={14} /> Adicionar conta
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 24, marginBottom: 12, fontSize: 13 }}>
+      <div style={{ display: 'flex', gap: 24, marginBottom: 12, fontSize: 13, flexWrap: 'wrap' }}>
         <span>
-          Saldo inicial (Peças Cortical + saldos acima): <strong>{formatarMoeda(saldoInicial)}</strong>
+          Saldo inicial (Peças Cortical + contas travadas): <strong>{formatarMoeda(saldoInicial)}</strong>
         </span>
         <span>
           Total a pagar no mês: <strong>{formatarMoeda(totalPagarMes)}</strong>
@@ -360,8 +430,6 @@ export function FluxoCaixaMensal() {
         <tbody>
           {linhas.map((l) => {
             const saldoDia = l.receberTotal - l.pagarTotal;
-            const negativo = l.saldoAcumulado < 0;
-            const cobertura = negativo ? sugestaoCobertura(-l.saldoAcumulado, saldosQuery.data ?? []) : [];
             return (
               <tr key={l.data} style={l.data === hojeISO ? { background: 'var(--copper-100, #fdf1e6)' } : undefined}>
                 <td className="mono">
@@ -388,10 +456,10 @@ export function FluxoCaixaMensal() {
                 </td>
                 <td style={{ fontWeight: 600 }}>{formatarMoeda(l.saldoAcumulado)}</td>
                 <td>
-                  <Badge tono={negativo ? 'danger' : 'teal'}>{negativo ? 'Negativo' : 'Positivo'}</Badge>
-                  {negativo && (
+                  <Badge tono={l.negativo ? 'danger' : 'teal'}>{l.negativo ? 'Negativo' : 'Positivo'}</Badge>
+                  {l.negativo && (
                     <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 2 }}>
-                      Cobrir com: {cobertura.map((c) => `${formatarMoeda(c.valor)} (${c.nome})`).join(' + ')}
+                      Saiu de: {l.retiradas.map((r) => `${formatarMoeda(r.valor)} (${r.nome})`).join(' + ')}
                     </div>
                   )}
                 </td>
@@ -410,6 +478,13 @@ export function FluxoCaixaMensal() {
           </tr>
         </tfoot>
       </table>
+
+      {saldoFinalPorConta.length > 0 && (
+        <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: 12 }}>
+          Saldo simulado de cada conta ao final de {NOMES_MES[mes - 1]}:{' '}
+          {saldoFinalPorConta.map((c) => `${c.nome}: ${formatarMoeda(c.saldo)}`).join(' · ')}
+        </p>
+      )}
     </div>
   );
 }
