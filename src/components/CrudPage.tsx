@@ -128,6 +128,10 @@ export interface CrudPageProps<Row extends { id: number }> {
   // parcelado em Contas a pagar/receber). Não afeta "Editar" - continua
   // usando o formulário genérico normalmente.
   aoClicarNovo?: () => void;
+  // Filtro "Período" (De/Até) por uma coluna de data (formato YYYY-MM-DD)
+  // no cabeçalho, além dos filtros por coluna já existentes - útil pra
+  // telas de lançamento (ex: Contas a pagar, por data_vencimento).
+  filtroPeriodo?: { campo: string; label?: string };
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -145,6 +149,7 @@ export function CrudPage<Row extends { id: number }>({
   resumo,
   permitirExportarPdf = true,
   aoClicarNovo,
+  filtroPeriodo,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -167,6 +172,8 @@ export function CrudPage<Row extends { id: number }>({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [periodoDe, setPeriodoDe] = useState('');
+  const [periodoAte, setPeriodoAte] = useState('');
 
   // Atualiza um campo e, se ele tiver `aoMudar`, mescla os campos que ele
   // preenche automaticamente (ex: puxar do catálogo).
@@ -180,11 +187,21 @@ export function CrudPage<Row extends { id: number }>({
 
   const linhasFiltradas = useMemo(() => {
     const todas = listQuery.data ?? [];
-    return todas.filter((linha) =>
-      colunas.every((c) => passaFiltro(c.valorFiltro ? c.valorFiltro(linha) : (linha as Record<string, unknown>)[c.chave], c.chave)),
-    );
+    return todas.filter((linha) => {
+      const passaColunas = colunas.every((c) =>
+        passaFiltro(c.valorFiltro ? c.valorFiltro(linha) : (linha as Record<string, unknown>)[c.chave], c.chave),
+      );
+      if (!passaColunas) return false;
+      if (filtroPeriodo && (periodoDe || periodoAte)) {
+        const valor = (linha as Record<string, unknown>)[filtroPeriodo.campo];
+        if (typeof valor !== 'string') return false;
+        if (periodoDe && valor < periodoDe) return false;
+        if (periodoAte && valor > periodoAte) return false;
+      }
+      return true;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listQuery.data, filtrosColuna, filtrosValores, colunas]);
+  }, [listQuery.data, filtrosColuna, filtrosValores, colunas, filtroPeriodo, periodoDe, periodoAte]);
 
   const { linhasOrdenadas: linhas, coluna: colunaOrdenada, direcao, ordenarPor: ordenarPorColuna } = useLinhasOrdenadas(linhasFiltradas);
 
@@ -291,9 +308,24 @@ export function CrudPage<Row extends { id: number }>({
     <div>
       <div className="crud-cabecalho">
         <h1>{titulo}</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {algumFiltroAtivo && (
-            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {filtroPeriodo && (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
+              <span style={{ color: 'var(--ink-400)' }}>{filtroPeriodo.label ?? 'Período'}:</span>
+              <input type="date" value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} style={{ width: 140 }} />
+              <span style={{ color: 'var(--ink-400)' }}>até</span>
+              <input type="date" value={periodoAte} onChange={(e) => setPeriodoAte(e.target.value)} style={{ width: 140 }} />
+            </div>
+          )}
+          {(algumFiltroAtivo || periodoDe || periodoAte) && (
+            <button
+              className="botao-secundario botao-pequeno"
+              onClick={() => {
+                limparTudo();
+                setPeriodoDe('');
+                setPeriodoAte('');
+              }}
+            >
               Limpar filtros
             </button>
           )}

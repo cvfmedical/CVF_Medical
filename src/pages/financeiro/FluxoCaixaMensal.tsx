@@ -272,14 +272,20 @@ export function FluxoCaixaMensal() {
         }
       }
     }
+    // "Saldo acumulado" reflete só a simulação real de banco (Peças
+    // Cortical não é dinheiro em caixa - entra só nos totais informativos
+    // acima da tabela, não dia a dia).
     const saldoBancosDia = Array.from(saldoCorrentePorConta.values()).reduce((s, v) => s + v, 0);
-    return { ...d, retiradas, saldoBancosDia, negativo: saldoBancosDia < 0, saldoAcumulado: saldoBancosDia + pecasCorticalPendente };
+    return { ...d, retiradas, saldoBancosDia, negativo: saldoBancosDia < 0, saldoAcumulado: saldoBancosDia };
   });
 
   const saldoInicialBancos = contasDefinidas.reduce((s, c) => s + (saldoInicialPorConta.get(c.id) ?? 0), 0);
   const saldoInicial = saldoInicialBancos + pecasCorticalPendente;
   const totalPagarMes = linhas.reduce((s, l) => s + l.pagarTotal, 0);
   const totalReceberMes = linhas.reduce((s, l) => s + l.receberTotal, 0);
+  // Peças Cortical entra aqui (informativo) e no saldo inicial - não no
+  // "Saldo acumulado" dia a dia, que é só a simulação real dos bancos.
+  const totalReceberComCortical = totalReceberMes + pecasCorticalPendente;
   const saldoFinalPorConta = contasDefinidas.map((c) => ({ nome: c.nome, saldo: saldoCorrentePorConta.get(c.id) ?? 0 }));
   const hojeISO = new Date().toISOString().slice(0, 10);
 
@@ -288,7 +294,7 @@ export function FluxoCaixaMensal() {
     try {
       await exportarTabelaPdf({
         titulo: 'Fluxo de caixa mensal',
-        subtitulo: `${NOMES_MES[mes - 1]}/${ano} - Saldo inicial: ${formatarMoeda(saldoInicial)} - Total a pagar: ${formatarMoeda(totalPagarMes)} - Total a receber: ${formatarMoeda(totalReceberMes)}`,
+        subtitulo: `${NOMES_MES[mes - 1]}/${ano} - Saldo inicial: ${formatarMoeda(saldoInicial)} - Total a pagar: ${formatarMoeda(totalPagarMes)} - Total a receber (com Peças Cortical): ${formatarMoeda(totalReceberComCortical)}`,
         colunas: [
           { label: 'Data' },
           { label: 'A pagar', alinhamento: 'right' },
@@ -412,7 +418,7 @@ export function FluxoCaixaMensal() {
           Total a pagar no mês: <strong>{formatarMoeda(totalPagarMes)}</strong>
         </span>
         <span>
-          Total a receber no mês: <strong>{formatarMoeda(totalReceberMes)}</strong>
+          Total a receber no mês (contas + Peças Cortical): <strong>{formatarMoeda(totalReceberComCortical)}</strong>
         </span>
       </div>
 

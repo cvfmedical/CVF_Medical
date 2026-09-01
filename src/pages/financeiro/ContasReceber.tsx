@@ -97,6 +97,8 @@ export function ContasReceber() {
   // como recebidos numa ação só, em vez de um por um.
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const [baixandoLote, setBaixandoLote] = useState(false);
+  const [periodoDe, setPeriodoDe] = useState('');
+  const [periodoAte, setPeriodoAte] = useState('');
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -388,9 +390,12 @@ export function ContasReceber() {
     return (c as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (query.data ?? []).filter((c) =>
-    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(c, chave), chave)),
-  );
+  const linhasFiltradas = (query.data ?? []).filter((c) => {
+    if (!COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(c, chave), chave))) return false;
+    if (periodoDe && c.data_vencimento < periodoDe) return false;
+    if (periodoAte && c.data_vencimento > periodoAte) return false;
+    return true;
+  });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
   if (query.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
@@ -447,9 +452,22 @@ export function ContasReceber() {
     <div>
       <div className="crud-cabecalho">
         <h1>Contas a receber</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {algumFiltroAtivo && (
-            <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
+            <span style={{ color: 'var(--ink-400)' }}>Vencimento:</span>
+            <input type="date" value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} style={{ width: 140 }} />
+            <span style={{ color: 'var(--ink-400)' }}>até</span>
+            <input type="date" value={periodoAte} onChange={(e) => setPeriodoAte(e.target.value)} style={{ width: 140 }} />
+          </div>
+          {(algumFiltroAtivo || periodoDe || periodoAte) && (
+            <button
+              className="botao-secundario botao-pequeno"
+              onClick={() => {
+                limparTudo();
+                setPeriodoDe('');
+                setPeriodoAte('');
+              }}
+            >
               Limpar filtros
             </button>
           )}
