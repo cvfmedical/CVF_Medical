@@ -42,11 +42,6 @@ const CODIGO_OPCAO_SIMPLES_NACIONAL = 3;
 // regApTribSN: 1 = "Regime de apuração dos tributos federais e
 // municipal pelo SN" - confirmado na mesma nota real.
 const REGIME_TRIBUTARIO_SIMPLES_NACIONAL = 1;
-// PIS/COFINS - confirmados na mesma nota real (<CST>00</CST> = Nenhum,
-// <tpRetPisCofins>0</tpRetPisCofins> = Não Retidos). Opcionais pela
-// documentação, mas incluídos porque já temos o valor real confirmado.
-const SITUACAO_TRIBUTARIA_PIS_COFINS = '00';
-const TIPO_RETENCAO_PIS_COFINS = 0;
 
 // Grupo IBS/CBS (Reforma Tributária, obrigatório na NFS-e nacional desde
 // 01/07/2026) - nomes de campo confirmados pelo suporte da Focus NFe e
@@ -252,6 +247,9 @@ Deno.serve(async (req: Request) => {
   // consulta pública ao IBGE; se não conseguir achar, os campos de
   // endereço simplesmente ficam de fora (nunca inventa um código).
   const codigoMunicipioTomador = await codigoIbgeMunicipio(cliente.cidade, cliente.uf);
+  // Só manda o endereço se tiver o essencial completo - ver comentário
+  // junto do payload sobre o grupo ser tudo-ou-nada no schema.
+  const enderecoTomadorCompleto = codigoMunicipioTomador != null && !!cliente.cep && !!cliente.logradouro;
 
   const orc = (conta as unknown as { orcamentos: { numero_orcamento: string; ordens_servico: { numero_os: string } | null } | null }).orcamentos;
   const descricaoServico = orc
@@ -273,14 +271,20 @@ Deno.serve(async (req: Request) => {
     regime_especial_tributacao: 0,
     ...(documentoTomador.length === 14 ? { cnpj_tomador: documentoTomador } : { cpf_tomador: documentoTomador }),
     razao_social_tomador: cliente.razao_social,
-    // Endereço do tomador - só entra o que o cadastro do cliente tem de
-    // fato preenchido (nunca inventa dado faltante).
-    ...(codigoMunicipioTomador != null ? { codigo_municipio_tomador: codigoMunicipioTomador } : {}),
-    ...(cliente.cep ? { cep_tomador: apenasDigitos(cliente.cep) } : {}),
-    ...(cliente.logradouro ? { logradouro_tomador: cliente.logradouro } : {}),
-    ...(cliente.numero_endereco ? { numero_tomador: cliente.numero_endereco } : {}),
-    ...(cliente.complemento ? { complemento_tomador: cliente.complemento } : {}),
-    ...(cliente.bairro ? { bairro_tomador: cliente.bairro } : {}),
+    // Endereço do tomador - o schema exige o grupo inteiro (cMun+CEP
+    // dentro de endNac, xLgr dentro de end) ou nada - mandar só uma
+    // parte (ex: só o município) quebra a nota ("endNac: falta CEP").
+    // Por isso só entra quando TEM os 3 dados essenciais completos.
+    ...(enderecoTomadorCompleto
+      ? {
+          codigo_municipio_tomador: codigoMunicipioTomador,
+          cep_tomador: apenasDigitos(cliente.cep!),
+          logradouro_tomador: cliente.logradouro,
+          ...(cliente.numero_endereco ? { numero_tomador: cliente.numero_endereco } : {}),
+          ...(cliente.complemento ? { complemento_tomador: cliente.complemento } : {}),
+          ...(cliente.bairro ? { bairro_tomador: cliente.bairro } : {}),
+        }
+      : {}),
     ...(cliente.telefone ? { telefone_tomador: cliente.telefone } : {}),
     ...(cliente.email ? { email_tomador: cliente.email } : {}),
     codigo_municipio_prestacao: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
@@ -292,8 +296,13 @@ Deno.serve(async (req: Request) => {
     tributacao_iss: 1,
     tipo_retencao_iss: TIPO_RETENCAO_ISS,
     ...(aliquotaIss != null ? { percentual_aliquota_relativa_municipio: aliquotaIss } : {}),
-    situacao_tributaria_pis_cofins: SITUACAO_TRIBUTARIA_PIS_COFINS,
-    tipo_retencao_pis_cofins: TIPO_RETENCAO_PIS_COFINS,
+    // situacao_tributaria_pis_cofins/tipo_retencao_pis_cofins REMOVIDOS
+    // (2026-09-01): mandar esses dois campos faz o schema passar a
+    // exigir também percentual_total_tributos_simples_nacional (o
+    // "trib" fica incompleto sem "totTrib") - e esse percentual muda
+    // com o faturamento, não confirmado com a contabilidade ainda. Sem
+    // os 3 campos juntos, nenhum deles é obrigatório - por isso ficam
+    // de fora até confirmar o valor certo do totTrib.
     // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
     finalidade_emissao: 0,
     consumidor_final: 0,
