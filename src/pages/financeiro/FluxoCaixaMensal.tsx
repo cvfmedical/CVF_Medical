@@ -4,6 +4,7 @@ import { IconFileTypePdf, IconPlus, IconTrash } from '@tabler/icons-react';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro } from '../../lib/erros';
 import { CarregandoTela } from '../../components/CarregandoTela';
+import { Badge } from '../../components/Badge';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
 
 interface SaldoCaixa {
@@ -40,6 +41,28 @@ function mesAtualISO(): string {
 
 function formatarMoeda(v: number): string {
   return `R$ ${v.toFixed(2)}`;
+}
+
+// Quando o saldo acumulado de um dia fica negativo, sugere de qual(is)
+// conta(s) de caixa sairia o dinheiro pra cobrir - preenche na ordem em
+// que os saldos aparecem (Banco Inter antes de Banco Itaú, por padrão),
+// usando o valor ATUAL cadastrado em cada conta (não simula transferência
+// entre contas dia a dia, é só uma referência rápida de "por onde começar
+// a olhar"). "Peças Cortical" fica de fora por não ser dinheiro em caixa
+// de fato - é um valor a receber, não dá pra pagar conta com ele.
+function sugestaoCobertura(deficit: number, contas: SaldoCaixa[]): { nome: string; valor: number }[] {
+  let restante = deficit;
+  const resultado: { nome: string; valor: number }[] = [];
+  for (const c of contas) {
+    if (restante <= 0.001) break;
+    const disponivel = Number(c.valor);
+    if (disponivel <= 0) continue;
+    const usado = Math.min(disponivel, restante);
+    resultado.push({ nome: c.nome, valor: usado });
+    restante -= usado;
+  }
+  if (restante > 0.001) resultado.push({ nome: 'Falta cobrir (sem saldo cadastrado suficiente)', valor: restante });
+  return resultado;
 }
 
 // Painel do fluxo de caixa mensal - substitui o controle que era feito à
@@ -220,6 +243,7 @@ export function FluxoCaixaMensal() {
           { label: 'A receber', alinhamento: 'right' },
           { label: 'Saldo do dia', alinhamento: 'right' },
           { label: 'Saldo acumulado', alinhamento: 'right' },
+          { label: 'Situação' },
         ],
         linhas: linhas.map((l) => [
           new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', weekday: 'short' }),
@@ -227,9 +251,14 @@ export function FluxoCaixaMensal() {
           l.receberTotal ? formatarMoeda(l.receberTotal) : '',
           formatarMoeda(l.receberTotal - l.pagarTotal),
           formatarMoeda(l.saldoAcumulado),
+          l.saldoAcumulado < 0
+            ? `Negativo - cobrir com ${sugestaoCobertura(-l.saldoAcumulado, saldosQuery.data ?? [])
+                .map((c) => `${formatarMoeda(c.valor)} (${c.nome})`)
+                .join(' + ')}`
+            : 'Positivo',
         ]),
         totalLabel: 'TOTAL DO MÊS',
-        totalValor: `A pagar ${formatarMoeda(totalPagarMes)} · A receber ${formatarMoeda(totalReceberMes)}`,
+        totalValor: `A pagar ${formatarMoeda(totalPagarMes)} · A receber ${formatarMoeda(totalReceberMes)} · Saldo final ${formatarMoeda(linhas[linhas.length - 1]?.saldoAcumulado ?? saldoInicial)}`,
         nomeArquivo: `fluxo-caixa-${mesAno}`,
       });
     } catch (e) {
@@ -325,11 +354,14 @@ export function FluxoCaixaMensal() {
             <th>A receber</th>
             <th>Saldo do dia</th>
             <th>Saldo acumulado</th>
+            <th>Situação</th>
           </tr>
         </thead>
         <tbody>
           {linhas.map((l) => {
             const saldoDia = l.receberTotal - l.pagarTotal;
+            const negativo = l.saldoAcumulado < 0;
+            const cobertura = negativo ? sugestaoCobertura(-l.saldoAcumulado, saldosQuery.data ?? []) : [];
             return (
               <tr key={l.data} style={l.data === hojeISO ? { background: 'var(--copper-100, #fdf1e6)' } : undefined}>
                 <td className="mono">
@@ -355,10 +387,28 @@ export function FluxoCaixaMensal() {
                   {(l.pagarTotal > 0 || l.receberTotal > 0) && formatarMoeda(saldoDia)}
                 </td>
                 <td style={{ fontWeight: 600 }}>{formatarMoeda(l.saldoAcumulado)}</td>
+                <td>
+                  <Badge tono={negativo ? 'danger' : 'teal'}>{negativo ? 'Negativo' : 'Positivo'}</Badge>
+                  {negativo && (
+                    <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 2 }}>
+                      Cobrir com: {cobertura.map((c) => `${formatarMoeda(c.valor)} (${c.nome})`).join(' + ')}
+                    </div>
+                  )}
+                </td>
               </tr>
             );
           })}
         </tbody>
+        <tfoot>
+          <tr style={{ fontWeight: 600 }}>
+            <td>TOTAL DO MÊS</td>
+            <td>{formatarMoeda(totalPagarMes)}</td>
+            <td>{formatarMoeda(totalReceberMes)}</td>
+            <td>{formatarMoeda(totalReceberMes - totalPagarMes)}</td>
+            <td>{formatarMoeda(linhas[linhas.length - 1]?.saldoAcumulado ?? saldoInicial)}</td>
+            <td></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
