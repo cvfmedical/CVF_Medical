@@ -141,6 +141,7 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Orçamentos aguardando aprovação', path: '/orcamentos-aguardando-aprovacao', categoria: 'financeiro', implementado: false },
       { label: 'Lançamento retroativo', path: '/financeiro/lancamento-retroativo', categoria: 'financeiro', implementado: false },
       { label: 'Faturamento (NF-e / NFS-e)', path: '/financeiro/faturamento', categoria: 'financeiro', implementado: false },
+      { label: 'Fluxo de caixa mensal', path: '/financeiro/fluxo-caixa', categoria: 'financeiro', implementado: false },
       { label: 'Contas a receber', path: '/financeiro/contas-receber', categoria: 'financeiro', implementado: false },
       { label: 'Contas a pagar', path: '/financeiro/contas-pagar', categoria: 'financeiro', implementado: false },
     ],

@@ -12,7 +12,7 @@ import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
-import { IconCalendar, IconFileTypePdf, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconCalendar, IconCheck, IconFileTypePdf, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
@@ -93,6 +93,10 @@ export function ContasReceber() {
   const [novaDataRecebimento, setNovaDataRecebimento] = useState('');
   const [erroData, setErroData] = useState<string | null>(null);
   const [salvandoData, setSalvandoData] = useState(false);
+  // Baixa em lote - selecionar vários títulos "Em aberto" e marcar todos
+  // como recebidos numa ação só, em vez de um por um.
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
+  const [baixandoLote, setBaixandoLote] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -287,6 +291,36 @@ export function ContasReceber() {
     }
   }
 
+  function alternarSelecao(id: number) {
+    setSelecionados((s) => {
+      const nova = new Set(s);
+      if (nova.has(id)) nova.delete(id);
+      else nova.add(id);
+      return nova;
+    });
+  }
+
+  async function baixarSelecionados() {
+    const ids = Array.from(selecionados);
+    if (ids.length === 0) return;
+    if (!confirm(`Confirma a baixa (recebimento) de ${ids.length} título(s), com data de hoje?`)) return;
+    setBaixandoLote(true);
+    try {
+      const { error } = await supabase
+        .from('contas_receber')
+        .update({ status: 'Recebido', data_recebimento: new Date().toISOString().slice(0, 10) })
+        .in('id', ids)
+        .eq('status', 'Em aberto');
+      if (error) throw error;
+      setSelecionados(new Set());
+      qc.invalidateQueries({ queryKey: ['contas-receber'] });
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setBaixandoLote(false);
+    }
+  }
+
   async function excluir(id: number, numero: string) {
     if (!confirm(`Excluir a conta ${numero}?`)) return;
     const { error } = await supabase.from('contas_receber').delete().eq('id', id);
@@ -414,6 +448,11 @@ export function ContasReceber() {
               Limpar filtros
             </button>
           )}
+          {selecionados.size > 0 && (
+            <button className="botao-secundario botao-pequeno" onClick={baixarSelecionados} disabled={baixandoLote}>
+              <IconCheck size={16} /> {baixandoLote ? 'Baixando...' : `Baixar selecionados (${selecionados.size})`}
+            </button>
+          )}
           <button className="botao-secundario botao-pequeno" onClick={exportarPdf} disabled={exportandoPdf}>
             <IconFileTypePdf size={16} /> {exportandoPdf ? 'Gerando PDF...' : 'Exportar PDF'}
           </button>
@@ -429,6 +468,17 @@ export function ContasReceber() {
       <table className="tabela-crud">
         <thead>
           <tr>
+            <th style={{ width: 28 }}>
+              <input
+                type="checkbox"
+                title="Selecionar todos os 'Em aberto' visíveis"
+                checked={linhas.some((c) => c.status === 'Em aberto') && linhas.filter((c) => c.status === 'Em aberto').every((c) => selecionados.has(c.id))}
+                onChange={(e) => {
+                  const idsEmAberto = linhas.filter((c) => c.status === 'Em aberto').map((c) => c.id);
+                  setSelecionados(e.target.checked ? new Set(idsEmAberto) : new Set());
+                }}
+              />
+            </th>
             {[
               ['codigo_entrada', 'Entrada'],
               ['numero_os', 'OS'],
@@ -448,6 +498,7 @@ export function ContasReceber() {
             <th></th>
           </tr>
           <tr>
+            <th></th>
             {COLUNAS_FILTRAVEIS.map((chave) => {
               const valoresDisponiveis = Array.from(
                 new Set((query.data ?? []).map((c) => String(valorColuna(c, chave) ?? ''))),
@@ -479,6 +530,11 @@ export function ContasReceber() {
             const st = statusExibicao(c);
             return (
               <tr key={c.id}>
+                <td>
+                  {c.status === 'Em aberto' && (
+                    <input type="checkbox" checked={selecionados.has(c.id)} onChange={() => alternarSelecao(c.id)} />
+                  )}
+                </td>
                 <td>
                   {c.orcamentos ? (
                     <span
@@ -558,7 +614,7 @@ export function ContasReceber() {
           })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={11}>Nenhuma conta encontrada.</td>
+              <td colSpan={12}>Nenhuma conta encontrada.</td>
             </tr>
           )}
         </tbody>

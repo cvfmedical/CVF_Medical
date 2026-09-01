@@ -56,6 +56,7 @@ import { SolicitacoesCompra } from './pages/estoque/SolicitacoesCompra';
 import { ContasReceber } from './pages/financeiro/ContasReceber';
 import { ContasPagar } from './pages/financeiro/ContasPagar';
 import { Faturamento } from './pages/financeiro/Faturamento';
+import { FluxoCaixaMensal } from './pages/financeiro/FluxoCaixaMensal';
 import { ContratosManutencao } from './pages/comercial/ContratosManutencao';
 import { GarantiasAtivas } from './pages/comercial/GarantiasAtivas';
 import { RelatorioPecasUtilizadas } from './pages/comercial/RelatorioPecasUtilizadas';
@@ -117,6 +118,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/financeiro/contas-receber': ContasReceber,
   '/financeiro/contas-pagar': ContasPagar,
   '/financeiro/faturamento': Faturamento,
+  '/financeiro/fluxo-caixa': FluxoCaixaMensal,
   '/comercial/contratos': ContratosManutencao,
   '/comercial/garantias': GarantiasAtivas,
   '/comercial/relatorio-pecas': RelatorioPecasUtilizadas,
