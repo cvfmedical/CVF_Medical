@@ -16,6 +16,7 @@ import { IconCalendar, IconCheck, IconFileTypePdf, IconPencil, IconPlus, IconTra
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
+import { formatarMoeda } from '../../lib/formato';
 
 interface ContaReceber {
   id: number;
@@ -453,11 +454,17 @@ export function ContasReceber() {
       <div className="crud-cabecalho">
         <h1>Contas a receber</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
-            <span style={{ color: 'var(--ink-400)' }}>Vencimento:</span>
-            <input type="date" value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} style={{ width: 140 }} />
-            <span style={{ color: 'var(--ink-400)' }}>até</span>
-            <input type="date" value={periodoAte} onChange={(e) => setPeriodoAte(e.target.value)} style={{ width: 140 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
+              <span style={{ color: 'var(--ink-400)' }}>Vencimento:</span>
+              <input type="date" value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} style={{ width: 140 }} />
+              <span style={{ color: 'var(--ink-400)' }}>até</span>
+              <input type="date" value={periodoAte} onChange={(e) => setPeriodoAte(e.target.value)} style={{ width: 140 }} />
+            </div>
+            <span style={{ fontSize: 13, color: 'var(--copper-500)', fontWeight: 600 }}>
+              Total filtrado: {formatarMoeda(linhas.reduce((s, c) => s + Number(c.valor), 0))} ({linhas.length} título
+              {linhas.length === 1 ? '' : 's'})
+            </span>
           </div>
           {(algumFiltroAtivo || periodoDe || periodoAte) && (
             <button
@@ -484,11 +491,7 @@ export function ContasReceber() {
           </button>
         </div>
       </div>
-      <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 4 }}>
-        Total filtrado: <strong>R$ {linhas.reduce((s, c) => s + Number(c.valor), 0).toFixed(2)}</strong> ({linhas.length} título
-        {linhas.length === 1 ? '' : 's'})
-      </p>
-      <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: 0, marginBottom: 16 }}>
+      <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Contas de orçamentos aprovados são lançadas automaticamente aqui. Total em aberto: R$ {totalEmAberto.toFixed(2)}
         {' · '}
         <span style={{ color: '#dc2626' }}>Em vermelho: vence amanhã (D+1)</span>

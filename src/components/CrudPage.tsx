@@ -12,6 +12,7 @@ import { useLinhasOrdenadas } from '../lib/useOrdenacao';
 import { useFiltrosColuna } from '../lib/useFiltrosColuna';
 import { FiltroColunaValores } from './FiltroColunaValores';
 import { exportarTabelaPdf } from '../lib/exportarPdf';
+import { formatarMoeda } from '../lib/formato';
 
 export type TipoCampo = 'text' | 'number' | 'textarea' | 'select' | 'combobox' | 'checkbox' | 'date';
 
@@ -312,11 +313,19 @@ export function CrudPage<Row extends { id: number }>({
         <h1>{titulo}</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {filtroPeriodo && (
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
-              <span style={{ color: 'var(--ink-400)' }}>{filtroPeriodo.label ?? 'Período'}:</span>
-              <input type="date" value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} style={{ width: 140 }} />
-              <span style={{ color: 'var(--ink-400)' }}>até</span>
-              <input type="date" value={periodoAte} onChange={(e) => setPeriodoAte(e.target.value)} style={{ width: 140 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}>
+                <span style={{ color: 'var(--ink-400)' }}>{filtroPeriodo.label ?? 'Período'}:</span>
+                <input type="date" value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} style={{ width: 140 }} />
+                <span style={{ color: 'var(--ink-400)' }}>até</span>
+                <input type="date" value={periodoAte} onChange={(e) => setPeriodoAte(e.target.value)} style={{ width: 140 }} />
+              </div>
+              {filtroPeriodo.campoValor && !listQuery.isLoading && !listQuery.isError && (
+                <span style={{ fontSize: 13, color: 'var(--copper-500)', fontWeight: 600 }}>
+                  Total filtrado: {formatarMoeda(linhasFiltradas.reduce((s, l) => s + Number((l as Record<string, unknown>)[filtroPeriodo.campoValor!] ?? 0), 0))}{' '}
+                  ({linhasFiltradas.length} registro{linhasFiltradas.length === 1 ? '' : 's'})
+                </span>
+              )}
             </div>
           )}
           {(algumFiltroAtivo || periodoDe || periodoAte) && (
@@ -341,13 +350,6 @@ export function CrudPage<Row extends { id: number }>({
           </button>
         </div>
       </div>
-
-      {filtroPeriodo?.campoValor && !listQuery.isLoading && !listQuery.isError && (
-        <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 12 }}>
-          Total filtrado: <strong>R$ {linhasFiltradas.reduce((s, l) => s + Number((l as Record<string, unknown>)[filtroPeriodo.campoValor!] ?? 0), 0).toFixed(2)}</strong>{' '}
-          ({linhasFiltradas.length} registro{linhasFiltradas.length === 1 ? '' : 's'})
-        </p>
-      )}
 
       {resumo && !listQuery.isLoading && !listQuery.isError && resumo(listQuery.data ?? [])}
 
