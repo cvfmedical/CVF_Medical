@@ -42,6 +42,11 @@ const CODIGO_OPCAO_SIMPLES_NACIONAL = 3;
 // regApTribSN: 1 = "Regime de apuração dos tributos federais e
 // municipal pelo SN" - confirmado na mesma nota real.
 const REGIME_TRIBUTARIO_SIMPLES_NACIONAL = 1;
+// PIS/COFINS - confirmados na mesma nota real (<CST>00</CST> = Nenhum,
+// <tpRetPisCofins>0</tpRetPisCofins> = Não Retidos). Opcionais pela
+// documentação, mas incluídos porque já temos o valor real confirmado.
+const SITUACAO_TRIBUTARIA_PIS_COFINS = '00';
+const TIPO_RETENCAO_PIS_COFINS = 0;
 
 // Grupo IBS/CBS (Reforma Tributária, obrigatório na NFS-e nacional desde
 // 01/07/2026) - nomes de campo confirmados pelo suporte da Focus NFe e
@@ -63,6 +68,35 @@ function json(body: unknown, status = 200) {
 
 function apenasDigitos(v: string | null | undefined): string {
   return (v ?? '').replace(/\D/g, '');
+}
+
+function normalizarNomeCidade(v: string): string {
+  return v
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+// Resolve o código IBGE de 7 dígitos do município a partir do nome da
+// cidade + UF - o cadastro de clientes só guarda o nome (texto livre),
+// mas o schema da NFS-e (codigo_municipio_tomador) exige o código IBGE.
+// Consulta pública do IBGE, sem chave/autenticação. Se falhar por
+// qualquer motivo (cidade não localizada, API fora do ar), retorna null
+// e o campo simplesmente fica de fora do payload - nunca inventa um
+// código.
+async function codigoIbgeMunicipio(cidade: string | null, uf: string | null): Promise<number | null> {
+  if (!cidade || !uf) return null;
+  try {
+    const resp = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`);
+    if (!resp.ok) return null;
+    const municipios = (await resp.json()) as { id: number; nome: string }[];
+    const alvo = normalizarNomeCidade(cidade);
+    const achado = municipios.find((m) => normalizarNomeCidade(m.nome) === alvo);
+    return achado?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // dd/MM/yyyy-like ISO com offset de São Paulo (-03:00), formato exigido
@@ -187,7 +221,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: cliente, error: erroCliente } = await supabaseAdmin
     .from('clientes')
-    .select('cnpj, razao_social')
+    .select('cnpj, razao_social, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep, telefone, email')
     .eq('id', conta.cliente_id)
     .single();
   if (erroCliente || !cliente) return json({ error: 'Cliente da conta não encontrado.' }, 404);
@@ -212,6 +246,13 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   const aliquotaIss = configFiscal?.aliquota_iss ? Number(configFiscal.aliquota_iss) : null;
 
+  // Endereço completo do tomador - a nota real (nº 2902) mostra que a
+  // prefeitura recebe esses dados, mas o cadastro de clientes só guarda
+  // o nome da cidade (não o código IBGE que o campo pede). Resolve via
+  // consulta pública ao IBGE; se não conseguir achar, os campos de
+  // endereço simplesmente ficam de fora (nunca inventa um código).
+  const codigoMunicipioTomador = await codigoIbgeMunicipio(cliente.cidade, cliente.uf);
+
   const orc = (conta as unknown as { orcamentos: { numero_orcamento: string; ordens_servico: { numero_os: string } | null } | null }).orcamentos;
   const descricaoServico = orc
     ? `Prestação de serviço de manutenção em equipamento cirúrgico - Orçamento ${orc.numero_orcamento}${orc.ordens_servico ? ' - OS ' + orc.ordens_servico.numero_os : ''}`
@@ -232,6 +273,16 @@ Deno.serve(async (req: Request) => {
     regime_especial_tributacao: 0,
     ...(documentoTomador.length === 14 ? { cnpj_tomador: documentoTomador } : { cpf_tomador: documentoTomador }),
     razao_social_tomador: cliente.razao_social,
+    // Endereço do tomador - só entra o que o cadastro do cliente tem de
+    // fato preenchido (nunca inventa dado faltante).
+    ...(codigoMunicipioTomador != null ? { codigo_municipio_tomador: codigoMunicipioTomador } : {}),
+    ...(cliente.cep ? { cep_tomador: apenasDigitos(cliente.cep) } : {}),
+    ...(cliente.logradouro ? { logradouro_tomador: cliente.logradouro } : {}),
+    ...(cliente.numero_endereco ? { numero_tomador: cliente.numero_endereco } : {}),
+    ...(cliente.complemento ? { complemento_tomador: cliente.complemento } : {}),
+    ...(cliente.bairro ? { bairro_tomador: cliente.bairro } : {}),
+    ...(cliente.telefone ? { telefone_tomador: cliente.telefone } : {}),
+    ...(cliente.email ? { email_tomador: cliente.email } : {}),
     codigo_municipio_prestacao: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
     codigo_tributacao_nacional_iss: CODIGO_TRIBUTACAO_NACIONAL_ISS,
     codigo_tributacao_municipal_iss: CODIGO_TRIBUTACAO_MUNICIPAL_ISS,
@@ -241,6 +292,8 @@ Deno.serve(async (req: Request) => {
     tributacao_iss: 1,
     tipo_retencao_iss: TIPO_RETENCAO_ISS,
     ...(aliquotaIss != null ? { percentual_aliquota_relativa_municipio: aliquotaIss } : {}),
+    situacao_tributaria_pis_cofins: SITUACAO_TRIBUTARIA_PIS_COFINS,
+    tipo_retencao_pis_cofins: TIPO_RETENCAO_PIS_COFINS,
     // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
     finalidade_emissao: 0,
     consumidor_final: 0,
