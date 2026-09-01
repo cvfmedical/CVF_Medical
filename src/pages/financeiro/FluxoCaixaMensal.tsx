@@ -68,6 +68,31 @@ export function FluxoCaixaMensal() {
     },
   });
 
+  // "Peças Cortical" não é digitado - é a soma das contas a receber de
+  // peças com faturamento diferido (clientes.faturamento_pecas_diferido)
+  // ainda em aberto, geradas automaticamente ao lançar a NF de serviço em
+  // Faturamento.tsx (descrição termina em "(peças)", sem NF própria).
+  const pecasCorticalQuery = useQuery({
+    queryKey: ['pecas-cortical-pendente'],
+    queryFn: async (): Promise<number> => {
+      const { data: clientesDiferido, error: erroClientes } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('faturamento_pecas_diferido', true);
+      if (erroClientes) throw erroClientes;
+      const ids = (clientesDiferido ?? []).map((c) => c.id);
+      if (ids.length === 0) return 0;
+      const { data, error } = await supabase
+        .from('contas_receber')
+        .select('valor')
+        .in('cliente_id', ids)
+        .eq('status', 'Em aberto')
+        .ilike('descricao', '%(peças)%');
+      if (error) throw error;
+      return (data ?? []).reduce((s, r) => s + Number(r.valor), 0);
+    },
+  });
+
   const pagarQuery = useQuery({
     queryKey: ['fluxo-caixa-pagar', mesAno],
     queryFn: async (): Promise<ContaPagarLinha[]> => {
@@ -155,9 +180,10 @@ export function FluxoCaixaMensal() {
     qc.invalidateQueries({ queryKey: ['saldos-caixa'] });
   }
 
-  if (saldosQuery.isLoading || pagarQuery.isLoading || receberQuery.isLoading) return <CarregandoTela />;
+  if (saldosQuery.isLoading || pagarQuery.isLoading || receberQuery.isLoading || pecasCorticalQuery.isLoading) return <CarregandoTela />;
 
-  const saldoInicial = (saldosQuery.data ?? []).reduce((s, r) => s + Number(r.valor), 0);
+  const pecasCorticalPendente = pecasCorticalQuery.data ?? 0;
+  const saldoInicial = (saldosQuery.data ?? []).reduce((s, r) => s + Number(r.valor), 0) + pecasCorticalPendente;
 
   const dias = Array.from({ length: diasNoMes }, (_, i) => {
     const dataStr = `${mesAno}-${String(i + 1).padStart(2, '0')}`;
@@ -226,10 +252,16 @@ export function FluxoCaixaMensal() {
       </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Visualização dia a dia do que já está lançado em Contas a pagar e Contas a receber - não lança nada novo, só
-        cruza os dois. O saldo acumulado parte da soma dos saldos de caixa abaixo.
+        cruza os dois. O saldo acumulado parte da soma de "Peças Cortical" (calculado automaticamente) com os saldos
+        de caixa abaixo (esses sim, digitados).
       </p>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, minWidth: 180, background: 'var(--surface-secondary, #f8fafc)' }}>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-400)', marginBottom: 4 }}>Peças Cortical</label>
+          <div style={{ fontWeight: 600 }}>{formatarMoeda(pecasCorticalPendente)}</div>
+          <span style={{ fontSize: 10, color: 'var(--ink-400)' }}>Automático - peças com faturamento diferido ainda em aberto</span>
+        </div>
         {(saldosQuery.data ?? []).map((s) => (
           <div
             key={s.id}
@@ -275,7 +307,7 @@ export function FluxoCaixaMensal() {
 
       <div style={{ display: 'flex', gap: 24, marginBottom: 12, fontSize: 13 }}>
         <span>
-          Saldo inicial (soma dos saldos acima): <strong>{formatarMoeda(saldoInicial)}</strong>
+          Saldo inicial (Peças Cortical + saldos acima): <strong>{formatarMoeda(saldoInicial)}</strong>
         </span>
         <span>
           Total a pagar no mês: <strong>{formatarMoeda(totalPagarMes)}</strong>
