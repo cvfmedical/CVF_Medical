@@ -145,6 +145,16 @@ Deno.serve(async (req: Request) => {
         .eq('id', contaId);
     } else if (resultado.status === 'cancelado') {
       await supabaseAdmin.from('contas_receber').update({ nfse_status: 'cancelada' }).eq('id', contaId);
+    } else {
+      // Status ainda não é nenhum dos terminais conhecidos - grava a
+      // resposta bruta em nfse_erro_detalhe só pra diagnóstico (não muda
+      // nfse_status), já que o app não mostra esse retorno em lugar
+      // nenhum e "processando" sem mais detalhe não ajuda a entender o
+      // que está de fato acontecendo do lado da Focus NFe/prefeitura.
+      await supabaseAdmin
+        .from('contas_receber')
+        .update({ nfse_erro_detalhe: `[debug] status="${resultado.status}" - ${JSON.stringify(resultado)}` })
+        .eq('id', contaId);
     }
 
     return json({ ok: true, resultado });
