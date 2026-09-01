@@ -236,10 +236,18 @@ Deno.serve(async (req: Request) => {
   // desse município não marca como obrigatório).
   const { data: configFiscal } = await supabaseAdmin
     .from('configuracao_fiscal')
-    .select('aliquota_iss')
+    .select('aliquota_iss, percentual_total_tributos_sn')
     .eq('id', 1)
     .maybeSingle();
   const aliquotaIss = configFiscal?.aliquota_iss ? Number(configFiscal.aliquota_iss) : null;
+  // Descoberto em teste (2026-09-01): informar a alíquota do ISS
+  // (percentual_aliquota_relativa_municipio) faz o schema passar a
+  // exigir também um dos dois: tribFed (PIS/COFINS) OU totTrib
+  // (este campo) dentro do grupo "trib". Manda só este, mais simples e
+  // sem precisar declarar PIS/COFINS.
+  const percentualTotalTributosSN = configFiscal?.percentual_total_tributos_sn
+    ? Number(configFiscal.percentual_total_tributos_sn)
+    : null;
 
   // Endereço completo do tomador - a nota real (nº 2902) mostra que a
   // prefeitura recebe esses dados, mas o cadastro de clientes só guarda
@@ -296,13 +304,9 @@ Deno.serve(async (req: Request) => {
     tributacao_iss: 1,
     tipo_retencao_iss: TIPO_RETENCAO_ISS,
     ...(aliquotaIss != null ? { percentual_aliquota_relativa_municipio: aliquotaIss } : {}),
-    // situacao_tributaria_pis_cofins/tipo_retencao_pis_cofins REMOVIDOS
-    // (2026-09-01): mandar esses dois campos faz o schema passar a
-    // exigir também percentual_total_tributos_simples_nacional (o
-    // "trib" fica incompleto sem "totTrib") - e esse percentual muda
-    // com o faturamento, não confirmado com a contabilidade ainda. Sem
-    // os 3 campos juntos, nenhum deles é obrigatório - por isso ficam
-    // de fora até confirmar o valor certo do totTrib.
+    ...(percentualTotalTributosSN != null
+      ? { percentual_total_tributos_simples_nacional: percentualTotalTributosSN }
+      : {}),
     // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
     finalidade_emissao: 0,
     consumidor_final: 0,

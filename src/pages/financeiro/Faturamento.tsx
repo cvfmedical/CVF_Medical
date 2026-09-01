@@ -120,20 +120,28 @@ const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'numero_os', 'numero_orcamento', '
 export function Faturamento() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Alíquota do ISS - a contabilidade reenvia todo mês (recalculada em
-  // cima do faturamento, padrão Simples Nacional). Fica guardada aqui pra
-  // não precisar caçar e-mail antigo toda vez que for emitir uma NFS-e.
+  // Alíquota do ISS e percentual total de tributos do Simples Nacional -
+  // a contabilidade reenvia os dois todo mês (recalculados em cima do
+  // faturamento). Ficam guardados aqui pra não precisar caçar e-mail
+  // antigo toda vez que for emitir uma NFS-e.
   const aliquotaIssQuery = useQuery({
     queryKey: ['configuracao-fiscal'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('configuracao_fiscal').select('aliquota_iss, atualizado_em').eq('id', 1).single();
+      const { data, error } = await supabase
+        .from('configuracao_fiscal')
+        .select('aliquota_iss, percentual_total_tributos_sn, atualizado_em')
+        .eq('id', 1)
+        .single();
       if (error) throw error;
-      return data as { aliquota_iss: number | null; atualizado_em: string | null };
+      return data as { aliquota_iss: number | null; percentual_total_tributos_sn: number | null; atualizado_em: string | null };
     },
   });
   const [editandoAliquota, setEditandoAliquota] = useState(false);
   const [novaAliquota, setNovaAliquota] = useState('');
   const [salvandoAliquota, setSalvandoAliquota] = useState(false);
+  const [editandoTotalTributos, setEditandoTotalTributos] = useState(false);
+  const [novoTotalTributos, setNovoTotalTributos] = useState('');
+  const [salvandoTotalTributos, setSalvandoTotalTributos] = useState(false);
 
   function abrirEdicaoAliquota() {
     setNovaAliquota(String(aliquotaIssQuery.data?.aliquota_iss ?? ''));
@@ -159,6 +167,33 @@ export function Faturamento() {
       alert(mensagemErro(e));
     } finally {
       setSalvandoAliquota(false);
+    }
+  }
+
+  function abrirEdicaoTotalTributos() {
+    setNovoTotalTributos(String(aliquotaIssQuery.data?.percentual_total_tributos_sn ?? ''));
+    setEditandoTotalTributos(true);
+  }
+
+  async function salvarTotalTributos() {
+    const valor = Number(novoTotalTributos);
+    if (!novoTotalTributos || Number.isNaN(valor) || valor <= 0) {
+      alert('Informe um percentual válido.');
+      return;
+    }
+    setSalvandoTotalTributos(true);
+    try {
+      const { error } = await supabase
+        .from('configuracao_fiscal')
+        .update({ percentual_total_tributos_sn: valor, atualizado_em: new Date().toISOString().slice(0, 10) })
+        .eq('id', 1);
+      if (error) throw error;
+      setEditandoTotalTributos(false);
+      qc.invalidateQueries({ queryKey: ['configuracao-fiscal'] });
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setSalvandoTotalTributos(false);
     }
   }
   const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
@@ -755,53 +790,103 @@ export function Faturamento() {
         lançamento (antes disso o orçamento aprovado aparece como "Aguardando entrega"/"Liberado").
       </p>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          padding: '8px 12px',
-          marginBottom: 16,
-          fontSize: 13,
-          width: 'fit-content',
-        }}
-      >
-        <span style={{ color: 'var(--ink-400)' }}>Alíquota ISS atual:</span>
-        {editandoAliquota ? (
-          <>
-            <input
-              type="number"
-              step="0.01"
-              value={novaAliquota}
-              onChange={(e) => setNovaAliquota(e.target.value)}
-              style={{ width: 80 }}
-              autoFocus
-            />
-            <span>%</span>
-            <button className="botao-primario botao-pequeno" onClick={salvarAliquota} disabled={salvandoAliquota}>
-              {salvandoAliquota ? 'Salvando...' : 'Salvar'}
-            </button>
-            <button className="botao-secundario botao-pequeno" onClick={() => setEditandoAliquota(false)} disabled={salvandoAliquota}>
-              Cancelar
-            </button>
-          </>
-        ) : (
-          <>
-            <strong>
-              {aliquotaIssQuery.data?.aliquota_iss != null ? `${Number(aliquotaIssQuery.data.aliquota_iss).toFixed(2)}%` : 'Não informada'}
-            </strong>
-            {aliquotaIssQuery.data?.atualizado_em && (
-              <span style={{ color: 'var(--ink-400)' }}>
-                (atualizada em {new Date(aliquotaIssQuery.data.atualizado_em + 'T00:00:00').toLocaleDateString('pt-BR')})
-              </span>
-            )}
-            <button className="botao-secundario botao-pequeno" onClick={abrirEdicaoAliquota}>
-              Atualizar
-            </button>
-          </>
-        )}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 13,
+            width: 'fit-content',
+          }}
+        >
+          <span style={{ color: 'var(--ink-400)' }}>Alíquota ISS atual:</span>
+          {editandoAliquota ? (
+            <>
+              <input
+                type="number"
+                step="0.01"
+                value={novaAliquota}
+                onChange={(e) => setNovaAliquota(e.target.value)}
+                style={{ width: 80 }}
+                autoFocus
+              />
+              <span>%</span>
+              <button className="botao-primario botao-pequeno" onClick={salvarAliquota} disabled={salvandoAliquota}>
+                {salvandoAliquota ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button className="botao-secundario botao-pequeno" onClick={() => setEditandoAliquota(false)} disabled={salvandoAliquota}>
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <strong>
+                {aliquotaIssQuery.data?.aliquota_iss != null ? `${Number(aliquotaIssQuery.data.aliquota_iss).toFixed(2)}%` : 'Não informada'}
+              </strong>
+              {aliquotaIssQuery.data?.atualizado_em && (
+                <span style={{ color: 'var(--ink-400)' }}>
+                  (atualizada em {new Date(aliquotaIssQuery.data.atualizado_em + 'T00:00:00').toLocaleDateString('pt-BR')})
+                </span>
+              )}
+              <button className="botao-secundario botao-pequeno" onClick={abrirEdicaoAliquota}>
+                Atualizar
+              </button>
+            </>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 13,
+            width: 'fit-content',
+          }}
+        >
+          <span style={{ color: 'var(--ink-400)' }}>% Total de Tributos (Simples Nacional):</span>
+          {editandoTotalTributos ? (
+            <>
+              <input
+                type="number"
+                step="0.01"
+                value={novoTotalTributos}
+                onChange={(e) => setNovoTotalTributos(e.target.value)}
+                style={{ width: 80 }}
+                autoFocus
+              />
+              <span>%</span>
+              <button className="botao-primario botao-pequeno" onClick={salvarTotalTributos} disabled={salvandoTotalTributos}>
+                {salvandoTotalTributos ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button
+                className="botao-secundario botao-pequeno"
+                onClick={() => setEditandoTotalTributos(false)}
+                disabled={salvandoTotalTributos}
+              >
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <strong>
+                {aliquotaIssQuery.data?.percentual_total_tributos_sn != null
+                  ? `${Number(aliquotaIssQuery.data.percentual_total_tributos_sn).toFixed(2)}%`
+                  : 'Não informado'}
+              </strong>
+              <button className="botao-secundario botao-pequeno" onClick={abrirEdicaoTotalTributos}>
+                Atualizar
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {liberadas.length > 0 && (
