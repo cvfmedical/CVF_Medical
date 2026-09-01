@@ -395,6 +395,11 @@ export function ContasReceber() {
 
   if (query.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
 
+  // Trabalha com D+1 (o boleto só compensa 1 dia depois do vencimento) -
+  // destaca em vermelho o título que vence amanhã, pra facilitar achar o
+  // que precisa ser baixado no dia seguinte.
+  const amanhaISO = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
   const totalEmAberto = (query.data ?? [])
     .filter((c) => c.status === 'Em aberto')
     .reduce((soma, c) => soma + Number(c.valor), 0);
@@ -463,6 +468,8 @@ export function ContasReceber() {
       </div>
       <p style={{ fontSize: 13, color: 'var(--ink-400)', marginTop: -8, marginBottom: 16 }}>
         Contas de orçamentos aprovados são lançadas automaticamente aqui. Total em aberto: R$ {totalEmAberto.toFixed(2)}
+        {' · '}
+        <span style={{ color: '#dc2626' }}>Em vermelho: vence amanhã (D+1)</span>
       </p>
 
       <table className="tabela-crud">
@@ -528,8 +535,9 @@ export function ContasReceber() {
         <tbody>
           {linhas.map((c) => {
             const st = statusExibicao(c);
+            const venceAmanha = c.status === 'Em aberto' && c.data_vencimento === amanhaISO;
             return (
-              <tr key={c.id}>
+              <tr key={c.id} style={venceAmanha ? { background: '#fdecea' } : undefined}>
                 <td>
                   {c.status === 'Em aberto' && (
                     <input type="checkbox" checked={selecionados.has(c.id)} onChange={() => alternarSelecao(c.id)} />
@@ -582,8 +590,13 @@ export function ContasReceber() {
                     type="date"
                     value={c.data_vencimento}
                     onChange={(e) => alterarVencimento(c, e.target.value)}
-                    style={{ width: 140 }}
+                    style={venceAmanha ? { width: 140, borderColor: '#dc2626', color: '#dc2626', fontWeight: 600 } : { width: 140 }}
                   />
+                  {venceAmanha && (
+                    <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }} title="Vence amanhã (trabalhamos com D+1)">
+                      Vence amanhã
+                    </div>
+                  )}
                 </td>
                 <td>
                   <select value={c.status} onChange={(e) => mudarStatus(c, e.target.value)} style={{ marginRight: 6 }}>
