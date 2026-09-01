@@ -20,6 +20,14 @@ const CNPJ_PRESTADOR = '46948692000103';
 const INSCRICAO_MUNICIPAL_PRESTADOR = '20147606'; // confirmado no Nota Control/contador
 const CODIGO_MUNICIPIO_RIBEIRAO_PRETO = 3543402; // IBGE - serviço sempre prestado na oficina da CVF
 const CODIGO_TRIBUTACAO_NACIONAL_ISS = '140201'; // Assistência técnica (confirmado no Nota Control)
+// Em Ribeirão Preto, o código de tributação MUNICIPAL do ISSQN (cTribMun)
+// é igual ao nacional - confirmado lendo o XML de uma NFS-e real já
+// autorizada pela prefeitura (nº 2902, emitida pelo Nota Control):
+// <cTribMun>140201</cTribMun>, mesmo valor de <cTribNac>. Sem essa nota
+// real como referência, o valor não deveria ser adivinhado (a
+// documentação da Focus NFe não deixa claro que os dois coincidem aqui).
+const CODIGO_TRIBUTACAO_MUNICIPAL_ISS = '140201';
+const CODIGO_NBS = '120018200'; // Serviços de manutenção/reparação de instrumentos médico-hospitalares (confirmado no Nota Control e com o contador)
 const TIPO_RETENCAO_ISS = 1; // tpRetISSQN: 1 = Não Retido (confirmado no Nota Control)
 
 // Grupo IBS/CBS (Reforma Tributária, obrigatório na NFS-e nacional desde
@@ -190,7 +198,9 @@ Deno.serve(async (req: Request) => {
     razao_social_tomador: cliente.razao_social,
     codigo_municipio_prestacao: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
     codigo_tributacao_nacional_iss: CODIGO_TRIBUTACAO_NACIONAL_ISS,
+    codigo_tributacao_municipal_iss: CODIGO_TRIBUTACAO_MUNICIPAL_ISS,
     descricao_servico: descricaoServico,
+    codigo_nbs: CODIGO_NBS,
     valor_servico: conta.valor,
     tributacao_iss: 1,
     tipo_retencao_iss: TIPO_RETENCAO_ISS,
