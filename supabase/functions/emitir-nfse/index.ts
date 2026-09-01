@@ -177,6 +177,18 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Razão social do cliente não cadastrada - corrija em Cadastros → Clientes.' }, 400);
   }
 
+  // Alíquota do ISS - a contabilidade reenvia todo mês (recalculada em
+  // cima do faturamento, padrão Simples Nacional), atualizada em
+  // Faturamento.tsx ("Alíquota ISS atual"). Só envia se estiver
+  // preenchida - sem ela, o campo fica de fora do payload (o guia oficial
+  // desse município não marca como obrigatório).
+  const { data: configFiscal } = await supabaseAdmin
+    .from('configuracao_fiscal')
+    .select('aliquota_iss')
+    .eq('id', 1)
+    .maybeSingle();
+  const aliquotaIss = configFiscal?.aliquota_iss ? Number(configFiscal.aliquota_iss) : null;
+
   const orc = (conta as unknown as { orcamentos: { numero_orcamento: string; ordens_servico: { numero_os: string } | null } | null }).orcamentos;
   const descricaoServico = orc
     ? `Prestação de serviço de manutenção em equipamento cirúrgico - Orçamento ${orc.numero_orcamento}${orc.ordens_servico ? ' - OS ' + orc.ordens_servico.numero_os : ''}`
@@ -204,6 +216,7 @@ Deno.serve(async (req: Request) => {
     valor_servico: conta.valor,
     tributacao_iss: 1,
     tipo_retencao_iss: TIPO_RETENCAO_ISS,
+    ...(aliquotaIss != null ? { percentual_aliquota_relativa_municipio: aliquotaIss } : {}),
     // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
     finalidade_emissao: 0,
     consumidor_final: 0,

@@ -11,9 +11,10 @@ import { consultarCnpj } from '../../lib/consultaCnpj';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
-import { IconPencil, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
+import { IconPencil, IconPlus, IconSearch, IconTag, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { Badge } from '../../components/Badge';
+import { imprimirEtiquetaDespacho } from '../../lib/etiquetaDespacho';
 
 interface Cliente {
   id: number;
@@ -521,6 +522,24 @@ export function Clientes() {
                 </button>
                 <button className="botao-secundario botao-pequeno" onClick={() => abrirPrecosQuantidade(c)}>
                   Preços por quantidade
+                </button>
+                <button
+                  className="botao-icone"
+                  title="Imprimir etiqueta de postagem (Correios)"
+                  onClick={() =>
+                    imprimirEtiquetaDespacho({
+                      clienteNome: c.nome_fantasia || c.razao_social,
+                      logradouro: c.logradouro,
+                      numeroEndereco: c.numero_endereco,
+                      complemento: c.complemento,
+                      bairro: c.bairro,
+                      cidade: c.cidade,
+                      uf: c.uf,
+                      cep: c.cep,
+                    })
+                  }
+                >
+                  <IconTag size={16} />
                 </button>
                 <button className="botao-icone" title="Editar" onClick={() => abrirEdicao(c)}>
                   <IconPencil size={16} />

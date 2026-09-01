@@ -197,6 +197,48 @@ button {
   height: auto;
 }
 
+.sidebar-busca {
+  position: relative;
+  margin: 0 4px 12px;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-busca-icone {
+  position: absolute;
+  left: 8px;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.sidebar-busca input {
+  width: 100%;
+  padding: 6px 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-body);
+}
+
+.sidebar-busca button {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.sidebar-busca-vazia {
+  font-size: 12px;
+  color: var(--ink-400);
+  padding: 8px 4px;
+}
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;

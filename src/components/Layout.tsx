@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { IconChevronRight, IconLayoutDashboard, IconLogout } from '@tabler/icons-react';
+import { IconChevronRight, IconLayoutDashboard, IconLogout, IconSearch, IconX } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
 import { MENU, categoriaDoPath, type ItemMenu } from '../lib/menu';
+import { normalizarBusca } from '../lib/normalizarBusca';
 import cvfMarca from '../assets/cvf-marca.png';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 import { AlertasFlutuantes } from './AlertasFlutuantes';
@@ -20,6 +21,9 @@ export function Layout() {
 
   // Accordion: categoria expandida (uma por vez). Começa na do caminho atual.
   const [aberta, setAberta] = useState<string | null>(categoriaAtual?.titulo ?? null);
+  const [buscaMenu, setBuscaMenu] = useState('');
+  const buscaAtiva = buscaMenu.trim() !== '';
+  const termoBusca = normalizarBusca(buscaMenu.trim());
 
   return (
     <div className="layout-app">
@@ -27,6 +31,21 @@ export function Layout() {
         <NavLink to="/" className="sidebar-marca">
           <img src={cvfLogoCompleto} alt="Q-CVF Medical" className="sidebar-logo" />
         </NavLink>
+
+        <div className="sidebar-busca">
+          <IconSearch size={14} className="sidebar-busca-icone" />
+          <input
+            type="text"
+            placeholder="Buscar no menu..."
+            value={buscaMenu}
+            onChange={(e) => setBuscaMenu(e.target.value)}
+          />
+          {buscaAtiva && (
+            <button type="button" title="Limpar busca" onClick={() => setBuscaMenu('')}>
+              <IconX size={14} />
+            </button>
+          )}
+        </div>
 
         <nav className="sidebar-nav">
           <NavLink to="/" end className={({ isActive }) => 'sidebar-dash' + (isActive ? ' ativo' : '')}>
@@ -37,11 +56,20 @@ export function Layout() {
           {categoriasVisiveis.map((cat) => {
             const IconeCategoria = cat.icone;
             const itensVisiveis = cat.itens.filter((item) => temPermissao(item.categoria) && !item.oculto);
-            const expandida = aberta === cat.titulo;
+            // Durante a busca, ignora o accordion (uma categoria por vez) e
+            // mostra todas as categorias com resultado já abertas - senão
+            // não daria pra ver itens de mais de uma categoria de uma vez.
+            const categoriaBate = buscaAtiva && normalizarBusca(cat.titulo).includes(termoBusca);
+            const itensParaMostrar =
+              buscaAtiva && !categoriaBate
+                ? itensVisiveis.filter((item) => normalizarBusca(item.label).includes(termoBusca))
+                : itensVisiveis;
+            if (buscaAtiva && itensParaMostrar.length === 0) return null;
+            const expandida = buscaAtiva ? true : aberta === cat.titulo;
 
             // Agrupa por 'grupo' preservando a ordem original dos itens.
             const grupos: { nome: string | null; itens: ItemMenu[] }[] = [];
-            for (const item of itensVisiveis) {
+            for (const item of itensParaMostrar) {
               const chave = item.grupo ?? null;
               let g = grupos.find((x) => x.nome === chave);
               if (!g) {
@@ -58,7 +86,7 @@ export function Layout() {
                   className={
                     'sidebar-cat-cab' + (categoriaAtual?.titulo === cat.titulo ? ' atual' : '')
                   }
-                  onClick={() => setAberta(expandida ? null : cat.titulo)}
+                  onClick={() => !buscaAtiva && setAberta(expandida ? null : cat.titulo)}
                 >
                   <IconeCategoria size={18} stroke={1.75} />
                   <span className="sidebar-cat-nome">{cat.titulo}</span>
@@ -76,6 +104,10 @@ export function Layout() {
                             to={item.path}
                             end
                             className={({ isActive }) => 'sidebar-item' + (isActive ? ' ativo' : '')}
+                            onClick={() => {
+                              setBuscaMenu('');
+                              setAberta(cat.titulo);
+                            }}
                           >
                             {item.label}
                           </NavLink>
@@ -87,6 +119,12 @@ export function Layout() {
               </div>
             );
           })}
+
+          {buscaAtiva && categoriasVisiveis.every((cat) => {
+            const itensVisiveis = cat.itens.filter((item) => temPermissao(item.categoria) && !item.oculto);
+            const categoriaBate = normalizarBusca(cat.titulo).includes(termoBusca);
+            return !categoriaBate && itensVisiveis.every((item) => !normalizarBusca(item.label).includes(termoBusca));
+          }) && <p className="sidebar-busca-vazia">Nenhum item encontrado.</p>}
         </nav>
 
         <button type="button" className="sidebar-sair" onClick={() => signOut()}>

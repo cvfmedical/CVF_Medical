@@ -120,6 +120,47 @@ const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'numero_os', 'numero_orcamento', '
 export function Faturamento() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // Alíquota do ISS - a contabilidade reenvia todo mês (recalculada em
+  // cima do faturamento, padrão Simples Nacional). Fica guardada aqui pra
+  // não precisar caçar e-mail antigo toda vez que for emitir uma NFS-e.
+  const aliquotaIssQuery = useQuery({
+    queryKey: ['configuracao-fiscal'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('configuracao_fiscal').select('aliquota_iss, atualizado_em').eq('id', 1).single();
+      if (error) throw error;
+      return data as { aliquota_iss: number | null; atualizado_em: string | null };
+    },
+  });
+  const [editandoAliquota, setEditandoAliquota] = useState(false);
+  const [novaAliquota, setNovaAliquota] = useState('');
+  const [salvandoAliquota, setSalvandoAliquota] = useState(false);
+
+  function abrirEdicaoAliquota() {
+    setNovaAliquota(String(aliquotaIssQuery.data?.aliquota_iss ?? ''));
+    setEditandoAliquota(true);
+  }
+
+  async function salvarAliquota() {
+    const valor = Number(novaAliquota);
+    if (!novaAliquota || Number.isNaN(valor) || valor <= 0) {
+      alert('Informe uma alíquota válida.');
+      return;
+    }
+    setSalvandoAliquota(true);
+    try {
+      const { error } = await supabase
+        .from('configuracao_fiscal')
+        .update({ aliquota_iss: valor, atualizado_em: new Date().toISOString().slice(0, 10) })
+        .eq('id', 1);
+      if (error) throw error;
+      setEditandoAliquota(false);
+      qc.invalidateQueries({ queryKey: ['configuracao-fiscal'] });
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setSalvandoAliquota(false);
+    }
+  }
   const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
   const [searchParams] = useSearchParams();
   const [linhaSelecionada, setLinhaSelecionada] = useState<LinhaFaturamento | null>(null);
@@ -713,6 +754,55 @@ export function Faturamento() {
         prefeitura). A conta a receber é criada aqui mesmo, junto com os dados de NF e boleto, no momento do
         lançamento (antes disso o orçamento aprovado aparece como "Aguardando entrega"/"Liberado").
       </p>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          padding: '8px 12px',
+          marginBottom: 16,
+          fontSize: 13,
+          width: 'fit-content',
+        }}
+      >
+        <span style={{ color: 'var(--ink-400)' }}>Alíquota ISS atual:</span>
+        {editandoAliquota ? (
+          <>
+            <input
+              type="number"
+              step="0.01"
+              value={novaAliquota}
+              onChange={(e) => setNovaAliquota(e.target.value)}
+              style={{ width: 80 }}
+              autoFocus
+            />
+            <span>%</span>
+            <button className="botao-primario botao-pequeno" onClick={salvarAliquota} disabled={salvandoAliquota}>
+              {salvandoAliquota ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button className="botao-secundario botao-pequeno" onClick={() => setEditandoAliquota(false)} disabled={salvandoAliquota}>
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <>
+            <strong>
+              {aliquotaIssQuery.data?.aliquota_iss != null ? `${Number(aliquotaIssQuery.data.aliquota_iss).toFixed(2)}%` : 'Não informada'}
+            </strong>
+            {aliquotaIssQuery.data?.atualizado_em && (
+              <span style={{ color: 'var(--ink-400)' }}>
+                (atualizada em {new Date(aliquotaIssQuery.data.atualizado_em + 'T00:00:00').toLocaleDateString('pt-BR')})
+              </span>
+            )}
+            <button className="botao-secundario botao-pequeno" onClick={abrirEdicaoAliquota}>
+              Atualizar
+            </button>
+          </>
+        )}
+      </div>
 
       {liberadas.length > 0 && (
         <div

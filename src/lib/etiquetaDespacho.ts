@@ -7,7 +7,9 @@ import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 // impressoras térmicas de etiqueta imprimem bem. Diferente de
 // abrirImpressao() (lib/imprimir.ts), que é pro documento A4 completo.
 export interface DadosEtiquetaDespacho {
-  numeroOS: string;
+  // Opcional - deixa de fora quando a etiqueta não é de uma OS específica
+  // (ex: etiqueta de postagem impressa direto do cadastro do cliente).
+  numeroOS?: string | null;
   clienteNome: string;
   clienteFinalNome?: string | null;
   logradouro: string | null;
@@ -43,7 +45,7 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
-      <title>Etiqueta - ${d.numeroOS}</title>
+      <title>Etiqueta - ${d.numeroOS ?? d.clienteNome}</title>
       <style>
         * { box-sizing: border-box; }
         body {
@@ -134,10 +136,14 @@ export function imprimirEtiquetaDespacho(d: DadosEtiquetaDespacho) {
             ${d.clienteFinalNome ? `<div class="unidade">A/C: ${d.clienteFinalNome}</div>` : ''}
             <div class="endereco">${enderecoHtml || '<em>Endereço não cadastrado</em>'}</div>
           </div>
-          <div class="rodape">
+          ${
+            d.numeroOS
+              ? `<div class="rodape">
             <div class="os">OS ${d.numeroOS}</div>
             ${d.equipamento ? `<div class="equip">${d.equipamento}</div>` : ''}
-          </div>
+          </div>`
+              : ''
+          }
         </div>
       </div>
     </body>
@@ -165,10 +171,14 @@ function conteudoEtiqueta(d: DadosEtiquetaDespacho): string {
         ${d.clienteFinalNome ? `<div class="unidade">A/C: ${d.clienteFinalNome}</div>` : ''}
         <div class="endereco">${enderecoHtml || '<em>Endereço não cadastrado</em>'}</div>
       </div>
-      <div class="rodape">
+      ${
+        d.numeroOS
+          ? `<div class="rodape">
         <div class="os">OS ${d.numeroOS}</div>
         ${d.equipamento ? `<div class="equip">${d.equipamento}</div>` : ''}
-      </div>
+      </div>`
+          : ''
+      }
     </div>
   `;
 }
