@@ -29,6 +29,19 @@ const CODIGO_TRIBUTACAO_NACIONAL_ISS = '140201'; // Assistência técnica (confi
 const CODIGO_TRIBUTACAO_MUNICIPAL_ISS = '140201';
 const CODIGO_NBS = '120018200'; // Serviços de manutenção/reparação de instrumentos médico-hospitalares (confirmado no Nota Control e com o contador)
 const TIPO_RETENCAO_ISS = 1; // tpRetISSQN: 1 = Não Retido (confirmado no Nota Control)
+// Série da DPS usada pela CVF - confirmada no mesmo XML real (nº 2902)
+// usado pra confirmar cTribMun/NBS: <serie>70002</serie>. O "1" chutado
+// antes deu erro ("Série da DPS inválida").
+const SERIE_DPS = 70002;
+// opSimpNac: 3 = "Optante - Microempresa ou Empresa de Pequeno Porte
+// (ME/EPP)" - confirmado na mesma nota real (<opSimpNac>3</opSimpNac>).
+// ATENÇÃO: estava com "1" (Não Optante) até 2026-09-01 - valor errado,
+// nunca detectado nos testes porque a Focus não valida isso contra a
+// Receita em homologação. Corrigido antes de ir pra produção.
+const CODIGO_OPCAO_SIMPLES_NACIONAL = 3;
+// regApTribSN: 1 = "Regime de apuração dos tributos federais e
+// municipal pelo SN" - confirmado na mesma nota real.
+const REGIME_TRIBUTARIO_SIMPLES_NACIONAL = 1;
 
 // Grupo IBS/CBS (Reforma Tributária, obrigatório na NFS-e nacional desde
 // 01/07/2026) - nomes de campo confirmados pelo suporte da Focus NFe e
@@ -207,14 +220,15 @@ Deno.serve(async (req: Request) => {
   const ref = `qcvf-cr-${conta.id}`;
   const payload = {
     data_emissao: dataEmissaoISO(),
-    serie_dps: 1,
+    serie_dps: SERIE_DPS,
     numero_dps: conta.id,
     data_competencia: dataEmissaoISO().slice(0, 10),
     emitente_dps: 1,
     codigo_municipio_emissora: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
     cnpj_prestador: CNPJ_PRESTADOR,
     inscricao_municipal_prestador: INSCRICAO_MUNICIPAL_PRESTADOR,
-    codigo_opcao_simples_nacional: 1,
+    codigo_opcao_simples_nacional: CODIGO_OPCAO_SIMPLES_NACIONAL,
+    regime_tributario_simples_nacional: REGIME_TRIBUTARIO_SIMPLES_NACIONAL,
     regime_especial_tributacao: 0,
     ...(documentoTomador.length === 14 ? { cnpj_tomador: documentoTomador } : { cpf_tomador: documentoTomador }),
     razao_social_tomador: cliente.razao_social,
