@@ -138,7 +138,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!chamador) return json({ error: 'Só funcionários podem emitir NFS-e.' }, 403);
 
-  let corpo: { contaId?: number; acao?: 'emitir' | 'consultar' };
+  let corpo: { contaId?: number; acao?: 'emitir' | 'consultar' | 'previsualizar' };
   try {
     corpo = await req.json();
   } catch {
@@ -268,6 +268,10 @@ Deno.serve(async (req: Request) => {
     ? `Prestação de serviço de manutenção em equipamento cirúrgico - Orçamento ${orc.numero_orcamento}${orc.ordens_servico ? ' - OS ' + orc.ordens_servico.numero_os : ''}`
     : conta.descricao || 'Prestação de serviço de manutenção em equipamento cirúrgico';
 
+  // acao === 'previsualizar': monta o mesmo payload que seria enviado à
+  // Focus NFe, mas devolve pro frontend sem transmitir nada - usado pela
+  // tela de conferência antes de emitir de fato (pedido do faturamento
+  // pra revisar os dados da DPS antes de mandar pro SEFAZ).
   const ref = `qcvf-cr-${conta.id}`;
   const payload = {
     data_emissao: dataEmissaoISO(),
@@ -322,6 +326,29 @@ Deno.serve(async (req: Request) => {
     ibs_cbs_situacao_tributaria: CST_IBS_CBS,
     ibs_cbs_classificacao_tributaria: CLASSIFICACAO_TRIBUTARIA_IBS_CBS,
   };
+
+  if (acao === 'previsualizar') {
+    return json({
+      ok: true,
+      payload,
+      resumo: {
+        clienteRazaoSocial: cliente.razao_social,
+        documentoTomador,
+        enderecoTomador: enderecoTomadorCompleto
+          ? `${cliente.logradouro}${cliente.numero_endereco ? ', ' + cliente.numero_endereco : ''}` +
+            `${cliente.complemento ? ' - ' + cliente.complemento : ''}${cliente.bairro ? ' - ' + cliente.bairro : ''} - ` +
+            `${cliente.cidade}/${cliente.uf} - CEP ${cliente.cep}`
+          : null,
+        telefoneTomador: cliente.telefone ?? null,
+        emailTomador: cliente.email ?? null,
+        descricaoServico,
+        valorServico: conta.valor,
+        aliquotaIss,
+        percentualTotalTributosFederais,
+        percentualTotalTributosMunicipais,
+      },
+    });
+  }
 
   const resp = await fetch(`${focusBaseUrl}/v2/nfsen?ref=${encodeURIComponent(ref)}`, {
     method: 'POST',

@@ -232,6 +232,23 @@ export function Faturamento() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<number | null>(null);
+  const [carregandoPreviaId, setCarregandoPreviaId] = useState<number | null>(null);
+  const [previaNfse, setPreviaNfse] = useState<{
+    linha: LinhaFaturamento;
+    payload: Record<string, unknown>;
+    resumo: {
+      clienteRazaoSocial: string;
+      documentoTomador: string;
+      enderecoTomador: string | null;
+      telefoneTomador: string | null;
+      emailTomador: string | null;
+      descricaoServico: string;
+      valorServico: number;
+      aliquotaIss: number | null;
+      percentualTotalTributosFederais: number | null;
+      percentualTotalTributosMunicipais: number | null;
+    };
+  } | null>(null);
   // Evita reabrir sozinho se o usuário fechar o modal manualmente - só abre
   // uma vez por chegada vinda do link "Lançar NF" do Orçamento Financeiro.
   const abriuAutomaticoRef = useRef(false);
@@ -740,6 +757,35 @@ export function Faturamento() {
     qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
   }
 
+  // Antes de transmitir de fato pro SEFAZ, busca a prévia dos dados da DPS
+  // (mesmo payload que seria enviado, mas sem transmitir) pro setor de
+  // faturamento conferir num modal - só chama a emissão de verdade depois
+  // de confirmado ali.
+  async function abrirPreviaNfse(l: LinhaFaturamento) {
+    if (!l.contaId) return;
+    setCarregandoPreviaId(l.contaId);
+    setErro(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfse', {
+        body: { contaId: l.contaId, acao: 'previsualizar' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao gerar prévia da NFS-e.');
+      setPreviaNfse({ linha: l, payload: data.payload, resumo: data.resumo });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setCarregandoPreviaId(null);
+    }
+  }
+
+  async function confirmarEmissaoNfse() {
+    if (!previaNfse) return;
+    const linha = previaNfse.linha;
+    setPreviaNfse(null);
+    await emitirNFSe(linha);
+  }
+
   // Emissão automática de NFS-e pela Focus NFe - alternativa ao "Lançar
   // NF" manual (que continua existindo pra quando for preciso lançar uma
   // nota emitida por fora, ex.: Focus NFe fora do ar). Enquanto
@@ -1104,11 +1150,11 @@ export function Faturamento() {
                 {l.contaId != null && !l.nf_numero && (!l.nfseStatus || l.nfseStatus === 'erro') && (
                   <button
                     className="botao-secundario"
-                    onClick={() => emitirNFSe(l)}
-                    disabled={emitindoNfseId === l.contaId}
+                    onClick={() => abrirPreviaNfse(l)}
+                    disabled={carregandoPreviaId === l.contaId || emitindoNfseId === l.contaId}
                     title={l.nfseErroDetalhe ?? undefined}
                   >
-                    {emitindoNfseId === l.contaId ? 'Emitindo...' : 'Emitir NFS-e'}
+                    {carregandoPreviaId === l.contaId ? 'Carregando...' : 'Emitir NFS-e'}
                   </button>
                 )}
                 {l.contaId != null && !l.nf_numero && l.nfseStatus === 'processando' && (
@@ -1363,7 +1409,107 @@ export function Faturamento() {
             </div>
         </ModalJanela>
       )}
+      {previaNfse && (
+        <ModalJanela
+          titulo={`Conferir NFS-e antes de transmitir - ${previaNfse.linha.numero}`}
+          aoFechar={() => setPreviaNfse(null)}
+          larguraMax={600}
+        >
+          <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+            Confira todos os dados abaixo antes de transmitir. Depois de confirmar, a nota vai direto pro SEFAZ via
+            Focus NFe - não dá pra editar depois de transmitida.
+          </p>
+
+          <h2 style={{ fontSize: 13, marginTop: 12 }}>Prestador (CVF Medical)</h2>
+          <LinhaPrevia label="CNPJ" valor="46.948.692/0001-03" />
+          <LinhaPrevia label="Inscrição municipal" valor={String(previaNfse.payload.inscricao_municipal_prestador ?? '')} />
+          <LinhaPrevia label="Município de emissão" valor="Ribeirão Preto/SP" />
+          <LinhaPrevia
+            label="Regime tributário"
+            valor={
+              previaNfse.payload.codigo_opcao_simples_nacional === 3
+                ? 'Simples Nacional - Optante (ME/EPP)'
+                : `Código ${previaNfse.payload.codigo_opcao_simples_nacional}`
+            }
+          />
+
+          <h2 style={{ fontSize: 13, marginTop: 16 }}>Tomador (cliente)</h2>
+          <LinhaPrevia label="Razão social" valor={previaNfse.resumo.clienteRazaoSocial} />
+          <LinhaPrevia
+            label={previaNfse.resumo.documentoTomador.length === 14 ? 'CNPJ' : 'CPF'}
+            valor={formatarDocumento(previaNfse.resumo.documentoTomador)}
+          />
+          <LinhaPrevia label="Endereço" valor={previaNfse.resumo.enderecoTomador ?? 'Não informado no cadastro'} />
+          <LinhaPrevia label="Telefone" valor={previaNfse.resumo.telefoneTomador ?? '-'} />
+          <LinhaPrevia label="E-mail" valor={previaNfse.resumo.emailTomador ?? '-'} />
+
+          <h2 style={{ fontSize: 13, marginTop: 16 }}>Serviço</h2>
+          <LinhaPrevia label="Descrição" valor={previaNfse.resumo.descricaoServico} />
+          <LinhaPrevia label="Valor do serviço" valor={`R$ ${Number(previaNfse.resumo.valorServico).toFixed(2)}`} />
+          <LinhaPrevia label="Código NBS" valor={String(previaNfse.payload.codigo_nbs)} />
+          <LinhaPrevia label="Município da prestação" valor="Ribeirão Preto/SP" />
+          <LinhaPrevia label="Código de tributação nacional (ISS)" valor={String(previaNfse.payload.codigo_tributacao_nacional_iss)} />
+
+          <h2 style={{ fontSize: 13, marginTop: 16 }}>Tributação</h2>
+          <LinhaPrevia
+            label="Alíquota ISS"
+            valor={previaNfse.resumo.aliquotaIss != null ? `${previaNfse.resumo.aliquotaIss.toFixed(2)}%` : 'Não informada'}
+          />
+          <LinhaPrevia
+            label="% Total tributos federais (IBPT)"
+            valor={
+              previaNfse.resumo.percentualTotalTributosFederais != null
+                ? `${previaNfse.resumo.percentualTotalTributosFederais.toFixed(2)}%`
+                : 'Não informado'
+            }
+          />
+          <LinhaPrevia
+            label="% Total tributos municipais (IBPT)"
+            valor={
+              previaNfse.resumo.percentualTotalTributosMunicipais != null
+                ? `${previaNfse.resumo.percentualTotalTributosMunicipais.toFixed(2)}%`
+                : 'Não informado'
+            }
+          />
+          <LinhaPrevia label="Retenção do ISS" valor="Não retido" />
+
+          <h2 style={{ fontSize: 13, marginTop: 16 }}>Identificação da DPS</h2>
+          <LinhaPrevia label="Série" valor={String(previaNfse.payload.serie_dps)} />
+          <LinhaPrevia label="Número" valor={String(previaNfse.payload.numero_dps)} />
+          <LinhaPrevia label="Data/hora de emissão" valor={String(previaNfse.payload.data_emissao)} />
+
+          {erro && <p className="erro-login">{erro}</p>}
+
+          <div className="modal-acoes">
+            <button className="botao-secundario" onClick={() => setPreviaNfse(null)} disabled={emitindoNfseId != null}>
+              Cancelar
+            </button>
+            <button className="botao-primario" onClick={confirmarEmissaoNfse} disabled={emitindoNfseId != null}>
+              {emitindoNfseId === previaNfse.linha.contaId ? 'Transmitindo...' : 'Confirmar e transmitir ao SEFAZ'}
+            </button>
+          </div>
+        </ModalJanela>
+      )}
       {ModalConfirmacao}
     </div>
   );
+}
+
+function LinhaPrevia({ label, valor }: { label: string; valor: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 0', fontSize: 13 }}>
+      <span style={{ color: 'var(--ink-400)' }}>{label}</span>
+      <strong style={{ textAlign: 'right' }}>{valor}</strong>
+    </div>
+  );
+}
+
+function formatarDocumento(digitos: string): string {
+  if (digitos.length === 14) {
+    return digitos.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  }
+  if (digitos.length === 11) {
+    return digitos.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  }
+  return digitos;
 }
