@@ -236,17 +236,21 @@ Deno.serve(async (req: Request) => {
   // desse município não marca como obrigatório).
   const { data: configFiscal } = await supabaseAdmin
     .from('configuracao_fiscal')
-    .select('aliquota_iss, percentual_total_tributos_sn')
+    .select('aliquota_iss, percentual_total_tributos_federais, percentual_total_tributos_municipais')
     .eq('id', 1)
     .maybeSingle();
   const aliquotaIss = configFiscal?.aliquota_iss ? Number(configFiscal.aliquota_iss) : null;
   // Descoberto em teste (2026-09-01): informar a alíquota do ISS
   // (percentual_aliquota_relativa_municipio) faz o schema passar a
-  // exigir também um dos dois: tribFed (PIS/COFINS) OU totTrib
-  // (este campo) dentro do grupo "trib". Manda só este, mais simples e
-  // sem precisar declarar PIS/COFINS.
-  const percentualTotalTributosSN = configFiscal?.percentual_total_tributos_sn
-    ? Number(configFiscal.percentual_total_tributos_sn)
+  // exigir também um dos dois: tribFed (PIS/COFINS) OU totTrib dentro do
+  // grupo "trib". Usa o totTrib (percentuais totais de tributos,
+  // Federal/Municipal, fonte IBPT - confirmados com o contador, não
+  // mudam com frequência, diferente da alíquota ISS).
+  const percentualTotalTributosFederais = configFiscal?.percentual_total_tributos_federais
+    ? Number(configFiscal.percentual_total_tributos_federais)
+    : null;
+  const percentualTotalTributosMunicipais = configFiscal?.percentual_total_tributos_municipais
+    ? Number(configFiscal.percentual_total_tributos_municipais)
     : null;
 
   // Endereço completo do tomador - a nota real (nº 2902) mostra que a
@@ -304,8 +308,11 @@ Deno.serve(async (req: Request) => {
     tributacao_iss: 1,
     tipo_retencao_iss: TIPO_RETENCAO_ISS,
     ...(aliquotaIss != null ? { percentual_aliquota_relativa_municipio: aliquotaIss } : {}),
-    ...(percentualTotalTributosSN != null
-      ? { percentual_total_tributos_simples_nacional: percentualTotalTributosSN }
+    ...(percentualTotalTributosFederais != null
+      ? { percentual_total_tributos_federais: percentualTotalTributosFederais }
+      : {}),
+    ...(percentualTotalTributosMunicipais != null
+      ? { percentual_total_tributos_municipais: percentualTotalTributosMunicipais }
       : {}),
     // Grupo IBS/CBS (Reforma Tributária) - ver constantes no topo do arquivo.
     finalidade_emissao: 0,

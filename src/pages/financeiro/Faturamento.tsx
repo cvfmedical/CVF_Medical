@@ -120,27 +120,35 @@ const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'numero_os', 'numero_orcamento', '
 export function Faturamento() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Alíquota do ISS e percentual total de tributos do Simples Nacional -
-  // a contabilidade reenvia os dois todo mês (recalculados em cima do
-  // faturamento). Ficam guardados aqui pra não precisar caçar e-mail
-  // antigo toda vez que for emitir uma NFS-e.
+  // Alíquota do ISS (muda todo mês, recalculada em cima do faturamento) e
+  // percentuais totais de tributos Federal/Municipal (fonte IBPT,
+  // confirmados com o contador - segundo ele, "não mudam com tanta
+  // frequência", mas deixados editáveis do mesmo jeito, por segurança).
+  // Ficam guardados aqui pra não precisar caçar e-mail antigo toda vez
+  // que for emitir uma NFS-e.
   const aliquotaIssQuery = useQuery({
     queryKey: ['configuracao-fiscal'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('configuracao_fiscal')
-        .select('aliquota_iss, percentual_total_tributos_sn, atualizado_em')
+        .select('aliquota_iss, percentual_total_tributos_federais, percentual_total_tributos_municipais, atualizado_em')
         .eq('id', 1)
         .single();
       if (error) throw error;
-      return data as { aliquota_iss: number | null; percentual_total_tributos_sn: number | null; atualizado_em: string | null };
+      return data as {
+        aliquota_iss: number | null;
+        percentual_total_tributos_federais: number | null;
+        percentual_total_tributos_municipais: number | null;
+        atualizado_em: string | null;
+      };
     },
   });
   const [editandoAliquota, setEditandoAliquota] = useState(false);
   const [novaAliquota, setNovaAliquota] = useState('');
   const [salvandoAliquota, setSalvandoAliquota] = useState(false);
   const [editandoTotalTributos, setEditandoTotalTributos] = useState(false);
-  const [novoTotalTributos, setNovoTotalTributos] = useState('');
+  const [novoTotalFederal, setNovoTotalFederal] = useState('');
+  const [novoTotalMunicipal, setNovoTotalMunicipal] = useState('');
   const [salvandoTotalTributos, setSalvandoTotalTributos] = useState(false);
 
   function abrirEdicaoAliquota() {
@@ -171,21 +179,31 @@ export function Faturamento() {
   }
 
   function abrirEdicaoTotalTributos() {
-    setNovoTotalTributos(String(aliquotaIssQuery.data?.percentual_total_tributos_sn ?? ''));
+    setNovoTotalFederal(String(aliquotaIssQuery.data?.percentual_total_tributos_federais ?? ''));
+    setNovoTotalMunicipal(String(aliquotaIssQuery.data?.percentual_total_tributos_municipais ?? ''));
     setEditandoTotalTributos(true);
   }
 
   async function salvarTotalTributos() {
-    const valor = Number(novoTotalTributos);
-    if (!novoTotalTributos || Number.isNaN(valor) || valor <= 0) {
-      alert('Informe um percentual válido.');
+    const valorFederal = Number(novoTotalFederal);
+    const valorMunicipal = Number(novoTotalMunicipal);
+    if (!novoTotalFederal || Number.isNaN(valorFederal) || valorFederal <= 0) {
+      alert('Informe um percentual federal válido.');
+      return;
+    }
+    if (!novoTotalMunicipal || Number.isNaN(valorMunicipal) || valorMunicipal <= 0) {
+      alert('Informe um percentual municipal válido.');
       return;
     }
     setSalvandoTotalTributos(true);
     try {
       const { error } = await supabase
         .from('configuracao_fiscal')
-        .update({ percentual_total_tributos_sn: valor, atualizado_em: new Date().toISOString().slice(0, 10) })
+        .update({
+          percentual_total_tributos_federais: valorFederal,
+          percentual_total_tributos_municipais: valorMunicipal,
+          atualizado_em: new Date().toISOString().slice(0, 10),
+        })
         .eq('id', 1);
       if (error) throw error;
       setEditandoTotalTributos(false);
@@ -851,16 +869,26 @@ export function Faturamento() {
             width: 'fit-content',
           }}
         >
-          <span style={{ color: 'var(--ink-400)' }}>% Total de Tributos (Simples Nacional):</span>
+          <span style={{ color: 'var(--ink-400)' }}>% Total de Tributos - Federal/Municipal (IBPT):</span>
           {editandoTotalTributos ? (
             <>
               <input
                 type="number"
                 step="0.01"
-                value={novoTotalTributos}
-                onChange={(e) => setNovoTotalTributos(e.target.value)}
+                value={novoTotalFederal}
+                onChange={(e) => setNovoTotalFederal(e.target.value)}
+                placeholder="Federal"
                 style={{ width: 80 }}
                 autoFocus
+              />
+              <span>% /</span>
+              <input
+                type="number"
+                step="0.01"
+                value={novoTotalMunicipal}
+                onChange={(e) => setNovoTotalMunicipal(e.target.value)}
+                placeholder="Municipal"
+                style={{ width: 80 }}
               />
               <span>%</span>
               <button className="botao-primario botao-pequeno" onClick={salvarTotalTributos} disabled={salvandoTotalTributos}>
@@ -877,9 +905,13 @@ export function Faturamento() {
           ) : (
             <>
               <strong>
-                {aliquotaIssQuery.data?.percentual_total_tributos_sn != null
-                  ? `${Number(aliquotaIssQuery.data.percentual_total_tributos_sn).toFixed(2)}%`
-                  : 'Não informado'}
+                {aliquotaIssQuery.data?.percentual_total_tributos_federais != null
+                  ? `${Number(aliquotaIssQuery.data.percentual_total_tributos_federais).toFixed(2)}%`
+                  : '-'}{' '}
+                /{' '}
+                {aliquotaIssQuery.data?.percentual_total_tributos_municipais != null
+                  ? `${Number(aliquotaIssQuery.data.percentual_total_tributos_municipais).toFixed(2)}%`
+                  : '-'}
               </strong>
               <button className="botao-secundario botao-pequeno" onClick={abrirEdicaoTotalTributos}>
                 Atualizar
