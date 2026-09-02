@@ -29,17 +29,21 @@ const CODIGO_TRIBUTACAO_NACIONAL_ISS = '140201'; // Assistência técnica (confi
 const CODIGO_TRIBUTACAO_MUNICIPAL_ISS = '140201';
 const CODIGO_NBS = '120018200'; // Serviços de manutenção/reparação de instrumentos médico-hospitalares (confirmado no Nota Control e com o contador)
 const TIPO_RETENCAO_ISS = 1; // tpRetISSQN: 1 = Não Retido (confirmado no Nota Control)
-// Série da DPS usada pela CVF em PRODUÇÃO - confirmada no mesmo XML real
-// (nº 2902) usado pra confirmar cTribMun/NBS: <serie>70002</serie>.
-const SERIE_DPS_PRODUCAO = 70002;
+// Série da DPS pra emissão via API/webservice em PRODUÇÃO - CONFIRMADA
+// pela Nota Control/ISSNet por escrito (e-mail de liberação de produção,
+// chamado 0550600, 2026-09-02): "Série do documento (DPS): 1". A 70002
+// vista no XML real da nota nº 2902 é a série usada pelo canal Web do
+// Nota Control (emissão manual pelo portal) - CANAL DIFERENTE do nosso
+// (aplicativo próprio/API), cada um com sua própria série. Não confundir
+// os dois: 70002 nunca foi a série certa pra emissão via API.
+const SERIE_DPS_PRODUCAO = 1;
 // O ambiente de HOMOLOGAÇÃO usa um cadastro de contribuinte separado
 // (autocadastro no sandbox da ISS.net, não o cadastro real da prefeitura)
-// - a série 70002 é específica da produção e dava "Série da DPS inválida"
-// nesse sandbox. CONFIRMADO pelo suporte da Focus NFe (2026-09-02, Vitor
-// Gabriel Oliveira): uma emissão anterior foi autorizada em homologação
-// usando série 8 - não é chute, é o valor real de uma nota já aceita
-// nesse ambiente. Ajustável sem redeploy via env
-// FOCUS_NFE_SERIE_DPS_HOMOLOGACAO se precisar trocar de novo.
+// - por isso tem sua PRÓPRIA série, diferente da de produção. CONFIRMADO
+// pelo suporte da Focus NFe (2026-09-02, Vitor Gabriel Oliveira): uma
+// emissão anterior foi autorizada em homologação usando série 8. Ajustável
+// sem redeploy via env FOCUS_NFE_SERIE_DPS_HOMOLOGACAO se precisar trocar
+// de novo.
 const SERIE_DPS_HOMOLOGACAO = Deno.env.get('FOCUS_NFE_SERIE_DPS_HOMOLOGACAO') ?? '8';
 // opSimpNac: 3 = "Optante - Microempresa ou Empresa de Pequeno Porte
 // (ME/EPP)" - confirmado na mesma nota real (<opSimpNac>3</opSimpNac>).
