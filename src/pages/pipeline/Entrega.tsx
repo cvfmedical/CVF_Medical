@@ -13,12 +13,14 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
+import { linkEmail } from '../../lib/compartilhar';
 
 interface EntregaRow {
   id: number;
   ordem_servico_id: number;
   forma_devolucao: string;
   detalhes: string | null;
+  codigo_rastreio: string | null;
   data_entrega: string | null;
   nf_devolucao_numero: string | null;
   nf_devolucao_serie: string | null;
@@ -73,6 +75,24 @@ export function Entrega() {
       return data as { ordem_servico_id: number }[];
     },
   });
+
+  // Só pro botão "Enviar por e-mail" do código de rastreio - não precisa
+  // de mais nada do cliente além do e-mail.
+  const clientesEmailQuery = useQuery({
+    queryKey: ['clientes-email-entrega'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('clientes').select('id, email');
+      if (error) throw error;
+      return data as { id: number; email: string | null }[];
+    },
+  });
+
+  function enviarRastreioPorEmail(row: EntregaRow) {
+    const os = porId(row.ordem_servico_id);
+    const email = os ? clientesEmailQuery.data?.find((c) => c.id === os.cliente_id)?.email : null;
+    const corpo = `Olá! Seu equipamento (OS ${os?.numero_os ?? row.ordem_servico_id}) foi postado nos Correios. Código de rastreio: ${row.codigo_rastreio}. Acompanhe em https://rastreamento.correios.com.br/app/index.php`;
+    window.open(linkEmail(email, `Q-CVF Medical - Código de rastreio - OS ${os?.numero_os ?? ''}`, corpo), '_blank');
+  }
 
   if (isLoading || orcamentosQuery.isLoading || entregasExistentesQuery.isLoading) return <CarregandoTela />;
 
@@ -348,6 +368,7 @@ export function Entrega() {
             porId(r.ordem_servico_id)?.status_os === STATUS_DEVOLUCAO_SEM_REPARO ? 'Devolução sem reparo' : 'Pós-reparo',
         },
         { chave: 'forma_devolucao', label: 'Forma de devolução' },
+        { chave: 'codigo_rastreio', label: 'Rastreio', render: (r) => r.codigo_rastreio || '-', mono: true },
         { chave: 'nf_devolucao_numero', label: 'NF devolução', mono: true },
         { chave: 'data_entrega', label: 'Data', render: (r) => (r.data_entrega ? new Date(r.data_entrega).toLocaleString('pt-BR') : '-') },
         {
@@ -379,6 +400,15 @@ export function Entrega() {
           >
             <IconPrinter size={16} />
           </button>
+          {row.codigo_rastreio && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Enviar o código de rastreio por e-mail pro cliente"
+              onClick={() => enviarRastreioPorEmail(row)}
+            >
+              Enviar rastreio
+            </button>
+          )}
           {!row.confirmado_pelo_cliente_em && !row.finalizado_manualmente_em && (
             <button
               className="botao-secundario botao-pequeno"
@@ -414,7 +444,8 @@ export function Entrega() {
           opcoes: ['Carro próprio', 'Correios', 'Transportadora'],
           obrigatorio: true,
         },
-        { name: 'detalhes', label: 'Detalhes (transportadora, rastreio, etc.)', type: 'textarea' },
+        { name: 'detalhes', label: 'Detalhes (transportadora, etc.)', type: 'textarea' },
+        { name: 'codigo_rastreio', label: 'Código de rastreio (Correios)', type: 'text' },
         { name: 'nf_devolucao_numero', label: 'Nota fiscal de devolução - número', type: 'text' },
         { name: 'nf_devolucao_serie', label: 'Nota fiscal de devolução - série', type: 'text' },
         { name: 'nf_devolucao_cfop', label: 'CFOP (5916/6916)', type: 'text' },
