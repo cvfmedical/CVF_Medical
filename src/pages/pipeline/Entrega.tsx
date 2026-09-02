@@ -73,9 +73,17 @@ export function Entrega() {
   const entregasExistentesQuery = useQuery({
     queryKey: ['entregas-os-ids'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('entregas').select('id, ordem_servico_id, codigo_rastreio');
+      const { data, error } = await supabase
+        .from('entregas')
+        .select('id, ordem_servico_id, codigo_rastreio, confirmado_pelo_cliente_em, finalizado_manualmente_em');
       if (error) throw error;
-      return data as { id: number; ordem_servico_id: number; codigo_rastreio: string | null }[];
+      return data as {
+        id: number;
+        ordem_servico_id: number;
+        codigo_rastreio: string | null;
+        confirmado_pelo_cliente_em: string | null;
+        finalizado_manualmente_em: string | null;
+      }[];
     },
   });
 
@@ -126,7 +134,9 @@ export function Entrega() {
   // o modal de rastreio.
   const [selecionandoRastreio, setSelecionandoRastreio] = useState(false);
   const [entregasSelecionadasRastreio, setEntregasSelecionadasRastreio] = useState<Set<number>>(new Set());
-  const entregasSemRastreio = (entregasExistentesQuery.data ?? []).filter((e) => !e.codigo_rastreio);
+  const entregasSemRastreio = (entregasExistentesQuery.data ?? []).filter(
+    (e) => !e.codigo_rastreio && !e.confirmado_pelo_cliente_em && !e.finalizado_manualmente_em,
+  );
 
   function alternarSelecaoEntregaRastreio(id: number) {
     setEntregasSelecionadasRastreio((s) => {
@@ -723,6 +733,10 @@ export function Entrega() {
         // seu próprio cache separado - sem isso, a OS recém-entregue continua
         // aparecendo como selecionável até a página ser recarregada.
         qc.invalidateQueries({ queryKey: ['ordens-servico-opcoes'] });
+      }}
+      ocultarPorPadrao={{
+        linhaOculta: (r) => !!r.confirmado_pelo_cliente_em || !!r.finalizado_manualmente_em,
+        rotulo: 'já finalizadas',
       }}
     />
 

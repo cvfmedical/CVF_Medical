@@ -135,6 +135,13 @@ export interface CrudPageProps<Row extends { id: number }> {
   // `campoValor`, quando informado, soma esse campo numérico das linhas
   // filtradas e mostra "Total filtrado" logo abaixo do cabeçalho.
   filtroPeriodo?: { campo: string; label?: string; campoValor?: string };
+  // Esconde certas linhas por padrão (ex: entregas já finalizadas) sem
+  // misturar com os filtros por coluna - aparece um checkbox "Mostrar
+  // {rotulo} (consulta)" que reexibe quando marcado. Tudo client-side,
+  // não refaz a query nem afeta `resumo` (que sempre recebe todas as
+  // linhas) - mesmo espírito do "Mostrar já faturados" já usado em
+  // Faturamento.tsx, só que reutilizável por qualquer tela CrudPage.
+  ocultarPorPadrao?: { linhaOculta: (row: Row) => boolean; rotulo: string };
 }
 
 export function CrudPage<Row extends { id: number }>({
@@ -153,6 +160,7 @@ export function CrudPage<Row extends { id: number }>({
   permitirExportarPdf = true,
   aoClicarNovo,
   filtroPeriodo,
+  ocultarPorPadrao,
 }: CrudPageProps<Row>) {
   const { listQuery, criar, atualizar, excluir } = useCrud<Row>(tabela, ordenarPor);
   const location = useLocation();
@@ -177,6 +185,7 @@ export function CrudPage<Row extends { id: number }>({
   const [salvando, setSalvando] = useState(false);
   const [periodoDe, setPeriodoDe] = useState('');
   const [periodoAte, setPeriodoAte] = useState('');
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
 
   // Atualiza um campo e, se ele tiver `aoMudar`, mescla os campos que ele
   // preenche automaticamente (ex: puxar do catálogo).
@@ -191,6 +200,7 @@ export function CrudPage<Row extends { id: number }>({
   const linhasFiltradas = useMemo(() => {
     const todas = listQuery.data ?? [];
     return todas.filter((linha) => {
+      if (ocultarPorPadrao && !mostrarOcultos && ocultarPorPadrao.linhaOculta(linha)) return false;
       const passaColunas = colunas.every((c) =>
         passaFiltro(c.valorFiltro ? c.valorFiltro(linha) : (linha as Record<string, unknown>)[c.chave], c.chave),
       );
@@ -204,7 +214,7 @@ export function CrudPage<Row extends { id: number }>({
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listQuery.data, filtrosColuna, filtrosValores, colunas, filtroPeriodo, periodoDe, periodoAte]);
+  }, [listQuery.data, filtrosColuna, filtrosValores, colunas, filtroPeriodo, periodoDe, periodoAte, ocultarPorPadrao, mostrarOcultos]);
 
   const { linhasOrdenadas: linhas, coluna: colunaOrdenada, direcao, ordenarPor: ordenarPorColuna } = useLinhasOrdenadas(linhasFiltradas);
 
@@ -327,6 +337,12 @@ export function CrudPage<Row extends { id: number }>({
                 </span>
               )}
             </div>
+          )}
+          {ocultarPorPadrao && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={mostrarOcultos} onChange={(e) => setMostrarOcultos(e.target.checked)} />
+              Mostrar {ocultarPorPadrao.rotulo} (consulta)
+            </label>
           )}
           {(algumFiltroAtivo || periodoDe || periodoAte) && (
             <button
