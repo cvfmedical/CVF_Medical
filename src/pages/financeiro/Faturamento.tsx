@@ -18,6 +18,7 @@ import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { totalOrcamento } from '../../lib/valorOrcamento';
 import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
+import { abrirPreviaDanfse } from '../../lib/previaDanfse';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -238,6 +239,7 @@ export function Faturamento() {
     linha: LinhaFaturamento;
     payload: Record<string, unknown>;
     resumoSomenteLeitura: {
+      ambiente: 'homologacao' | 'producao';
       valorServico: number;
       aliquotaIss: number | null;
       percentualTotalTributosFederais: number | null;
@@ -785,6 +787,7 @@ export function Faturamento() {
         linha: l,
         payload: data.payload,
         resumoSomenteLeitura: {
+          ambiente: r.ambiente,
           valorServico: r.valorServico,
           aliquotaIss: r.aliquotaIss,
           percentualTotalTributosFederais: r.percentualTotalTributosFederais,
@@ -848,6 +851,32 @@ export function Faturamento() {
     } finally {
       setSalvandoCadastroTomador(false);
     }
+  }
+
+  function visualizarPreviaDanfse() {
+    if (!previaNfse || !formNfse) return;
+    abrirPreviaDanfse({
+      ambiente: previaNfse.resumoSomenteLeitura.ambiente,
+      serieDps: String(previaNfse.payload.serie_dps),
+      numeroDps: String(previaNfse.payload.numero_dps),
+      dataEmissao: String(previaNfse.payload.data_emissao),
+      razaoSocialTomador: formNfse.razaoSocial,
+      documentoTomador: formNfse.documento,
+      logradouroTomador: formNfse.logradouro,
+      numeroTomador: formNfse.numero,
+      complementoTomador: formNfse.complemento,
+      bairroTomador: formNfse.bairro,
+      cepTomador: formNfse.cep,
+      cidadeTomador: formNfse.cidade,
+      ufTomador: formNfse.uf,
+      telefoneTomador: formNfse.telefone,
+      emailTomador: formNfse.email,
+      descricaoServico: formNfse.descricaoServico,
+      valorServico: previaNfse.resumoSomenteLeitura.valorServico,
+      aliquotaIss: previaNfse.resumoSomenteLeitura.aliquotaIss,
+      codigoTributacaoNacionalIss: String(previaNfse.payload.codigo_tributacao_nacional_iss),
+      codigoNbs: String(previaNfse.payload.codigo_nbs),
+    });
   }
 
   async function confirmarEmissaoNfse() {
@@ -1752,6 +1781,9 @@ export function Faturamento() {
               disabled={salvandoCadastroTomador || emitindoNfseId != null}
             >
               {salvandoCadastroTomador ? 'Salvando...' : 'Salvar no cadastro'}
+            </button>
+            <button className="botao-secundario" onClick={visualizarPreviaDanfse} disabled={emitindoNfseId != null}>
+              Visualizar DANFE (prévia)
             </button>
             <button className="botao-primario" onClick={confirmarEmissaoNfse} disabled={emitindoNfseId != null}>
               {emitindoNfseId === previaNfse.linha.contaId ? 'Transmitindo...' : 'Confirmar e transmitir ao SEFAZ'}

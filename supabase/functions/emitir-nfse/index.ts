@@ -295,10 +295,44 @@ Deno.serve(async (req: Request) => {
   // junto do payload sobre o grupo ser tudo-ou-nada no schema.
   const enderecoTomadorCompleto = codigoMunicipioTomador != null && !!cepTomador && !!logradouroTomador;
 
-  const orc = (conta as unknown as { orcamentos: { numero_orcamento: string; ordens_servico: { numero_os: string } | null } | null }).orcamentos;
-  const descricaoServicoPadrao = orc
-    ? `Prestação de serviço de manutenção em equipamento cirúrgico - Orçamento ${orc.numero_orcamento}${orc.ordens_servico ? ' - OS ' + orc.ordens_servico.numero_os : ''}`
-    : conta.descricao || 'Prestação de serviço de manutenção em equipamento cirúrgico';
+  const orc = (
+    conta as unknown as {
+      orcamentos: { numero_orcamento: string; ordem_servico_id: number | null; ordens_servico: { numero_os: string } | null } | null;
+    }
+  ).orcamentos;
+
+  // O que veio pra manutenção (ex.: "CAMISA PARA ARTROSCOPIA", "160mm x
+  // 4mm x 30° - ARTROSCOPIA DE JOELHO/OMBRO") - cada OS tem no máximo uma
+  // entrada de equipamento (confirmado: nenhuma OS tem mais de uma), então
+  // dá pra usar direto como a 3ª linha da descrição do serviço.
+  const { data: entradaEquip } = orc?.ordem_servico_id
+    ? await supabaseAdmin
+        .from('entradas_equipamento')
+        .select('equipamento_desc')
+        .eq('ordem_servico_id', orc.ordem_servico_id)
+        .maybeSingle()
+    : { data: null };
+
+  // Valor aproximado dos tributos (Lei 12.741/2012 - Lei da Transparência
+  // Fiscal): não é o percentual, é o R$ daquela nota específica, calculado
+  // sobre o valor do serviço com os percentuais Federal+Municipal do IBPT
+  // (mesmos já usados no totTrib do payload).
+  const valorAproxTributos =
+    percentualTotalTributosFederais != null && percentualTotalTributosMunicipais != null
+      ? (Number(conta.valor) * (percentualTotalTributosFederais + percentualTotalTributosMunicipais)) / 100
+      : null;
+
+  // Formato fixo pedido pelo usuário (2026-09-02): 4 linhas sempre nessa
+  // ordem - texto fixo, referência ao orçamento, o que veio pra
+  // manutenção, e o valor (não percentual) dos tributos daquela nota.
+  const descricaoServicoPadrao = [
+    'MANUTENÇÃO EM EQUIPAMENTO',
+    orc ? `REFERENTE AO ORÇAMENTO - ORC: ${orc.numero_orcamento}` : conta.descricao || 'Prestação de serviço',
+    entradaEquip?.equipamento_desc || 'Instrumental cirúrgico',
+    valorAproxTributos != null
+      ? `Valor aproximado dos tributos: R$ ${valorAproxTributos.toFixed(2)} (Fonte: IBPT - Lei 12.741/2012)`
+      : 'Valor aproximado dos tributos: não informado',
+  ].join('\n');
   const descricaoServico = overrides.descricao_servico?.trim() || descricaoServicoPadrao;
 
   // acao === 'previsualizar': monta o mesmo payload que seria enviado à
@@ -365,6 +399,10 @@ Deno.serve(async (req: Request) => {
       ok: true,
       payload,
       resumo: {
+        // Usado pra tela de conferência decidir se mostra a marca d'água
+        // "HOMOLOGAÇÃO" na prévia da DANFSe - some sozinho quando
+        // FOCUS_NFE_BASE_URL apontar pra produção.
+        ambiente: focusBaseUrl.includes('homologacao') ? 'homologacao' : 'producao',
         clienteId: conta.cliente_id,
         razaoSocialTomador,
         documentoTomador: documentoTomadorBruto,
