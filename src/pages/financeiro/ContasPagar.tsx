@@ -168,10 +168,46 @@ export function ContasPagar() {
   const [erroNovo, setErroNovo] = useState<string | null>(null);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
 
+  // Lançamentos futuros gerados por "Repetir todo mês até dezembro" - uma
+  // linha por mês restante do ano do vencimento base, cada uma com
+  // valor/vencimento próprios e editáveis (o valor pode variar mês a mês,
+  // ex: conta de luz) antes de confirmar.
+  interface RepeticaoMensal {
+    dataVencimento: string;
+    valor: string;
+  }
+  const [repeticoes, setRepeticoes] = useState<RepeticaoMensal[]>([]);
+
   function abrirModalNovo() {
     setFormNovo(formNovoVazio);
+    setRepeticoes([]);
     setErroNovo(null);
     setModalNovoAberto(true);
+  }
+
+  function gerarRepeticoesMensais() {
+    setErroNovo(null);
+    if (!formNovo.data_vencimento) return setErroNovo('Informe a data de vencimento antes de gerar as repetições.');
+    if (!formNovo.valor || Number(formNovo.valor) <= 0) return setErroNovo('Informe um valor válido antes de gerar as repetições.');
+    const dataBase = new Date(`${formNovo.data_vencimento}T00:00:00`);
+    const ano = dataBase.getFullYear();
+    const mesBase = dataBase.getMonth();
+    const dia = dataBase.getDate();
+    const novas: RepeticaoMensal[] = [];
+    for (let mes = mesBase + 1; mes <= 11; mes++) {
+      const ultimoDiaMesAlvo = new Date(ano, mes + 1, 0).getDate();
+      const data = new Date(ano, mes, Math.min(dia, ultimoDiaMesAlvo));
+      novas.push({ dataVencimento: data.toISOString().slice(0, 10), valor: formNovo.valor });
+    }
+    setRepeticoes(novas);
+  }
+
+  function atualizarRepeticao(i: number, campo: keyof RepeticaoMensal, valor: string) {
+    setRepeticoes((rs) => rs.map((r, idx) => (idx === i ? { ...r, [campo]: valor } : r)));
+  }
+
+  function removerRepeticao(i: number) {
+    setRepeticoes((rs) => rs.filter((_, idx) => idx !== i));
   }
 
   async function salvarNovo() {
@@ -227,46 +263,56 @@ export function ContasPagar() {
 
     if (!formNovo.valor || Number(formNovo.valor) <= 0) return setErroNovo('Informe um valor válido.');
     if (!formNovo.data_vencimento) return setErroNovo('Informe a data de vencimento.');
+    if (formNovo.repetirTodoAno && repeticoes.length === 0) {
+      return setErroNovo('Clique em "Gerar lançamentos futuros" antes de salvar (ou desmarque "Repetir todo mês").');
+    }
+    for (const r of repeticoes) {
+      if (!r.dataVencimento || !r.valor || Number(r.valor) <= 0) {
+        return setErroNovo('Confira o valor e o vencimento de todos os lançamentos futuros gerados.');
+      }
+    }
 
     setSalvandoNovo(true);
     try {
       if (categoria) talvezCadastrarCategoriaNova(categoria);
 
-      // "Repetir todo mês até dezembro": mesmo valor/descrição, um
-      // lançamento por mês restante do ano do vencimento informado (dia
-      // fixo, ajustado pro último dia do mês quando o mês alvo for mais
-      // curto - ex: vencimento dia 31 vira dia 30 em abril).
-      const dataBase = new Date(`${formNovo.data_vencimento}T00:00:00`);
-      const datasVencimento = [dataBase];
-      if (formNovo.repetirTodoAno) {
-        const ano = dataBase.getFullYear();
-        const mesBase = dataBase.getMonth();
-        const dia = dataBase.getDate();
-        for (let mes = mesBase + 1; mes <= 11; mes++) {
-          const ultimoDiaMesAlvo = new Date(ano, mes + 1, 0).getDate();
-          datasVencimento.push(new Date(ano, mes, Math.min(dia, ultimoDiaMesAlvo)));
-        }
-      }
+      const { error } = await supabase.from('contas_pagar').insert({
+        numero_conta: numeroGerado,
+        tipo_custo: formNovo.tipo_custo,
+        socio,
+        categoria,
+        fornecedor_id: fornecedorId,
+        descricao: formNovo.descricao,
+        valor: Number(formNovo.valor),
+        data_vencimento: formNovo.data_vencimento,
+        data_pagamento: formNovo.data_pagamento || null,
+        forma_pagamento: formNovo.forma_pagamento || null,
+        status: formNovo.status,
+        observacoes: formNovo.observacoes || null,
+      });
+      if (error) throw error;
 
-      for (const dataVenc of datasVencimento) {
-        const primeira = dataVenc === dataBase;
-        const numeroConta = primeira ? numeroGerado : await gerarNumeroConta();
-        const { error } = await supabase.from('contas_pagar').insert({
+      // "Repetir todo mês até dezembro" - cada linha gerada (e
+      // possivelmente ajustada) em "repeticoes" vira um lançamento próprio,
+      // "Em aberto", com o mesmo tipo/sócio/categoria/fornecedor/descrição
+      // do lançamento base, mas valor e vencimento próprios.
+      for (const r of repeticoes) {
+        const numeroConta = await gerarNumeroConta();
+        const { error: erroRepeticao } = await supabase.from('contas_pagar').insert({
           numero_conta: numeroConta,
           tipo_custo: formNovo.tipo_custo,
           socio,
           categoria,
           fornecedor_id: fornecedorId,
           descricao: formNovo.descricao,
-          valor: Number(formNovo.valor),
-          data_vencimento: dataVenc.toISOString().slice(0, 10),
-          data_pagamento: primeira ? formNovo.data_pagamento || null : null,
-          forma_pagamento: formNovo.forma_pagamento || null,
-          status: primeira ? formNovo.status : 'Em aberto',
+          valor: Number(r.valor),
+          data_vencimento: r.dataVencimento,
+          status: 'Em aberto',
           observacoes: formNovo.observacoes || null,
         });
-        if (error) throw error;
+        if (erroRepeticao) throw erroRepeticao;
       }
+
       setModalNovoAberto(false);
       setNumeroGerado(await gerarNumeroConta());
       qc.invalidateQueries({ queryKey: ['contas_pagar'] });
@@ -449,16 +495,14 @@ export function ContasPagar() {
               <input
                 type="checkbox"
                 checked={formNovo.repetirTodoAno}
-                onChange={(e) => setFormNovo((f) => ({ ...f, repetirTodoAno: e.target.checked }))}
+                onChange={(e) => {
+                  const marcado = e.target.checked;
+                  setFormNovo((f) => ({ ...f, repetirTodoAno: marcado }));
+                  if (!marcado) setRepeticoes([]);
+                }}
               />
-              Repetir todo mês até dezembro (mesmo valor e descrição)
+              Repetir todo mês até dezembro
             </label>
-          )}
-          {formNovo.repetirTodoAno && (
-            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
-              Cria um lançamento "Em aberto" pra esse mês (com o status/data de pagamento informados abaixo) e mais um
-              por mês restante do ano do vencimento, mesmo dia, mesmo valor e descrição.
-            </p>
           )}
 
           {formNovo.parcelado ? (
@@ -522,6 +566,49 @@ export function ContasPagar() {
                   onChange={(e) => setFormNovo((f) => ({ ...f, data_vencimento: e.target.value }))}
                 />
               </div>
+
+              {formNovo.repetirTodoAno && (
+                <>
+                  <button type="button" className="botao-secundario botao-pequeno" onClick={gerarRepeticoesMensais}>
+                    {repeticoes.length > 0 ? 'Gerar de novo (a partir dos campos acima)' : 'Gerar lançamentos futuros'}
+                  </button>
+                  <p style={{ fontSize: 11, color: 'var(--ink-400)', margin: '6px 0' }}>
+                    Cria esse lançamento (acima, "Em aberto"/"Pago" conforme o status escolhido) e mais um por mês
+                    restante do ano do vencimento, mesmo dia. Ajuste valor e vencimento de cada mês abaixo se precisar
+                    (ex.: conta que varia de valor) ou remova algum mês que não se aplique.
+                  </p>
+                  {repeticoes.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 6 }}>
+                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                        <label>Vencimento</label>
+                        <input
+                          type="date"
+                          value={r.dataVencimento}
+                          onChange={(e) => atualizarRepeticao(i, 'dataVencimento', e.target.value)}
+                        />
+                      </div>
+                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                        <label>Valor (R$)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={r.valor}
+                          onChange={(e) => atualizarRepeticao(i, 'valor', e.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover esse mês"
+                        onClick={() => removerRepeticao(i)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+
               <div className="campo-form">
                 <label>Data de pagamento</label>
                 <input
