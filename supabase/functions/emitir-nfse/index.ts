@@ -29,10 +29,18 @@ const CODIGO_TRIBUTACAO_NACIONAL_ISS = '140201'; // Assistência técnica (confi
 const CODIGO_TRIBUTACAO_MUNICIPAL_ISS = '140201';
 const CODIGO_NBS = '120018200'; // Serviços de manutenção/reparação de instrumentos médico-hospitalares (confirmado no Nota Control e com o contador)
 const TIPO_RETENCAO_ISS = 1; // tpRetISSQN: 1 = Não Retido (confirmado no Nota Control)
-// Série da DPS usada pela CVF - confirmada no mesmo XML real (nº 2902)
-// usado pra confirmar cTribMun/NBS: <serie>70002</serie>. O "1" chutado
-// antes deu erro ("Série da DPS inválida").
-const SERIE_DPS = 70002;
+// Série da DPS usada pela CVF em PRODUÇÃO - confirmada no mesmo XML real
+// (nº 2902) usado pra confirmar cTribMun/NBS: <serie>70002</serie>.
+const SERIE_DPS_PRODUCAO = 70002;
+// O ambiente de HOMOLOGAÇÃO usa um cadastro de contribuinte separado
+// (autocadastro no sandbox da ISS.net, não o cadastro real da prefeitura)
+// - a série 70002 é específica da produção e voltou a dar "Série da DPS
+// inválida" mesmo já confirmada (2026-09-02), possivelmente porque não
+// está registrada nesse sandbox. Testando com "1" (padrão mais comum) só
+// em homologação enquanto não confirmamos com a Focus NFe/Nota Control -
+// AINDA NÃO CONFIRMADO, ajustável sem redeploy via env
+// FOCUS_NFE_SERIE_DPS_HOMOLOGACAO caso "1" também falhe.
+const SERIE_DPS_HOMOLOGACAO = Deno.env.get('FOCUS_NFE_SERIE_DPS_HOMOLOGACAO') ?? '1';
 // opSimpNac: 3 = "Optante - Microempresa ou Empresa de Pequeno Porte
 // (ME/EPP)" - confirmado na mesma nota real (<opSimpNac>3</opSimpNac>).
 // ATENÇÃO: estava com "1" (Não Optante) até 2026-09-01 - valor errado,
@@ -120,6 +128,8 @@ Deno.serve(async (req: Request) => {
   // "https://api.focusnfe.com.br" (com um token de produção) só depois de
   // validar a emissão de teste.
   const focusBaseUrl = Deno.env.get('FOCUS_NFE_BASE_URL') ?? 'https://homologacao.focusnfe.com.br';
+  const ambiente: 'homologacao' | 'producao' = focusBaseUrl.includes('homologacao') ? 'homologacao' : 'producao';
+  const serieDps = ambiente === 'homologacao' ? Number(SERIE_DPS_HOMOLOGACAO) : SERIE_DPS_PRODUCAO;
 
   if (!focusToken) return json({ error: 'FOCUS_NFE_TOKEN não configurado no servidor.' }, 500);
 
@@ -342,7 +352,7 @@ Deno.serve(async (req: Request) => {
   const ref = `qcvf-cr-${conta.id}`;
   const payload = {
     data_emissao: dataEmissaoISO(),
-    serie_dps: SERIE_DPS,
+    serie_dps: serieDps,
     numero_dps: conta.id,
     data_competencia: dataEmissaoISO().slice(0, 10),
     emitente_dps: 1,
@@ -402,7 +412,7 @@ Deno.serve(async (req: Request) => {
         // Usado pra tela de conferência decidir se mostra a marca d'água
         // "HOMOLOGAÇÃO" na prévia da DANFSe - some sozinho quando
         // FOCUS_NFE_BASE_URL apontar pra produção.
-        ambiente: focusBaseUrl.includes('homologacao') ? 'homologacao' : 'producao',
+        ambiente,
         clienteId: conta.cliente_id,
         razaoSocialTomador,
         documentoTomador: documentoTomadorBruto,
