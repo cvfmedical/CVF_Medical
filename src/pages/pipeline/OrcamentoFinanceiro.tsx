@@ -499,7 +499,13 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('cliente_precos_quantidade')
         .select('id, descricao, grupo_contado, quantidade, grupo_extra, extra_presente, valor_fixo')
-        .in('cliente_id', idsCliente);
+        .in('cliente_id', idsCliente)
+        // Duas regras podem bater ao mesmo tempo (ex: 1 CÂNULA + 1 OBJETIVA +
+        // 1 ROD_LENS satisfaz tanto "CANULA=1 com OBJETIVA" quanto
+        // "ROD_LENS=1 com OBJETIVA") - o .find() abaixo pega a primeira, então
+        // ordena pelo valor mais alto primeiro, pra nunca aplicar por engano
+        // o preço mais barato quando a combinação mais específica também bate.
+        .order('valor_fixo', { ascending: false });
       if (error) throw error;
       return data as unknown as PrecoQuantidade[];
     },
