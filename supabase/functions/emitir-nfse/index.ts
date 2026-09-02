@@ -202,9 +202,15 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', contaId);
     } else if (resultado.status === 'erro_autorizacao' || resultado.status === 'negado') {
-      const detalhe = Array.isArray(resultado.erros)
+      // A emissão é assíncrona - o erro de negócio de verdade (ex.: "Série
+      // da DPS inválida") normalmente aparece só AQUI (na consulta), não no
+      // POST inicial (que só valida schema). Guarda o JSON bruto inteiro,
+      // não só a mensagem curta de cada erro - a Focus às vezes tem mais
+      // contexto (código, campo apontado) que o "mensagem" sozinho não mostra.
+      const mensagens = Array.isArray(resultado.erros)
         ? resultado.erros.map((e: { mensagem?: string }) => e.mensagem).join('; ')
-        : JSON.stringify(resultado);
+        : null;
+      const detalhe = `${mensagens ?? 'erro sem mensagem'} | RAW: ${JSON.stringify(resultado)}`;
       await supabaseAdmin
         .from('contas_receber')
         .update({ nfse_status: 'erro', nfse_erro_detalhe: detalhe })
