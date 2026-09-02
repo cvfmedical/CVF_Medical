@@ -13,6 +13,7 @@ import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { normalizarTagContagem } from '../../lib/normalizarTagContagem';
 
 interface ProdutoServico {
   id: number;
@@ -297,7 +298,7 @@ function TelaProdutosServicos({ titulo, tipos, rascunhoKey }: { titulo: string; 
         preco_valor1: form.preco_valor1 ? Number(form.preco_valor1) : null,
         preco_valor2: form.preco_valor2 ? Number(form.preco_valor2) : null,
         preco_valor3: form.preco_valor3 ? Number(form.preco_valor3) : null,
-        grupo_contagem_preco: form.grupo_contagem_preco.trim() || null,
+        grupo_contagem_preco: form.grupo_contagem_preco.trim() ? normalizarTagContagem(form.grupo_contagem_preco) : null,
         unidade: form.unidade || 'un',
         observacoes: form.observacoes || null,
         status_ativo: form.status_ativo,

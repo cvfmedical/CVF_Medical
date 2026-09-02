@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE } from '../../lib/statusOS';
 import { AlertaGarantia } from '../../components/AlertaGarantia';
 import { normalizarBusca } from '../../lib/normalizarBusca';
+import { normalizarTagContagem } from '../../lib/normalizarTagContagem';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -522,13 +523,17 @@ export function OrcamentoFinanceiro() {
     for (const item of itensQuery.data) {
       const grupo = item.produtos_servicos?.grupo_contagem_preco;
       if (!grupo) continue;
-      contagem.set(grupo, (contagem.get(grupo) ?? 0) + item.quantidade);
+      const chave = normalizarTagContagem(grupo);
+      contagem.set(chave, (contagem.get(chave) ?? 0) + item.quantidade);
     }
+    // Normaliza de novo aqui (defensivo) - cobre tags salvas antes dessa
+    // normalização existir, ou digitadas direto no banco, sem depender de
+    // um backfill dos dados antigos.
     return (
       regras.find((r) => {
-        if ((contagem.get(r.grupo_contado) ?? 0) !== r.quantidade) return false;
+        if ((contagem.get(normalizarTagContagem(r.grupo_contado)) ?? 0) !== r.quantidade) return false;
         if (r.grupo_extra) {
-          const temExtra = (contagem.get(r.grupo_extra) ?? 0) > 0;
+          const temExtra = (contagem.get(normalizarTagContagem(r.grupo_extra)) ?? 0) > 0;
           if (temExtra !== r.extra_presente) return false;
         }
         return true;

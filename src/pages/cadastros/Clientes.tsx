@@ -11,6 +11,7 @@ import { consultarCnpj } from '../../lib/consultaCnpj';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
+import { normalizarTagContagem } from '../../lib/normalizarTagContagem';
 import { IconPencil, IconPlus, IconSearch, IconTag, IconTrash } from '@tabler/icons-react';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { Badge } from '../../components/Badge';
@@ -240,9 +241,9 @@ export function Clientes() {
     const { error } = await supabase.from('cliente_precos_quantidade').insert({
       cliente_id: clientePrecosQtd.id,
       descricao: descricaoQtdNova.trim(),
-      grupo_contado: grupoContadoNovo.trim().toUpperCase(),
+      grupo_contado: normalizarTagContagem(grupoContadoNovo),
       quantidade: Number(quantidadeNova),
-      grupo_extra: usaGrupoExtra ? grupoExtraNovo.trim().toUpperCase() : null,
+      grupo_extra: usaGrupoExtra ? normalizarTagContagem(grupoExtraNovo) : null,
       extra_presente: usaGrupoExtra ? extraPresenteNovo : true,
       valor_fixo: Number(valorQtdNovo),
     });
