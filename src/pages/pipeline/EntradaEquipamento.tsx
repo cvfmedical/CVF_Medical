@@ -300,11 +300,15 @@ export function EntradaEquipamento() {
       if (!item) return;
       // Fabricante fica só no campo próprio (equipamento_fab) - não repete
       // dentro da descrição, pra não duplicar em telas que já mostram os
-      // dois juntos ("descrição (fabricante)") ou em linhas separadas.
+      // dois juntos ("descrição (fabricante)") ou em linhas separadas. O
+      // subgrupo (ex: "ÓTICA", "MINI ÓTICA") entra na frente da descrição
+      // pra ficar visível de cara qual categoria é, sem abrir o cadastro.
       setForm((f) => ({
         ...f,
         equipamento_fab: item.fabricante,
-        equipamento_desc: formatarModeloOtica({ ...item, fabricante: '' }),
+        equipamento_desc: item.subgrupo
+          ? `${item.subgrupo} - ${formatarModeloOtica({ ...item, fabricante: '' })}`
+          : formatarModeloOtica({ ...item, fabricante: '' }),
       }));
       setEhOtica(true);
       setCatalogoOticaId(id);
@@ -313,7 +317,11 @@ export function EntradaEquipamento() {
     } else if (tipo === 'produto') {
       const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === id);
       if (!item) return;
-      setForm((f) => ({ ...f, equipamento_fab: item.marca_fabricante ?? '', equipamento_desc: item.nome }));
+      setForm((f) => ({
+        ...f,
+        equipamento_fab: item.marca_fabricante ?? '',
+        equipamento_desc: item.subgrupo ? `${item.subgrupo} - ${item.nome}` : item.nome,
+      }));
       setEhOtica(false);
       setCatalogoOticaId('');
       setGrupoEquipamento(item.categoria ?? '');
