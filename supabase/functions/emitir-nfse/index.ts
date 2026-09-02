@@ -138,7 +138,21 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!chamador) return json({ error: 'Só funcionários podem emitir NFS-e.' }, 403);
 
-  let corpo: { contaId?: number; acao?: 'emitir' | 'consultar' | 'previsualizar' };
+  type Overrides = Partial<{
+    razao_social_tomador: string;
+    documento_tomador: string;
+    logradouro_tomador: string;
+    numero_tomador: string;
+    complemento_tomador: string;
+    bairro_tomador: string;
+    cep_tomador: string;
+    cidade_tomador: string;
+    uf_tomador: string;
+    telefone_tomador: string;
+    email_tomador: string;
+    descricao_servico: string;
+  }>;
+  let corpo: { contaId?: number; acao?: 'emitir' | 'consultar' | 'previsualizar'; overrides?: Overrides };
   try {
     corpo = await req.json();
   } catch {
@@ -221,11 +235,29 @@ Deno.serve(async (req: Request) => {
     .single();
   if (erroCliente || !cliente) return json({ error: 'Cliente da conta não encontrado.' }, 404);
 
-  const documentoTomador = apenasDigitos(cliente.cnpj);
+  // Sobrescritas vindas da tela de conferência (Faturamento) - o setor de
+  // faturamento pode corrigir dados do tomador ali mesmo antes de
+  // transmitir (ex.: endereço que faltava no cadastro), sem precisar sair
+  // pra editar o cliente primeiro. Cada campo só sobrescreve se vier
+  // preenchido - em branco, usa o valor do cadastro normalmente.
+  const overrides = corpo.overrides ?? {};
+  const razaoSocialTomador = overrides.razao_social_tomador?.trim() || cliente.razao_social;
+  const documentoTomadorBruto = overrides.documento_tomador?.trim() || cliente.cnpj;
+  const logradouroTomador = overrides.logradouro_tomador?.trim() || cliente.logradouro;
+  const numeroEnderecoTomador = overrides.numero_tomador?.trim() || cliente.numero_endereco;
+  const complementoTomador = overrides.complemento_tomador?.trim() || cliente.complemento;
+  const bairroTomador = overrides.bairro_tomador?.trim() || cliente.bairro;
+  const cepTomador = overrides.cep_tomador?.trim() || cliente.cep;
+  const cidadeTomador = overrides.cidade_tomador?.trim() || cliente.cidade;
+  const ufTomador = overrides.uf_tomador?.trim() || cliente.uf;
+  const telefoneTomador = overrides.telefone_tomador?.trim() || cliente.telefone;
+  const emailTomador = overrides.email_tomador?.trim() || cliente.email;
+
+  const documentoTomador = apenasDigitos(documentoTomadorBruto);
   if (documentoTomador.length !== 14 && documentoTomador.length !== 11) {
     return json({ error: 'CNPJ/CPF do cliente inválido ou não cadastrado - corrija em Cadastros → Clientes.' }, 400);
   }
-  if (!cliente.razao_social) {
+  if (!razaoSocialTomador) {
     return json({ error: 'Razão social do cliente não cadastrada - corrija em Cadastros → Clientes.' }, 400);
   }
 
@@ -258,15 +290,16 @@ Deno.serve(async (req: Request) => {
   // o nome da cidade (não o código IBGE que o campo pede). Resolve via
   // consulta pública ao IBGE; se não conseguir achar, os campos de
   // endereço simplesmente ficam de fora (nunca inventa um código).
-  const codigoMunicipioTomador = await codigoIbgeMunicipio(cliente.cidade, cliente.uf);
+  const codigoMunicipioTomador = await codigoIbgeMunicipio(cidadeTomador, ufTomador);
   // Só manda o endereço se tiver o essencial completo - ver comentário
   // junto do payload sobre o grupo ser tudo-ou-nada no schema.
-  const enderecoTomadorCompleto = codigoMunicipioTomador != null && !!cliente.cep && !!cliente.logradouro;
+  const enderecoTomadorCompleto = codigoMunicipioTomador != null && !!cepTomador && !!logradouroTomador;
 
   const orc = (conta as unknown as { orcamentos: { numero_orcamento: string; ordens_servico: { numero_os: string } | null } | null }).orcamentos;
-  const descricaoServico = orc
+  const descricaoServicoPadrao = orc
     ? `Prestação de serviço de manutenção em equipamento cirúrgico - Orçamento ${orc.numero_orcamento}${orc.ordens_servico ? ' - OS ' + orc.ordens_servico.numero_os : ''}`
     : conta.descricao || 'Prestação de serviço de manutenção em equipamento cirúrgico';
+  const descricaoServico = overrides.descricao_servico?.trim() || descricaoServicoPadrao;
 
   // acao === 'previsualizar': monta o mesmo payload que seria enviado à
   // Focus NFe, mas devolve pro frontend sem transmitir nada - usado pela
@@ -286,7 +319,7 @@ Deno.serve(async (req: Request) => {
     regime_tributario_simples_nacional: REGIME_TRIBUTARIO_SIMPLES_NACIONAL,
     regime_especial_tributacao: 0,
     ...(documentoTomador.length === 14 ? { cnpj_tomador: documentoTomador } : { cpf_tomador: documentoTomador }),
-    razao_social_tomador: cliente.razao_social,
+    razao_social_tomador: razaoSocialTomador,
     // Endereço do tomador - o schema exige o grupo inteiro (cMun+CEP
     // dentro de endNac, xLgr dentro de end) ou nada - mandar só uma
     // parte (ex: só o município) quebra a nota ("endNac: falta CEP").
@@ -294,15 +327,15 @@ Deno.serve(async (req: Request) => {
     ...(enderecoTomadorCompleto
       ? {
           codigo_municipio_tomador: codigoMunicipioTomador,
-          cep_tomador: apenasDigitos(cliente.cep!),
-          logradouro_tomador: cliente.logradouro,
-          ...(cliente.numero_endereco ? { numero_tomador: cliente.numero_endereco } : {}),
-          ...(cliente.complemento ? { complemento_tomador: cliente.complemento } : {}),
-          ...(cliente.bairro ? { bairro_tomador: cliente.bairro } : {}),
+          cep_tomador: apenasDigitos(cepTomador!),
+          logradouro_tomador: logradouroTomador,
+          ...(numeroEnderecoTomador ? { numero_tomador: numeroEnderecoTomador } : {}),
+          ...(complementoTomador ? { complemento_tomador: complementoTomador } : {}),
+          ...(bairroTomador ? { bairro_tomador: bairroTomador } : {}),
         }
       : {}),
-    ...(cliente.telefone ? { telefone_tomador: cliente.telefone } : {}),
-    ...(cliente.email ? { email_tomador: cliente.email } : {}),
+    ...(telefoneTomador ? { telefone_tomador: telefoneTomador } : {}),
+    ...(emailTomador ? { email_tomador: emailTomador } : {}),
     codigo_municipio_prestacao: CODIGO_MUNICIPIO_RIBEIRAO_PRETO,
     codigo_tributacao_nacional_iss: CODIGO_TRIBUTACAO_NACIONAL_ISS,
     codigo_tributacao_municipal_iss: CODIGO_TRIBUTACAO_MUNICIPAL_ISS,
@@ -332,15 +365,18 @@ Deno.serve(async (req: Request) => {
       ok: true,
       payload,
       resumo: {
-        clienteRazaoSocial: cliente.razao_social,
-        documentoTomador,
-        enderecoTomador: enderecoTomadorCompleto
-          ? `${cliente.logradouro}${cliente.numero_endereco ? ', ' + cliente.numero_endereco : ''}` +
-            `${cliente.complemento ? ' - ' + cliente.complemento : ''}${cliente.bairro ? ' - ' + cliente.bairro : ''} - ` +
-            `${cliente.cidade}/${cliente.uf} - CEP ${cliente.cep}`
-          : null,
-        telefoneTomador: cliente.telefone ?? null,
-        emailTomador: cliente.email ?? null,
+        clienteId: conta.cliente_id,
+        razaoSocialTomador,
+        documentoTomador: documentoTomadorBruto,
+        logradouroTomador: logradouroTomador ?? '',
+        numeroEnderecoTomador: numeroEnderecoTomador ?? '',
+        complementoTomador: complementoTomador ?? '',
+        bairroTomador: bairroTomador ?? '',
+        cepTomador: cepTomador ?? '',
+        cidadeTomador: cidadeTomador ?? '',
+        ufTomador: ufTomador ?? '',
+        telefoneTomador: telefoneTomador ?? '',
+        emailTomador: emailTomador ?? '',
         descricaoServico,
         valorServico: conta.valor,
         aliquotaIss,
