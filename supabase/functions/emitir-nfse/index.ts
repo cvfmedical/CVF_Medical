@@ -104,13 +104,37 @@ async function codigoIbgeMunicipio(cidade: string | null, uf: string | null): Pr
 
 // dd/MM/yyyy-like ISO com offset de São Paulo (-03:00), formato exigido
 // pela Focus NFe (ex.: "2026-01-01T07:30:00-0300").
+//
+// BUG REAL corrigido em 2026-09-02: a versão anterior usava
+// agora.getHours()/getMinutes()/getSeconds(), que são os componentes de
+// horário LOCAL DO SERVIDOR - no Supabase Edge Functions (Deno Deploy) o
+// servidor roda em UTC, não em horário de Brasília. Isso fazia o código
+// pegar a hora UTC e simplesmente colar "-0300" no final, sem de fato
+// SUBTRAIR 3 horas - ou seja, a data/hora declarada ficava ~3h à FRENTE
+// do instante real (ex.: 20:17 UTC virava "20:17:00-0300", que na
+// verdade corresponde a 23:17 UTC). Achado porque a Focus rejeitou uma
+// emissão de teste com "A data e hora de emissão da DPS deve ser
+// anterior ou igual à data atual" mesmo enviada na hora - o teste com
+// série 8 (2026-09-02) expôs esse bug, que afetaria toda emissão, tanto
+// em homologação quanto em produção. Corrigido usando Intl.DateTimeFormat
+// com timeZone explícito, que calcula certo independente do fuso do
+// servidor.
 function dataEmissaoISO(): string {
-  const agora = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return (
-    `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}` +
-    `T${pad(agora.getHours())}:${pad(agora.getMinutes())}:${pad(agora.getSeconds())}-0300`
-  );
+  const formatador = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const partes = Object.fromEntries(formatador.formatToParts(new Date()).map((p) => [p.type, p.value]));
+  // Intl às vezes devolve "24" pra meia-noite em vez de "00" (quirk
+  // conhecido do hour12:false em alguns runtimes) - normaliza.
+  const hora = partes.hour === '24' ? '00' : partes.hour;
+  return `${partes.year}-${partes.month}-${partes.day}T${hora}:${partes.minute}:${partes.second}-0300`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -438,6 +462,22 @@ Deno.serve(async (req: Request) => {
         percentualTotalTributosMunicipais,
       },
     });
+  }
+
+  // Regra confirmada em teste real (2026-09-02, erro E0235 da SEFAZ
+  // Nacional): quando o tomador é identificado por CNPJ (é sempre o
+  // nosso caso - nunca CPF), o endereço nacional completo é OBRIGATÓRIO,
+  // não opcional. Antes disso o código só omitia o grupo de endereço
+  // quando incompleto (silenciosamente) - agora bloqueia a emissão com
+  // uma mensagem clara em vez de deixar a Focus rejeitar sem contexto.
+  if (documentoTomador.length === 14 && !enderecoTomadorCompleto) {
+    return json(
+      {
+        error:
+          'Endereço do cliente incompleto - a NFS-e nacional exige logradouro, CEP e cidade/UF quando o tomador é identificado por CNPJ. Complete o cadastro em Cadastros → Clientes (ou pela tela de conferência, "Salvar no cadastro") antes de emitir.',
+      },
+      400,
+    );
   }
 
   const resp = await fetch(`${focusBaseUrl}/v2/nfsen?ref=${encodeURIComponent(ref)}`, {
