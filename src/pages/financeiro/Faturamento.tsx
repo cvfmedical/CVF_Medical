@@ -40,6 +40,7 @@ interface ContaReceber {
   boleto_vencimento: string | null;
   nfse_status: string | null;
   nfse_erro_detalhe: string | null;
+  nfse_pdf_path: string | null;
   orcamentos: {
     numero_orcamento: string;
     ordem_servico_id: number;
@@ -88,6 +89,7 @@ interface LinhaFaturamento {
   boleto_vencimento: string | null;
   nfseStatus: string | null;
   nfseErroDetalhe: string | null;
+  nfsePdfPath: string | null;
 }
 
 const formVazio = {
@@ -289,7 +291,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('contas_receber')
         .select(
-          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, nfse_status, nfse_erro_detalhe, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, nfse_status, nfse_erro_detalhe, nfse_pdf_path, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
         )
         .neq('status', 'Cancelado')
         .order('id', { ascending: false });
@@ -351,6 +353,7 @@ export function Faturamento() {
       boleto_vencimento: c.boleto_vencimento,
       nfseStatus: c.nfse_status,
       nfseErroDetalhe: c.nfse_erro_detalhe,
+      nfsePdfPath: c.nfse_pdf_path,
     })),
     ...(orcamentosQuery.data ?? [])
       // Garantia e bonificação (cortesia) somam R$ 0,00 - não há o que
@@ -381,6 +384,7 @@ export function Faturamento() {
           boleto_vencimento: null,
           nfseStatus: null,
           nfseErroDetalhe: null,
+          nfsePdfPath: null,
         };
       }),
   ];
@@ -1307,6 +1311,11 @@ export function Faturamento() {
                 {l.nf_numero && (
                   <button className="botao-secundario" onClick={() => enviarPorEmail(l)}>
                     Enviar por e-mail
+                  </button>
+                )}
+                {l.nfsePdfPath && (
+                  <button className="botao-secundario" onClick={() => window.open(l.nfsePdfPath!, '_blank')}>
+                    Ver DANFSe oficial
                   </button>
                 )}
                 {l.nf_numero && l.contaId && (
