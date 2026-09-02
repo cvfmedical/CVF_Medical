@@ -151,6 +151,7 @@ export function ContasPagar() {
     fornecedor_id: '',
     descricao: '',
     parcelado: false,
+    repetirTodoAno: false,
     valor: '',
     data_vencimento: '',
     forma_pagamento: '',
@@ -230,21 +231,42 @@ export function ContasPagar() {
     setSalvandoNovo(true);
     try {
       if (categoria) talvezCadastrarCategoriaNova(categoria);
-      const { error } = await supabase.from('contas_pagar').insert({
-        numero_conta: numeroGerado,
-        tipo_custo: formNovo.tipo_custo,
-        socio,
-        categoria,
-        fornecedor_id: fornecedorId,
-        descricao: formNovo.descricao,
-        valor: Number(formNovo.valor),
-        data_vencimento: formNovo.data_vencimento,
-        data_pagamento: formNovo.data_pagamento || null,
-        forma_pagamento: formNovo.forma_pagamento || null,
-        status: formNovo.status,
-        observacoes: formNovo.observacoes || null,
-      });
-      if (error) throw error;
+
+      // "Repetir todo mês até dezembro": mesmo valor/descrição, um
+      // lançamento por mês restante do ano do vencimento informado (dia
+      // fixo, ajustado pro último dia do mês quando o mês alvo for mais
+      // curto - ex: vencimento dia 31 vira dia 30 em abril).
+      const dataBase = new Date(`${formNovo.data_vencimento}T00:00:00`);
+      const datasVencimento = [dataBase];
+      if (formNovo.repetirTodoAno) {
+        const ano = dataBase.getFullYear();
+        const mesBase = dataBase.getMonth();
+        const dia = dataBase.getDate();
+        for (let mes = mesBase + 1; mes <= 11; mes++) {
+          const ultimoDiaMesAlvo = new Date(ano, mes + 1, 0).getDate();
+          datasVencimento.push(new Date(ano, mes, Math.min(dia, ultimoDiaMesAlvo)));
+        }
+      }
+
+      for (const dataVenc of datasVencimento) {
+        const primeira = dataVenc === dataBase;
+        const numeroConta = primeira ? numeroGerado : await gerarNumeroConta();
+        const { error } = await supabase.from('contas_pagar').insert({
+          numero_conta: numeroConta,
+          tipo_custo: formNovo.tipo_custo,
+          socio,
+          categoria,
+          fornecedor_id: fornecedorId,
+          descricao: formNovo.descricao,
+          valor: Number(formNovo.valor),
+          data_vencimento: dataVenc.toISOString().slice(0, 10),
+          data_pagamento: primeira ? formNovo.data_pagamento || null : null,
+          forma_pagamento: formNovo.forma_pagamento || null,
+          status: primeira ? formNovo.status : 'Em aberto',
+          observacoes: formNovo.observacoes || null,
+        });
+        if (error) throw error;
+      }
       setModalNovoAberto(false);
       setNumeroGerado(await gerarNumeroConta());
       qc.invalidateQueries({ queryKey: ['contas_pagar'] });
@@ -412,14 +434,32 @@ export function ContasPagar() {
             <textarea value={formNovo.descricao} onChange={(e) => setFormNovo((f) => ({ ...f, descricao: e.target.value }))} />
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '12px 0' }}>
-            <input
-              type="checkbox"
-              checked={formNovo.parcelado}
-              onChange={(e) => setFormNovo((f) => ({ ...f, parcelado: e.target.checked }))}
-            />
-            Pagamento parcelado
-          </label>
+          {!formNovo.repetirTodoAno && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '12px 0' }}>
+              <input
+                type="checkbox"
+                checked={formNovo.parcelado}
+                onChange={(e) => setFormNovo((f) => ({ ...f, parcelado: e.target.checked }))}
+              />
+              Pagamento parcelado
+            </label>
+          )}
+          {!formNovo.parcelado && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '12px 0' }}>
+              <input
+                type="checkbox"
+                checked={formNovo.repetirTodoAno}
+                onChange={(e) => setFormNovo((f) => ({ ...f, repetirTodoAno: e.target.checked }))}
+              />
+              Repetir todo mês até dezembro (mesmo valor e descrição)
+            </label>
+          )}
+          {formNovo.repetirTodoAno && (
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+              Cria um lançamento "Em aberto" pra esse mês (com o status/data de pagamento informados abaixo) e mais um
+              por mês restante do ano do vencimento, mesmo dia, mesmo valor e descrição.
+            </p>
+          )}
 
           {formNovo.parcelado ? (
             <>
@@ -521,7 +561,13 @@ export function ContasPagar() {
               Cancelar
             </button>
             <button className="botao-primario" onClick={salvarNovo} disabled={salvandoNovo}>
-              {salvandoNovo ? 'Salvando...' : formNovo.parcelado ? 'Gerar parcelas' : 'Salvar'}
+              {salvandoNovo
+                ? 'Salvando...'
+                : formNovo.parcelado
+                  ? 'Gerar parcelas'
+                  : formNovo.repetirTodoAno
+                    ? 'Gerar lançamentos'
+                    : 'Salvar'}
             </button>
           </div>
         </ModalJanela>
