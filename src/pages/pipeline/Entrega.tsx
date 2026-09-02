@@ -102,11 +102,26 @@ export function Entrega() {
   const [novoCodigoRastreio, setNovoCodigoRastreio] = useState('');
   const [salvandoRastreio, setSalvandoRastreio] = useState(false);
   const [erroRastreio, setErroRastreio] = useState<string | null>(null);
+  const [arquivoEtiqueta, setArquivoEtiqueta] = useState<File | null>(null);
+  const [enviandoAutomatico, setEnviandoAutomatico] = useState(false);
+  const [enviadoAutomatico, setEnviadoAutomatico] = useState(false);
 
   function abrirEdicaoRastreio(row: EntregaRow) {
     setRowEditandoRastreio(row);
     setNovoCodigoRastreio(row.codigo_rastreio ?? '');
+    setArquivoEtiqueta(null);
+    setEnviadoAutomatico(false);
     setErroRastreio(null);
+  }
+
+  async function salvarCodigoRastreio(codigo: string) {
+    if (!rowEditandoRastreio) return;
+    const { error } = await supabase
+      .from('entregas')
+      .update({ codigo_rastreio: codigo.trim() || null })
+      .eq('id', rowEditandoRastreio.id);
+    if (error) throw error;
+    qc.invalidateQueries({ queryKey: ['entregas'] });
   }
 
   async function salvarRastreio() {
@@ -114,17 +129,71 @@ export function Entrega() {
     setSalvandoRastreio(true);
     setErroRastreio(null);
     try {
-      const { error } = await supabase
-        .from('entregas')
-        .update({ codigo_rastreio: novoCodigoRastreio.trim() || null })
-        .eq('id', rowEditandoRastreio.id);
-      if (error) throw error;
+      await salvarCodigoRastreio(novoCodigoRastreio);
       setRowEditandoRastreio(null);
-      qc.invalidateQueries({ queryKey: ['entregas'] });
     } catch (e) {
       setErroRastreio(mensagemErro(e));
     } finally {
       setSalvandoRastreio(false);
+    }
+  }
+
+  function arquivoParaBase64(arquivo: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onload = () => {
+        // data:application/pdf;base64,XXXX - o Resend só quer o "XXXX".
+        const resultado = String(leitor.result);
+        resolve(resultado.slice(resultado.indexOf(',') + 1));
+      };
+      leitor.onerror = () => reject(leitor.error);
+      leitor.readAsDataURL(arquivo);
+    });
+  }
+
+  // Salva o código, monta o e-mail (com a etiqueta em PDF anexada, se
+  // escolhida) e dispara pelo Resend via a mesma function que já envia
+  // orçamento - já sai da caixa da CVF, sem precisar do Gmail do técnico.
+  async function enviarRastreioAutomatico() {
+    if (!rowEditandoRastreio) return;
+    if (!novoCodigoRastreio.trim()) {
+      setErroRastreio('Informe o código de rastreio antes de enviar.');
+      return;
+    }
+    const os = porId(rowEditandoRastreio.ordem_servico_id);
+    const email = os ? clientesEmailQuery.data?.find((c) => c.id === os.cliente_id)?.email : null;
+    if (!email) {
+      setErroRastreio('Cliente sem e-mail cadastrado - corrija em Cadastros → Clientes, ou use "Enviar rastreio" (abre no seu e-mail).');
+      return;
+    }
+    setEnviandoAutomatico(true);
+    setErroRastreio(null);
+    try {
+      await salvarCodigoRastreio(novoCodigoRastreio);
+      const anexos = arquivoEtiqueta
+        ? [{ filename: arquivoEtiqueta.name || 'etiqueta-despacho.pdf', content: await arquivoParaBase64(arquivoEtiqueta) }]
+        : [];
+      const html = `
+        <p>Olá!</p>
+        <p>Seu equipamento (OS ${os?.numero_os ?? rowEditandoRastreio.ordem_servico_id}) foi postado nos Correios.</p>
+        <p><strong>Código de rastreio:</strong> ${novoCodigoRastreio.trim()}</p>
+        <p>Acompanhe em <a href="https://rastreamento.correios.com.br/app/index.php">rastreamento.correios.com.br</a>.</p>
+      `;
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: {
+          to: email,
+          subject: `Q-CVF Medical - Código de rastreio - OS ${os?.numero_os ?? ''}`,
+          html,
+          anexos,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+      setEnviadoAutomatico(true);
+    } catch (e) {
+      setErroRastreio(mensagemErro(e));
+    } finally {
+      setEnviandoAutomatico(false);
     }
   }
 
@@ -540,14 +609,30 @@ export function Entrega() {
           />
         </div>
 
+        <div className="campo-form">
+          <label>Etiqueta em PDF (opcional, anexada no e-mail automático)</label>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => setArquivoEtiqueta(e.target.files?.[0] ?? null)}
+          />
+          {arquivoEtiqueta && (
+            <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>Selecionado: {arquivoEtiqueta.name}</p>
+          )}
+        </div>
+
+        {enviadoAutomatico && <p style={{ fontSize: 13, color: 'var(--teal-600, #0d7d6f)' }}>E-mail enviado com sucesso!</p>}
         {erroRastreio && <p className="erro-login">{erroRastreio}</p>}
 
         <div className="modal-acoes">
-          <button className="botao-secundario" onClick={() => setRowEditandoRastreio(null)} disabled={salvandoRastreio}>
+          <button className="botao-secundario" onClick={() => setRowEditandoRastreio(null)} disabled={salvandoRastreio || enviandoAutomatico}>
             Cancelar
           </button>
-          <button className="botao-primario" onClick={salvarRastreio} disabled={salvandoRastreio}>
-            {salvandoRastreio ? 'Salvando...' : 'Salvar'}
+          <button className="botao-secundario" onClick={salvarRastreio} disabled={salvandoRastreio || enviandoAutomatico}>
+            {salvandoRastreio ? 'Salvando...' : 'Só salvar'}
+          </button>
+          <button className="botao-primario" onClick={enviarRastreioAutomatico} disabled={salvandoRastreio || enviandoAutomatico}>
+            {enviandoAutomatico ? 'Enviando...' : 'Salvar e enviar por e-mail'}
           </button>
         </div>
       </ModalJanela>
