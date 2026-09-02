@@ -34,13 +34,13 @@ const TIPO_RETENCAO_ISS = 1; // tpRetISSQN: 1 = Não Retido (confirmado no Nota 
 const SERIE_DPS_PRODUCAO = 70002;
 // O ambiente de HOMOLOGAÇÃO usa um cadastro de contribuinte separado
 // (autocadastro no sandbox da ISS.net, não o cadastro real da prefeitura)
-// - a série 70002 é específica da produção e voltou a dar "Série da DPS
-// inválida" mesmo já confirmada (2026-09-02), possivelmente porque não
-// está registrada nesse sandbox. Testando com "1" (padrão mais comum) só
-// em homologação enquanto não confirmamos com a Focus NFe/Nota Control -
-// AINDA NÃO CONFIRMADO, ajustável sem redeploy via env
-// FOCUS_NFE_SERIE_DPS_HOMOLOGACAO caso "1" também falhe.
-const SERIE_DPS_HOMOLOGACAO = Deno.env.get('FOCUS_NFE_SERIE_DPS_HOMOLOGACAO') ?? '1';
+// - a série 70002 é específica da produção e dava "Série da DPS inválida"
+// nesse sandbox. CONFIRMADO pelo suporte da Focus NFe (2026-09-02, Vitor
+// Gabriel Oliveira): uma emissão anterior foi autorizada em homologação
+// usando série 8 - não é chute, é o valor real de uma nota já aceita
+// nesse ambiente. Ajustável sem redeploy via env
+// FOCUS_NFE_SERIE_DPS_HOMOLOGACAO se precisar trocar de novo.
+const SERIE_DPS_HOMOLOGACAO = Deno.env.get('FOCUS_NFE_SERIE_DPS_HOMOLOGACAO') ?? '8';
 // opSimpNac: 3 = "Optante - Microempresa ou Empresa de Pequeno Porte
 // (ME/EPP)" - confirmado na mesma nota real (<opSimpNac>3</opSimpNac>).
 // ATENÇÃO: estava com "1" (Não Optante) até 2026-09-01 - valor errado,
