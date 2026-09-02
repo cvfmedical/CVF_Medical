@@ -442,9 +442,15 @@ Deno.serve(async (req: Request) => {
   const resultado = await resp.json().catch(() => ({}));
 
   if (!resp.ok) {
+    // Guarda a resposta BRUTA inteira (não só "mensagem") - a Focus às
+    // vezes devolve um "mensagem" curto e genérico que não bate com a
+    // causa real (ex.: "Série da DPS inválida" mesmo já tendo testado
+    // duas séries diferentes) - precisamos do JSON completo (código de
+    // erro, campo apontado, etc.) pra diagnosticar direito, não adivinhar.
+    const detalheCompleto = `HTTP ${resp.status} | ${JSON.stringify(resultado)}`;
     await supabaseAdmin
       .from('contas_receber')
-      .update({ nfse_status: 'erro', nfse_erro_detalhe: resultado.mensagem ?? JSON.stringify(resultado) })
+      .update({ nfse_status: 'erro', nfse_erro_detalhe: detalheCompleto })
       .eq('id', contaId);
     return json({ error: 'Falha ao emitir NFS-e', detalhe: resultado }, 502);
   }
