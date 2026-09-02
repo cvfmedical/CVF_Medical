@@ -68,12 +68,14 @@ export function Entrega() {
   // status já tenha avançado pra "Entregue" (efeito esperado de já ter
   // sido entregue antes). Sem isso, editar uma entrega já salva mostrava
   // o campo "Ordem de serviço" em branco e travava com "OS não liberada".
+  // Também usada pra montar o painel de seleção "enviar rastreio em lote" -
+  // por isso já traz id e codigo_rastreio, não só ordem_servico_id.
   const entregasExistentesQuery = useQuery({
     queryKey: ['entregas-os-ids'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('entregas').select('ordem_servico_id');
+      const { data, error } = await supabase.from('entregas').select('id, ordem_servico_id, codigo_rastreio');
       if (error) throw error;
-      return data as { ordem_servico_id: number }[];
+      return data as { id: number; ordem_servico_id: number; codigo_rastreio: string | null }[];
     },
   });
 
@@ -90,15 +92,28 @@ export function Entrega() {
 
   function enviarRastreioPorEmail(row: EntregaRow) {
     const os = porId(row.ordem_servico_id);
+    const orc = orcamentoPorOS(row.ordem_servico_id);
     const email = os ? clientesEmailQuery.data?.find((c) => c.id === os.cliente_id)?.email : null;
-    const corpo = `Olá! Seu equipamento (OS ${os?.numero_os ?? row.ordem_servico_id}) foi postado nos Correios. Código de rastreio: ${row.codigo_rastreio}. Acompanhe em https://rastreamento.correios.com.br/app/index.php`;
-    window.open(linkEmail(email, `Q-CVF Medical - Código de rastreio - OS ${os?.numero_os ?? ''}`, corpo), '_blank');
+    const corpo = `Olá! Segue o código de rastreio dos Correios referente ao orçamento ${orc?.numero ?? row.ordem_servico_id}. Código de rastreio: ${row.codigo_rastreio}. Acompanhe em https://rastreamento.correios.com.br/app/index.php`;
+    window.open(
+      linkEmail(email, `RASTREAMENTO REFERENTE AOS ORÇAMENTOS ${orc?.numero ?? ''}`, corpo),
+      '_blank',
+    );
   }
 
   // Atalho dedicado só pro código de rastreio - sem precisar abrir o
   // formulário genérico de edição (que mistura o campo com NF de
-  // devolução, forma de devolução, etc.).
-  const [rowEditandoRastreio, setRowEditandoRastreio] = useState<EntregaRow | null>(null);
+  // devolução, forma de devolução, etc.). Trabalha com uma LISTA de
+  // entregas (não só uma) porque na prática a maioria dos pacotes reúne
+  // vários orçamentos/OS do mesmo cliente sob um único código de rastreio -
+  // por isso só precisa de id/ordem_servico_id/codigo_rastreio de cada uma,
+  // não da linha inteira (essas 3 colunas já vêm de entregasExistentesQuery).
+  interface RastreioAlvo {
+    id: number;
+    ordem_servico_id: number;
+    codigo_rastreio: string | null;
+  }
+  const [linhasEditandoRastreio, setLinhasEditandoRastreio] = useState<RastreioAlvo[] | null>(null);
   const [novoCodigoRastreio, setNovoCodigoRastreio] = useState('');
   const [salvandoRastreio, setSalvandoRastreio] = useState(false);
   const [erroRastreio, setErroRastreio] = useState<string | null>(null);
@@ -106,31 +121,76 @@ export function Entrega() {
   const [enviandoAutomatico, setEnviandoAutomatico] = useState(false);
   const [enviadoAutomatico, setEnviadoAutomatico] = useState(false);
 
-  function abrirEdicaoRastreio(row: EntregaRow) {
-    setRowEditandoRastreio(row);
-    setNovoCodigoRastreio(row.codigo_rastreio ?? '');
+  // Painel de seleção (mesmo padrão do "Selecionar etiquetas para
+  // imprimir") pra juntar várias entregas do mesmo cliente antes de abrir
+  // o modal de rastreio.
+  const [selecionandoRastreio, setSelecionandoRastreio] = useState(false);
+  const [entregasSelecionadasRastreio, setEntregasSelecionadasRastreio] = useState<Set<number>>(new Set());
+  const entregasSemRastreio = (entregasExistentesQuery.data ?? []).filter((e) => !e.codigo_rastreio);
+
+  function alternarSelecaoEntregaRastreio(id: number) {
+    setEntregasSelecionadasRastreio((s) => {
+      const nova = new Set(s);
+      if (nova.has(id)) nova.delete(id);
+      else nova.add(id);
+      return nova;
+    });
+  }
+
+  // Cliente das entregas selecionadas - null se estiverem vazias OU se
+  // misturarem mais de um cliente (não faz sentido mandar um e-mail só pra
+  // um pacote com OS de clientes diferentes).
+  function clienteComumDas(linhas: RastreioAlvo[]): number | null {
+    const clienteIds = new Set(linhas.map((l) => porId(l.ordem_servico_id)?.cliente_id).filter((id): id is number => id != null));
+    return clienteIds.size === 1 ? [...clienteIds][0] : null;
+  }
+
+  function abrirEdicaoRastreio(linhas: RastreioAlvo[]) {
+    setLinhasEditandoRastreio(linhas);
+    setNovoCodigoRastreio(linhas.find((l) => l.codigo_rastreio)?.codigo_rastreio ?? '');
     setArquivoEtiqueta(null);
     setEnviadoAutomatico(false);
     setErroRastreio(null);
   }
 
+  function continuarSelecaoRastreio() {
+    const linhas = entregasSemRastreio.filter((e) => entregasSelecionadasRastreio.has(e.id));
+    if (linhas.length === 0) return;
+    if (clienteComumDas(linhas) == null) return;
+    abrirEdicaoRastreio(linhas);
+    setSelecionandoRastreio(false);
+    setEntregasSelecionadasRastreio(new Set());
+  }
+
+  // Texto usado no assunto/corpo do e-mail - "ORC-1 / ORC-2 / ORC-3" pra
+  // quantos orçamentos estiverem no pacote (normalmente mais de um).
+  function numerosOrcamentoTexto(linhas: RastreioAlvo[]): string {
+    return linhas
+      .map((l) => orcamentoPorOS(l.ordem_servico_id)?.numero ?? `OS #${l.ordem_servico_id}`)
+      .join(' / ');
+  }
+
   async function salvarCodigoRastreio(codigo: string) {
-    if (!rowEditandoRastreio) return;
+    if (!linhasEditandoRastreio || linhasEditandoRastreio.length === 0) return;
     const { error } = await supabase
       .from('entregas')
       .update({ codigo_rastreio: codigo.trim() || null })
-      .eq('id', rowEditandoRastreio.id);
+      .in(
+        'id',
+        linhasEditandoRastreio.map((l) => l.id),
+      );
     if (error) throw error;
     qc.invalidateQueries({ queryKey: ['entregas'] });
+    qc.invalidateQueries({ queryKey: ['entregas-os-ids'] });
   }
 
   async function salvarRastreio() {
-    if (!rowEditandoRastreio) return;
+    if (!linhasEditandoRastreio) return;
     setSalvandoRastreio(true);
     setErroRastreio(null);
     try {
       await salvarCodigoRastreio(novoCodigoRastreio);
-      setRowEditandoRastreio(null);
+      setLinhasEditandoRastreio(null);
     } catch (e) {
       setErroRastreio(mensagemErro(e));
     } finally {
@@ -151,17 +211,18 @@ export function Entrega() {
     });
   }
 
-  // Salva o código, monta o e-mail (com a etiqueta em PDF anexada, se
-  // escolhida) e dispara pelo Resend via a mesma function que já envia
-  // orçamento - já sai da caixa da CVF, sem precisar do Gmail do técnico.
+  // Salva o código nas entregas selecionadas, monta o e-mail (com a
+  // etiqueta em PDF anexada, se escolhida) e dispara pelo Resend via a
+  // mesma function que já envia orçamento - já sai da caixa da CVF, sem
+  // precisar do Gmail do técnico.
   async function enviarRastreioAutomatico() {
-    if (!rowEditandoRastreio) return;
+    if (!linhasEditandoRastreio || linhasEditandoRastreio.length === 0) return;
     if (!novoCodigoRastreio.trim()) {
       setErroRastreio('Informe o código de rastreio antes de enviar.');
       return;
     }
-    const os = porId(rowEditandoRastreio.ordem_servico_id);
-    const email = os ? clientesEmailQuery.data?.find((c) => c.id === os.cliente_id)?.email : null;
+    const clienteId = clienteComumDas(linhasEditandoRastreio);
+    const email = clienteId != null ? clientesEmailQuery.data?.find((c) => c.id === clienteId)?.email : null;
     if (!email) {
       setErroRastreio('Cliente sem e-mail cadastrado - corrija em Cadastros → Clientes, ou use "Enviar rastreio" (abre no seu e-mail).');
       return;
@@ -173,16 +234,19 @@ export function Entrega() {
       const anexos = arquivoEtiqueta
         ? [{ filename: arquivoEtiqueta.name || 'etiqueta-despacho.pdf', content: await arquivoParaBase64(arquivoEtiqueta) }]
         : [];
+      const numeros = numerosOrcamentoTexto(linhasEditandoRastreio);
       const html = `
         <p>Olá!</p>
-        <p>Seu equipamento (OS ${os?.numero_os ?? rowEditandoRastreio.ordem_servico_id}) foi postado nos Correios.</p>
+        <p>Segue o código de rastreio dos Correios referente aos orçamentos ${numeros}.</p>
         <p><strong>Código de rastreio:</strong> ${novoCodigoRastreio.trim()}</p>
-        <p>Acompanhe em <a href="https://rastreamento.correios.com.br/app/index.php">rastreamento.correios.com.br</a>.</p>
+        <p>Acompanhe a entrega em: <a href="https://rastreamento.correios.com.br/app/index.php">rastreamento.correios.com.br</a>.</p>
+        <p>Qualquer dúvida, estamos à disposição.</p>
+        <p>Atenciosamente,<br>CVF Medical</p>
       `;
       const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
         body: {
           to: email,
-          subject: `Q-CVF Medical - Código de rastreio - OS ${os?.numero_os ?? ''}`,
+          subject: `RASTREAMENTO REFERENTE AOS ORÇAMENTOS ${numeros}`,
           html,
           anexos,
         },
@@ -340,7 +404,72 @@ export function Entrega() {
         <button className="botao-secundario" onClick={imprimirOrientacaoEsterilizacao}>
           Orientação de esterilização (PDF)
         </button>
+        <button
+          className="botao-secundario"
+          onClick={() => setSelecionandoRastreio((v) => !v)}
+          disabled={entregasSemRastreio.length === 0}
+        >
+          Selecionar entregas para enviar rastreio{entregasSelecionadasRastreio.size > 0 ? ` (${entregasSelecionadasRastreio.size})` : ''}
+        </button>
       </div>
+
+      {selecionandoRastreio && (
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 12,
+            background: 'var(--paper-50)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <strong style={{ fontSize: 13 }}>
+              Entregas sem rastreio - marque as do MESMO cliente que vão no mesmo pacote/código
+            </strong>
+            <button className="botao-secundario botao-pequeno" onClick={() => setEntregasSelecionadasRastreio(new Set())}>
+              Limpar seleção
+            </button>
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {entregasSemRastreio.map((e) => {
+              const os = porId(e.ordem_servico_id);
+              const orc = orcamentoPorOS(e.ordem_servico_id);
+              return (
+                <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={entregasSelecionadasRastreio.has(e.id)}
+                    onChange={() => alternarSelecaoEntregaRastreio(e.id)}
+                  />
+                  {os?.numero_os ?? `OS #${e.ordem_servico_id}`} - {os?.cliente_nome ?? '-'}
+                  {orc ? ` - ${orc.numero}` : ''}
+                </label>
+              );
+            })}
+            {entregasSemRastreio.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma entrega pendente de rastreio no momento.</p>
+            )}
+          </div>
+          {entregasSelecionadasRastreio.size > 0 &&
+            clienteComumDas(entregasSemRastreio.filter((e) => entregasSelecionadasRastreio.has(e.id))) == null && (
+              <p style={{ fontSize: 12, color: 'var(--danger-500)', marginTop: 8 }}>
+                As entregas marcadas são de clientes diferentes - selecione só entregas do mesmo cliente.
+              </p>
+            )}
+          <button
+            className="botao-primario botao-pequeno"
+            style={{ marginTop: 10 }}
+            onClick={continuarSelecaoRastreio}
+            disabled={
+              entregasSelecionadasRastreio.size === 0 ||
+              clienteComumDas(entregasSemRastreio.filter((e) => entregasSelecionadasRastreio.has(e.id))) == null
+            }
+          >
+            Continuar ({entregasSelecionadasRastreio.size})
+          </button>
+        </div>
+      )}
 
       {selecionandoEtiquetas && (
         <div
@@ -506,7 +635,7 @@ export function Entrega() {
           <button
             className="botao-icone"
             title={row.codigo_rastreio ? 'Editar código de rastreio' : 'Adicionar código de rastreio'}
-            onClick={() => abrirEdicaoRastreio(row)}
+            onClick={() => abrirEdicaoRastreio([{ id: row.id, ordem_servico_id: row.ordem_servico_id, codigo_rastreio: row.codigo_rastreio }])}
           >
             <IconTruckDelivery size={16} />
           </button>
@@ -597,8 +726,12 @@ export function Entrega() {
       }}
     />
 
-    {rowEditandoRastreio && (
-      <ModalJanela titulo="Código de rastreio (Correios)" aoFechar={() => setRowEditandoRastreio(null)}>
+    {linhasEditandoRastreio && (
+      <ModalJanela titulo="Código de rastreio (Correios)" aoFechar={() => setLinhasEditandoRastreio(null)}>
+        <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+          Orçamento{linhasEditandoRastreio.length > 1 ? 's' : ''} nesse envio: {numerosOrcamentoTexto(linhasEditandoRastreio)}
+        </p>
+
         <div className="campo-form">
           <label>Código de rastreio</label>
           <input
@@ -625,7 +758,7 @@ export function Entrega() {
         {erroRastreio && <p className="erro-login">{erroRastreio}</p>}
 
         <div className="modal-acoes">
-          <button className="botao-secundario" onClick={() => setRowEditandoRastreio(null)} disabled={salvandoRastreio || enviandoAutomatico}>
+          <button className="botao-secundario" onClick={() => setLinhasEditandoRastreio(null)} disabled={salvandoRastreio || enviandoAutomatico}>
             Cancelar
           </button>
           <button className="botao-secundario" onClick={salvarRastreio} disabled={salvandoRastreio || enviandoAutomatico}>
