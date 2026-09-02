@@ -7,13 +7,14 @@ import { supabase } from '../../lib/supabaseClient';
 import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { imprimirOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { imprimirEtiquetaDespacho, imprimirEtiquetasDespachoLote, type DadosEtiquetaDespacho } from '../../lib/etiquetaDespacho';
-import { IconPrinter } from '@tabler/icons-react';
+import { IconPrinter, IconTruckDelivery } from '@tabler/icons-react';
 import { mensagemErro } from '../../lib/erros';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { linkEmail } from '../../lib/compartilhar';
+import { ModalJanela } from '../../components/ModalJanela';
 
 interface EntregaRow {
   id: number;
@@ -92,6 +93,39 @@ export function Entrega() {
     const email = os ? clientesEmailQuery.data?.find((c) => c.id === os.cliente_id)?.email : null;
     const corpo = `Olá! Seu equipamento (OS ${os?.numero_os ?? row.ordem_servico_id}) foi postado nos Correios. Código de rastreio: ${row.codigo_rastreio}. Acompanhe em https://rastreamento.correios.com.br/app/index.php`;
     window.open(linkEmail(email, `Q-CVF Medical - Código de rastreio - OS ${os?.numero_os ?? ''}`, corpo), '_blank');
+  }
+
+  // Atalho dedicado só pro código de rastreio - sem precisar abrir o
+  // formulário genérico de edição (que mistura o campo com NF de
+  // devolução, forma de devolução, etc.).
+  const [rowEditandoRastreio, setRowEditandoRastreio] = useState<EntregaRow | null>(null);
+  const [novoCodigoRastreio, setNovoCodigoRastreio] = useState('');
+  const [salvandoRastreio, setSalvandoRastreio] = useState(false);
+  const [erroRastreio, setErroRastreio] = useState<string | null>(null);
+
+  function abrirEdicaoRastreio(row: EntregaRow) {
+    setRowEditandoRastreio(row);
+    setNovoCodigoRastreio(row.codigo_rastreio ?? '');
+    setErroRastreio(null);
+  }
+
+  async function salvarRastreio() {
+    if (!rowEditandoRastreio) return;
+    setSalvandoRastreio(true);
+    setErroRastreio(null);
+    try {
+      const { error } = await supabase
+        .from('entregas')
+        .update({ codigo_rastreio: novoCodigoRastreio.trim() || null })
+        .eq('id', rowEditandoRastreio.id);
+      if (error) throw error;
+      setRowEditandoRastreio(null);
+      qc.invalidateQueries({ queryKey: ['entregas'] });
+    } catch (e) {
+      setErroRastreio(mensagemErro(e));
+    } finally {
+      setSalvandoRastreio(false);
+    }
   }
 
   if (isLoading || orcamentosQuery.isLoading || entregasExistentesQuery.isLoading) return <CarregandoTela />;
@@ -400,6 +434,13 @@ export function Entrega() {
           >
             <IconPrinter size={16} />
           </button>
+          <button
+            className="botao-icone"
+            title={row.codigo_rastreio ? 'Editar código de rastreio' : 'Adicionar código de rastreio'}
+            onClick={() => abrirEdicaoRastreio(row)}
+          >
+            <IconTruckDelivery size={16} />
+          </button>
           {row.codigo_rastreio && (
             <button
               className="botao-secundario botao-pequeno"
@@ -486,6 +527,31 @@ export function Entrega() {
         qc.invalidateQueries({ queryKey: ['ordens-servico-opcoes'] });
       }}
     />
+
+    {rowEditandoRastreio && (
+      <ModalJanela titulo="Código de rastreio (Correios)" aoFechar={() => setRowEditandoRastreio(null)}>
+        <div className="campo-form">
+          <label>Código de rastreio</label>
+          <input
+            type="text"
+            value={novoCodigoRastreio}
+            onChange={(e) => setNovoCodigoRastreio(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        {erroRastreio && <p className="erro-login">{erroRastreio}</p>}
+
+        <div className="modal-acoes">
+          <button className="botao-secundario" onClick={() => setRowEditandoRastreio(null)} disabled={salvandoRastreio}>
+            Cancelar
+          </button>
+          <button className="botao-primario" onClick={salvarRastreio} disabled={salvandoRastreio}>
+            {salvandoRastreio ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </ModalJanela>
+    )}
     </div>
   );
 }
