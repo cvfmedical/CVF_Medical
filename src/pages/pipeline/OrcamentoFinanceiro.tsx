@@ -1526,7 +1526,7 @@ export function OrcamentoFinanceiro() {
     if (chave === 'codigo_entrada') return codigoEntradaPorOS.get(o.ordem_servico_id) ?? '';
     if (chave === 'numero_os') return o.ordens_servico?.numero_os ?? '';
     if (chave === 'cliente_nome') return o.ordens_servico?.cliente_nome ?? '';
-    if (chave === 'material') return `${o.ordens_servico?.optica_fab ?? ''} ${o.ordens_servico?.optica_desc ?? ''}`.trim();
+    if (chave === 'material') return `${o.ordens_servico?.optica_desc ?? ''} ${o.ordens_servico?.optica_fab ?? ''}`.trim();
     return (o as unknown as Record<string, unknown>)[chave];
   }
   const algumFiltroListaAtivo = Object.values(filtrosColunaLista).some((v) => v.trim());
@@ -1778,9 +1778,9 @@ export function OrcamentoFinanceiro() {
                   </div>
                 )}
                 <strong>Ótica da OS {orcamentoSelecionado.ordens_servico.numero_os}:</strong>{' '}
-                {[orcamentoSelecionado.ordens_servico.optica_fab, orcamentoSelecionado.ordens_servico.optica_desc]
+                {[orcamentoSelecionado.ordens_servico.optica_desc, orcamentoSelecionado.ordens_servico.optica_fab]
                   .filter(Boolean)
-                  .join(' ') || '—'}
+                  .join(' - ') || '—'}
                 {orcamentoSelecionado.ordens_servico.optica_sn
                   ? ` · Nº série ${orcamentoSelecionado.ordens_servico.optica_sn}`
                   : ''}

@@ -108,7 +108,13 @@ export function OrdemServico() {
     if (tipo === 'otica') {
       const item = catalogoQuery.data?.find((c) => String(c.id) === id);
       if (!item) return;
-      setForm((f) => ({ ...f, optica_fab: item.fabricante, optica_desc: formatarModeloOtica({ ...item, fabricante: '' }) }));
+      setForm((f) => ({
+        ...f,
+        optica_fab: item.fabricante,
+        optica_desc: item.subgrupo
+          ? `${item.subgrupo} - ${formatarModeloOtica({ ...item, fabricante: '' })}`
+          : formatarModeloOtica({ ...item, fabricante: '' }),
+      }));
       setEhOtica(true);
       setCatalogoOticaId(id);
       setGrupoEquipamento(item.grupo ?? '');
@@ -116,7 +122,11 @@ export function OrdemServico() {
     } else if (tipo === 'produto') {
       const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === id);
       if (!item) return;
-      setForm((f) => ({ ...f, optica_fab: item.marca_fabricante ?? '', optica_desc: item.nome }));
+      setForm((f) => ({
+        ...f,
+        optica_fab: item.marca_fabricante ?? '',
+        optica_desc: item.subgrupo ? `${item.subgrupo} - ${item.nome}` : item.nome,
+      }));
       setEhOtica(false);
       setCatalogoOticaId('');
       setGrupoEquipamento(item.categoria ?? '');
