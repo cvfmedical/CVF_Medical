@@ -131,11 +131,15 @@ export function Entrega() {
 
   // Painel de seleção (mesmo padrão do "Selecionar etiquetas para
   // imprimir") pra juntar várias entregas do mesmo cliente antes de abrir
-  // o modal de rastreio.
+  // o modal de rastreio. Lista TODAS as não finalizadas, mesmo as que já
+  // têm código - pra dar pra reenviar um e-mail consolidado (ex.: duas OS
+  // no mesmo pacote, mesmo rastreio) sem precisar mandar um e-mail por OS.
+  // Quando as selecionadas já têm o mesmo código, o modal reaproveita esse
+  // valor em vez de pedir um novo.
   const [selecionandoRastreio, setSelecionandoRastreio] = useState(false);
   const [entregasSelecionadasRastreio, setEntregasSelecionadasRastreio] = useState<Set<number>>(new Set());
   const entregasSemRastreio = (entregasExistentesQuery.data ?? []).filter(
-    (e) => !e.codigo_rastreio && !e.confirmado_pelo_cliente_em && !e.finalizado_manualmente_em,
+    (e) => !e.confirmado_pelo_cliente_em && !e.finalizado_manualmente_em,
   );
 
   function alternarSelecaoEntregaRastreio(id: number) {
@@ -435,7 +439,8 @@ export function Entrega() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <strong style={{ fontSize: 13 }}>
-              Entregas sem rastreio - marque as do MESMO cliente que vão no mesmo pacote/código
+              Marque as entregas do MESMO cliente que vão no mesmo pacote/código (pra gerar um código novo, ou
+              reenviar um e-mail consolidado de um código que elas já compartilham)
             </strong>
             <button className="botao-secundario botao-pequeno" onClick={() => setEntregasSelecionadasRastreio(new Set())}>
               Limpar seleção
@@ -454,11 +459,12 @@ export function Entrega() {
                   />
                   {os?.numero_os ?? `OS #${e.ordem_servico_id}`} - {os?.cliente_nome ?? '-'}
                   {orc ? ` - ${orc.numero}` : ''}
+                  {e.codigo_rastreio ? ` - rastreio: ${e.codigo_rastreio}` : ' - sem rastreio ainda'}
                 </label>
               );
             })}
             {entregasSemRastreio.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma entrega pendente de rastreio no momento.</p>
+              <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>Nenhuma entrega em aberto no momento.</p>
             )}
           </div>
           {entregasSelecionadasRastreio.size > 0 &&
