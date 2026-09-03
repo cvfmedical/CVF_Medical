@@ -1127,12 +1127,14 @@ export function Faturamento() {
           }}
         >
           <strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
-            Pular etapa (equipamento já entregue e NF já emitida fora do sistema)
+            Já foi entregue fora do sistema (atalho, uso raro)
           </strong>
           <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 8 }}>
-            Pra orçamentos aprovados cuja OS ainda está numa etapa anterior aqui dentro, mas que na vida real já foi
-            entregue ao cliente. Marca a OS como entregue - o orçamento passa a aparecer na lista abaixo, como
-            qualquer outro liberado, pra lançar a NF normalmente.
+            Só pra orçamentos aprovados cuja entrega ao cliente e a NF JÁ ACONTECERAM na vida real, fora do sistema
+            (ex.: caso antigo, lançado com atraso). Marca a OS direto como "Entregue", sem passar pela tela de
+            Entrega ao cliente - por isso <strong>não gera código de rastreio nem dispara e-mail ao cliente</strong>.
+            Se o equipamento ainda vai ser despachado/retirado normalmente, NÃO use isto - espere a OS chegar em
+            "Pronto para entrega" e registre pela tela Entrega ao cliente, que é o caminho que envia o rastreio.
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 320 }}>
@@ -1144,7 +1146,7 @@ export function Faturamento() {
               />
             </div>
             <button className="botao-secundario" onClick={pularEtapa} disabled={!orcamentoParaPular || pulandoEtapa}>
-              {pulandoEtapa ? 'Processando...' : 'Pular etapa'}
+              {pulandoEtapa ? 'Processando...' : 'Marcar como já entregue'}
             </button>
           </div>
         </div>
