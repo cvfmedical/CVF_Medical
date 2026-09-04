@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ThOrdenavel } from '../../components/ThOrdenavel';
 import { useLinhasOrdenadas } from '../../lib/useOrdenacao';
 import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
@@ -175,6 +175,7 @@ export function EntradaEquipamento() {
   } = useFiltrosColuna();
   const [consultandoRemessa, setConsultandoRemessa] = useState(false);
   const [avisoRemessa, setAvisoRemessa] = useState<string | null>(null);
+  const inputXmlRemessaRef = useRef<HTMLInputElement>(null);
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
   // Envio em lote (igual ao Financeiro): manda o e-mail de chegada de
   // várias entradas do mesmo cliente num só e-mail, em vez de um por um.
@@ -436,6 +437,42 @@ export function EntradaEquipamento() {
     setCondicoesSelecionadas((lista) => lista.filter((c) => c !== descricao));
   }
 
+  interface DadosNotaRemessa {
+    numero: string | number | null;
+    serie: string | number | null;
+    cfop: string | null;
+    valorTotal: string | number | null;
+    dataEmissao: string | null;
+    cnpjEmitente: string | null;
+    nomeEmitente: string | null;
+    chaveNfe: string | null;
+  }
+
+  // Preenche o formulário com os dados da nota (vindos da consulta na Focus
+  // OU do XML importado - mesmo formato) e avisa se o CNPJ do emitente não
+  // bater com o cliente selecionado nesta entrada.
+  function aplicarDadosNotaRemessa(d: DadosNotaRemessa, chaveFallback: string) {
+    setForm((f) => ({
+      ...f,
+      nf_remessa_numero: d.numero != null ? String(d.numero) : f.nf_remessa_numero,
+      nf_remessa_serie: d.serie != null ? String(d.serie) : f.nf_remessa_serie,
+      nf_remessa_cfop: d.cfop ?? f.nf_remessa_cfop,
+      nf_remessa_valor: d.valorTotal != null ? String(d.valorTotal) : f.nf_remessa_valor,
+      nf_remessa_data_emissao: d.dataEmissao ? String(d.dataEmissao).slice(0, 10) : f.nf_remessa_data_emissao,
+      nf_remessa_chave_acesso: d.chaveNfe ?? chaveFallback,
+    }));
+    const clienteSelecionado = clientesQuery.data?.find((c) => String(c.id) === form.cliente_id);
+    const cnpjCliente = clienteSelecionado?.cnpj?.replace(/\D/g, '') ?? '';
+    const cnpjNota = (d.cnpjEmitente ?? '').replace(/\D/g, '');
+    if (clienteSelecionado && cnpjCliente && cnpjNota && cnpjCliente !== cnpjNota) {
+      setAvisoRemessa(
+        `Atenção: o CNPJ do emitente desta nota (${d.nomeEmitente ?? cnpjNota}) não bate com o cliente selecionado nesta entrada (${clienteSelecionado.razao_social}). Confira se é o cliente certo.`,
+      );
+    } else {
+      setAvisoRemessa(null);
+    }
+  }
+
   // Consulta a NF-e de remessa (que o cliente emitiu) direto na Focus, pela
   // chave de acesso, e preenche número/série/CFOP/valor/data automaticamente
   // - evita digitar esses dados à mão e garante que batem com a nota real.
@@ -454,39 +491,60 @@ export function EntradaEquipamento() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar a nota.');
-      const d = data.dados as {
-        numero: string | number | null;
-        serie: string | number | null;
-        cfop: string | null;
-        valorTotal: string | number | null;
-        dataEmissao: string | null;
-        cnpjEmitente: string | null;
-        nomeEmitente: string | null;
-        chaveNfe: string | null;
-      };
-      setForm((f) => ({
-        ...f,
-        nf_remessa_numero: d.numero != null ? String(d.numero) : f.nf_remessa_numero,
-        nf_remessa_serie: d.serie != null ? String(d.serie) : f.nf_remessa_serie,
-        nf_remessa_cfop: d.cfop ?? f.nf_remessa_cfop,
-        nf_remessa_valor: d.valorTotal != null ? String(d.valorTotal) : f.nf_remessa_valor,
-        nf_remessa_data_emissao: d.dataEmissao ? String(d.dataEmissao).slice(0, 10) : f.nf_remessa_data_emissao,
-        nf_remessa_chave_acesso: d.chaveNfe ?? chave,
-      }));
-      const clienteSelecionado = clientesQuery.data?.find((c) => String(c.id) === form.cliente_id);
-      const cnpjCliente = clienteSelecionado?.cnpj?.replace(/\D/g, '') ?? '';
-      const cnpjNota = (d.cnpjEmitente ?? '').replace(/\D/g, '');
-      if (clienteSelecionado && cnpjCliente && cnpjNota && cnpjCliente !== cnpjNota) {
-        setAvisoRemessa(
-          `Atenção: o CNPJ do emitente desta nota (${d.nomeEmitente ?? cnpjNota}) não bate com o cliente selecionado nesta entrada (${clienteSelecionado.razao_social}). Confira se é o cliente certo.`,
-        );
-      } else {
-        setAvisoRemessa(null);
-      }
+      aplicarDadosNotaRemessa(data.dados as DadosNotaRemessa, chave);
     } catch (e) {
       setAvisoRemessa(await mensagemErroFuncao(e));
     } finally {
       setConsultandoRemessa(false);
+    }
+  }
+
+  // Extrai os mesmos campos direto do XML da NF-e (baixado do site do cliente
+  // ou do e-mail que acompanha o equipamento) - alternativa a "Consultar por
+  // chave de acesso" pra quando a Focus ainda não tem a nota indexada (ex:
+  // notas emitidas antes da "data de início de recebimento" configurada lá).
+  // Só lê o arquivo no navegador, nunca envia pra nenhum servidor.
+  function extrairDadosXmlNfe(xmlTexto: string): DadosNotaRemessa {
+    const doc = new DOMParser().parseFromString(xmlTexto, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length > 0) {
+      throw new Error('Arquivo XML inválido ou corrompido.');
+    }
+    const textoTag = (tag: string, escopo: Element | Document): string | null =>
+      escopo.getElementsByTagName(tag)[0]?.textContent?.trim() || null;
+
+    const infNFe = doc.getElementsByTagName('infNFe')[0];
+    if (!infNFe) throw new Error('XML não parece ser uma NF-e (tag <infNFe> não encontrada).');
+    const emit = doc.getElementsByTagName('emit')[0];
+    const ide = doc.getElementsByTagName('ide')[0];
+    const totalIcms = doc.getElementsByTagName('ICMSTot')[0];
+    const primeiroItem = doc.getElementsByTagName('det')[0];
+
+    let chave = textoTag('chNFe', doc); // presente quando o XML é o "nfeProc" completo (com protocolo)
+    if (!chave) {
+      const id = infNFe.getAttribute('Id') ?? ''; // formato "NFe" + 44 dígitos, quando só a NF-e sem protocolo
+      chave = id.replace(/\D/g, '') || null;
+    }
+
+    return {
+      numero: ide ? textoTag('nNF', ide) : null,
+      serie: ide ? textoTag('serie', ide) : null,
+      cfop: primeiroItem ? textoTag('CFOP', primeiroItem) : null,
+      valorTotal: totalIcms ? textoTag('vNF', totalIcms) : null,
+      dataEmissao: ide ? (textoTag('dhEmi', ide) ?? textoTag('dEmi', ide)) : null,
+      cnpjEmitente: emit ? textoTag('CNPJ', emit) : null,
+      nomeEmitente: emit ? textoTag('xNome', emit) : null,
+      chaveNfe: chave,
+    };
+  }
+
+  async function importarXmlNotaRemessa(arquivo: File) {
+    setAvisoRemessa(null);
+    try {
+      const texto = await arquivo.text();
+      const dados = extrairDadosXmlNfe(texto);
+      aplicarDadosNotaRemessa(dados, form.nf_remessa_chave_acesso.replace(/\D/g, ''));
+    } catch (e) {
+      setAvisoRemessa(e instanceof Error ? e.message : 'Falha ao ler o XML.');
     }
   }
 
@@ -1350,10 +1408,24 @@ export function EntradaEquipamento() {
                 >
                   {consultandoRemessa ? 'Consultando...' : 'Consultar por chave de acesso'}
                 </button>
+                <button type="button" className="botao-secundario" onClick={() => inputXmlRemessaRef.current?.click()}>
+                  Importar XML
+                </button>
+                <input
+                  type="file"
+                  accept=".xml,text/xml"
+                  ref={inputXmlRemessaRef}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const arquivo = e.target.files?.[0];
+                    if (arquivo) importarXmlNotaRemessa(arquivo);
+                    e.target.value = '';
+                  }}
+                />
               </div>
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Preenche número/série/CFOP/valor/data automaticamente com os dados reais da nota, consultados
-                direto na Focus/SEFAZ.
+                Preenche número/série/CFOP/valor/data automaticamente com os dados reais da nota - consultando
+                direto na Focus/SEFAZ, ou lendo o arquivo XML da nota (baixado do cliente/e-mail).
               </p>
               {avisoRemessa && <p className="erro-login">{avisoRemessa}</p>}
             </div>
