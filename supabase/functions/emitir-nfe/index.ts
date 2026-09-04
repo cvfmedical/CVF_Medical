@@ -129,15 +129,18 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const focusToken = Deno.env.get('FOCUS_NFE_TOKEN');
-  // Segredo PRÓPRIO (não reaproveita FOCUS_NFE_TOKEN da NFS-e) - pode ser a
-  // mesma conta Focus, mas o token de acesso costuma ser específico por
-  // empresa/produto; mantém configurável em separado por segurança.
-  const focusTokenNfe = Deno.env.get('FOCUS_NFE_TOKEN_NFE') ?? focusToken;
-  const focusBaseUrl = Deno.env.get('FOCUS_NFE_BASE_URL') ?? 'https://homologacao.focusnfe.com.br';
+  // Segredos PRÓPRIOS da NF-e, sem fallback pros da NFS-e (FOCUS_NFE_TOKEN /
+  // FOCUS_NFE_BASE_URL) - confirmado no painel da Focus que o token é o
+  // mesmo por AMBIENTE (não por tipo de documento), mas a NFS-e já está em
+  // produção; se essa function caísse no mesmo token/URL da NFS-e, a
+  // primeira consulta/emissão de NF-e já sairia direto em produção, sem
+  // passar por homologação. Sem essa variável configurada, cai em
+  // homologação por padrão (nunca produção por padrão).
+  const focusTokenNfe = Deno.env.get('FOCUS_NFE_TOKEN_NFE');
+  const focusBaseUrl = Deno.env.get('FOCUS_NFE_BASE_URL_NFE') ?? 'https://homologacao.focusnfe.com.br';
   const ambiente: 'homologacao' | 'producao' = focusBaseUrl.includes('homologacao') ? 'homologacao' : 'producao';
 
-  if (!focusTokenNfe) return json({ error: 'FOCUS_NFE_TOKEN_NFE (ou FOCUS_NFE_TOKEN) não configurado no servidor.' }, 500);
+  if (!focusTokenNfe) return json({ error: 'FOCUS_NFE_TOKEN_NFE não configurado no servidor.' }, 500);
 
   const supabaseCaller = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader } },
