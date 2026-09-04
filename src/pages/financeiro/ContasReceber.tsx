@@ -796,10 +796,9 @@ export function ContasReceber() {
               </div>
             </div>
             <div className="campo-form">
-              <label>Chave de acesso</label>
+              <label>Chave de acesso / código de verificação</label>
               <input
                 type="text"
-                maxLength={44}
                 value={formNF.nf_chave_acesso}
                 onChange={(e) => setFormNF((f) => ({ ...f, nf_chave_acesso: e.target.value }))}
               />
