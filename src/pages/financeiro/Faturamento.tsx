@@ -18,7 +18,7 @@ import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { totalOrcamento } from '../../lib/valorOrcamento';
 import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
-import { abrirPreviaDanfse, abrirDanfseOficial } from '../../lib/previaDanfse';
+import { abrirPreviaDanfse } from '../../lib/previaDanfse';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -235,6 +235,7 @@ export function Faturamento() {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
+  const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
   const [carregandoPreviaId, setCarregandoPreviaId] = useState<string | null>(null);
   const [salvandoCadastroTomador, setSalvandoCadastroTomador] = useState(false);
   const [previaNfse, setPreviaNfse] = useState<{
@@ -892,41 +893,39 @@ export function Faturamento() {
     });
   }
 
-  // DANFSe da nota JÁ AUTORIZADA, gerado pelo nosso sistema - não depende
-  // do link hospedado pela Focus/AWS ("Ver PDF (Focus)"), que pode ficar
-  // temporariamente indisponível (AccessDenied no S3 deles). Busca o
-  // cadastro completo do cliente na hora (a linha da tabela só tem o id).
-  async function visualizarDanfseOficial(l: LinhaFaturamento) {
-    if (!l.nf_numero || !l.clienteId) return;
+  // Pede pra própria Focus NFe reenviar a nota (com o PDF OFICIAL, gerado
+  // por eles/pela Sefin Nacional) direto pro e-mail do cliente - descoberto
+  // na documentação deles (POST /v2/nfsen/{ref}/email) depois que o link
+  // direto do PDF ("url_danfse", hospedado num bucket S3 da Focus) deu
+  // "Access Denied" no primeiro teste real. Evita ter que gerar uma versão
+  // caseira do DANFSe (tentado antes e corretamente rejeitado pelo
+  // usuário - não é o documento oficial, não deve ir pro cliente).
+  async function reenviarEmailOficial(l: LinhaFaturamento) {
+    if (!l.contaId) return;
+    const emailPadrao = clientesQuery.data?.find((c) => c.id === l.clienteId)?.email ?? '';
+    const digitado = window.prompt(
+      'Enviar a NFS-e oficial (PDF gerado pela Focus NFe/prefeitura) para qual e-mail? Separe vários com vírgula.',
+      emailPadrao,
+    );
+    if (!digitado) return;
+    const emails = digitado
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emails.length === 0) return;
+    setEnviandoEmailOficialId(l.chave);
     setErro(null);
     try {
-      const { data: cliente, error } = await supabase
-        .from('clientes')
-        .select('cnpj, razao_social, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep, telefone, email')
-        .eq('id', l.clienteId)
-        .single();
-      if (error || !cliente) throw error ?? new Error('Cliente não encontrado.');
-      abrirDanfseOficial({
-        numeroNotaFiscal: l.nf_numero,
-        codigoVerificacao: l.nf_chave_acesso ?? 'Não registrado',
-        dataEmissao: l.nf_data_emissao ?? '-',
-        razaoSocialTomador: cliente.razao_social,
-        documentoTomador: cliente.cnpj ?? '',
-        logradouroTomador: cliente.logradouro ?? '',
-        numeroTomador: cliente.numero_endereco ?? '',
-        complementoTomador: cliente.complemento ?? '',
-        bairroTomador: cliente.bairro ?? '',
-        cepTomador: cliente.cep ?? '',
-        cidadeTomador: cliente.cidade ?? '',
-        ufTomador: cliente.uf ?? '',
-        telefoneTomador: cliente.telefone ?? '',
-        emailTomador: cliente.email ?? '',
-        descricaoServico: l.descricao,
-        valorServico: l.valor,
-        aliquotaIss: aliquotaIssQuery.data?.aliquota_iss != null ? Number(aliquotaIssQuery.data.aliquota_iss) : null,
+      const { data, error } = await supabase.functions.invoke('emitir-nfse', {
+        body: { contaId: l.contaId, acao: 'reenviar_email', emails },
       });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao reenviar e-mail.');
+      window.alert(`Pedido de reenvio feito à Focus NFe. Pode levar alguns minutos para chegar em: ${emails.join(', ')}`);
     } catch (e) {
-      setErro(mensagemErro(e));
+      setErro(await mensagemErroFuncao(e));
+    } finally {
+      setEnviandoEmailOficialId(null);
     }
   }
 
@@ -1373,18 +1372,23 @@ export function Faturamento() {
                     Enviar por e-mail
                   </button>
                 )}
-                {l.nf_numero && l.nf_tipo === 'NFS-e' && (
-                  <button className="botao-secundario" onClick={() => visualizarDanfseOficial(l)}>
-                    Ver DANFSe
-                  </button>
-                )}
                 {l.nfsePdfPath && (
                   <button
                     className="botao-secundario"
                     onClick={() => window.open(l.nfsePdfPath!, '_blank')}
-                    title="PDF hospedado pela Focus NFe - às vezes fica temporariamente indisponível (erro do lado deles, não nosso)"
+                    title="PDF oficial hospedado pela Focus NFe - às vezes fica temporariamente indisponível (erro do lado deles, não nosso)"
                   >
-                    Ver PDF (Focus)
+                    Ver DANFSe oficial
+                  </button>
+                )}
+                {l.nf_numero && l.nf_tipo === 'NFS-e' && l.contaId != null && (
+                  <button
+                    className="botao-secundario"
+                    onClick={() => reenviarEmailOficial(l)}
+                    disabled={enviandoEmailOficialId === l.chave}
+                    title="Pede pra própria Focus NFe reenviar a NFS-e (com o PDF oficial, gerado por eles) direto pro e-mail do cliente - não depende de anexar nada manualmente"
+                  >
+                    {enviandoEmailOficialId === l.chave ? 'Enviando...' : 'Reenviar NF oficial por e-mail'}
                   </button>
                 )}
                 {l.nf_numero && l.contaId && (

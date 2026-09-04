@@ -216,8 +216,9 @@ Deno.serve(async (req: Request) => {
   let corpo: {
     contaId?: number;
     orcamentoId?: number;
-    acao?: 'emitir' | 'consultar' | 'previsualizar';
+    acao?: 'emitir' | 'consultar' | 'previsualizar' | 'reenviar_email';
     overrides?: Overrides;
+    emails?: string[];
   };
   try {
     corpo = await req.json();
@@ -235,6 +236,42 @@ Deno.serve(async (req: Request) => {
   if (!contaId && !orcamentoIdBody) return json({ error: 'Informe contaId ou orcamentoId.' }, 400);
 
   const authFocus = 'Basic ' + btoa(`${focusToken}:`);
+
+  if (acao === 'reenviar_email') {
+    // Pede pra própria Focus NFe reenviar a NFS-e (PDF OFICIAL, gerado por
+    // eles/pela Sefin Nacional) direto pro e-mail informado - documentado
+    // em doc.focusnfe.com.br/reference/reenviar_email_nfsen.md
+    // (POST /v2/nfsen/{ref}/email, body {emails: [...]}). Criado depois que
+    // o link direto do PDF ("url_danfse", hospedado num bucket S3 da
+    // Focus) deu "Access Denied" no primeiro teste real de produção
+    // (2026-09-04) - em vez de gerar uma versão caseira do DANFSe (que não
+    // é o documento oficial e não deve ir pro cliente), usa o canal
+    // oficial deles pra reenvio.
+    if (!contaId) return json({ error: 'contaId é obrigatório.' }, 400);
+    const emails = Array.isArray(corpo.emails)
+      ? corpo.emails.filter((e): e is string => typeof e === 'string' && e.trim() !== '')
+      : [];
+    if (emails.length === 0) return json({ error: 'Informe ao menos um e-mail.' }, 400);
+    const { data: conta, error: erroConta } = await supabaseAdmin
+      .from('contas_receber')
+      .select('id, nfse_ref')
+      .eq('id', contaId)
+      .single();
+    if (erroConta || !conta) return json({ error: 'Conta a receber não encontrada.' }, 404);
+    if (!conta.nfse_ref) return json({ error: 'Essa conta ainda não teve NFS-e emitida por aqui.' }, 400);
+
+    const resp = await fetch(`${focusBaseUrl}/v2/nfsen/${conta.nfse_ref}/email`, {
+      method: 'POST',
+      headers: { Authorization: authFocus, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails }),
+    });
+    const resultado = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const mensagemFocus = typeof resultado?.mensagem === 'string' ? resultado.mensagem : JSON.stringify(resultado);
+      return json({ error: `Falha ao reenviar e-mail pela Focus NFe (HTTP ${resp.status}): ${mensagemFocus}` }, 502);
+    }
+    return json({ ok: true, resultado });
+  }
 
   if (acao === 'consultar') {
     if (!contaId) return json({ error: 'contaId é obrigatório para consultar.' }, 400);
