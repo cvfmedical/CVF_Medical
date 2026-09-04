@@ -171,13 +171,15 @@ Deno.serve(async (req: Request) => {
 
   // === Consulta de NF-e de REMESSA recebida do cliente (por chave de
   // acesso) - só devolve os dados pro formulário preencher, nunca grava
-  // nada sozinha. Documentado em
-  // doc.focusnfe.com.br/reference/consultar_nfe_recebida_individual.md
+  // nada sozinha. Endpoint confirmado via teste direto (curl): o caminho é
+  // "nfes_recebidas" (plural) - "nfe_recebidas" (singular) dá 404. Com
+  // "?completa=1" a Focus devolve numero/serie/cfop dentro de
+  // "requisicao_nota_fiscal" (sem isso só vem um resumo sem esses campos).
   if (acao === 'consultar_remessa') {
     const chave = apenasDigitos(corpo.chaveAcesso);
     if (chave.length !== 44) return json({ error: 'Chave de acesso precisa ter 44 dígitos.' }, 400);
 
-    const resp = await fetch(`${focusBaseUrl}/v2/nfe_recebidas/${chave}`, {
+    const resp = await fetch(`${focusBaseUrl}/v2/nfes_recebidas/${chave}?completa=1`, {
       headers: { Authorization: authFocus },
     });
     const resultado = await resp.json().catch(() => ({}));
@@ -185,7 +187,20 @@ Deno.serve(async (req: Request) => {
       const mensagemFocus = typeof resultado?.mensagem === 'string' ? resultado.mensagem : JSON.stringify(resultado);
       return json({ error: `Falha ao consultar a NF-e (HTTP ${resp.status}): ${mensagemFocus}` }, 502);
     }
-    return json({ ok: true, resultado });
+
+    const reqNota = resultado?.requisicao_nota_fiscal ?? {};
+    const primeiroItem = Array.isArray(reqNota.itens) ? reqNota.itens[0] : null;
+    const dados = {
+      numero: reqNota.numero ?? resultado.numero ?? null,
+      serie: reqNota.serie ?? resultado.serie ?? null,
+      cfop: primeiroItem?.cfop ?? null,
+      valorTotal: reqNota.valor_total ?? resultado.valor_total ?? null,
+      dataEmissao: resultado.data_emissao ?? null,
+      cnpjEmitente: reqNota.cnpj_emitente ?? resultado.documento_emitente ?? resultado.cnpj_emitente ?? null,
+      nomeEmitente: reqNota.nome_emitente ?? resultado.nome_emitente ?? null,
+      chaveNfe: apenasDigitos(reqNota.chave_nfe ?? resultado.chave_nfe ?? chave),
+    };
+    return json({ ok: true, dados, resultado });
   }
 
   // === Ações relacionadas à DEVOLUÇÃO (emitida por nós) ===
