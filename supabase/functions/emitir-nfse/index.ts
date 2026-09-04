@@ -251,8 +251,16 @@ Deno.serve(async (req: Request) => {
     });
     const resultado = await resp.json().catch(() => ({}));
 
+    // Todas as gravações abaixo agora conferem erro - antes, uma falha aqui
+    // (ex.: 2026-09-04, "value too long for type character varying(44)" no
+    // nf_chave_acesso, dimensionado pra chave de acesso da NF-e tradicional
+    // de 44 dígitos, mas o código de verificação da NFS-e Nacional é mais
+    // longo) ficava completamente muda: a function respondia 200 OK com o
+    // status "autorizado" de verdade, mas a conta continuava presa em
+    // "processando" pra sempre, sem nenhum sinal de erro em lugar nenhum.
+    let erroGravacao: string | null = null;
     if (resultado.status === 'autorizado') {
-      await supabaseAdmin
+      const { error: erroUpdate } = await supabaseAdmin
         .from('contas_receber')
         .update({
           nf_tipo: 'NFS-e',
@@ -264,6 +272,7 @@ Deno.serve(async (req: Request) => {
           nfse_erro_detalhe: null,
         })
         .eq('id', contaId);
+      if (erroUpdate) erroGravacao = erroUpdate.message;
     } else if (resultado.status === 'erro_autorizacao' || resultado.status === 'negado') {
       // A emissão é assíncrona - o erro de negócio de verdade (ex.: "Série
       // da DPS inválida") normalmente aparece só AQUI (na consulta), não no
@@ -274,24 +283,36 @@ Deno.serve(async (req: Request) => {
         ? resultado.erros.map((e: { mensagem?: string }) => e.mensagem).join('; ')
         : null;
       const detalhe = `${mensagens ?? 'erro sem mensagem'} | RAW: ${JSON.stringify(resultado)}`;
-      await supabaseAdmin
+      const { error: erroUpdate } = await supabaseAdmin
         .from('contas_receber')
         .update({ nfse_status: 'erro', nfse_erro_detalhe: detalhe })
         .eq('id', contaId);
+      if (erroUpdate) erroGravacao = erroUpdate.message;
     } else if (resultado.status === 'cancelado') {
-      await supabaseAdmin.from('contas_receber').update({ nfse_status: 'cancelada' }).eq('id', contaId);
+      const { error: erroUpdate } = await supabaseAdmin
+        .from('contas_receber')
+        .update({ nfse_status: 'cancelada' })
+        .eq('id', contaId);
+      if (erroUpdate) erroGravacao = erroUpdate.message;
     } else {
       // Status ainda não é nenhum dos terminais conhecidos - grava a
       // resposta bruta em nfse_erro_detalhe só pra diagnóstico (não muda
       // nfse_status), já que o app não mostra esse retorno em lugar
       // nenhum e "processando" sem mais detalhe não ajuda a entender o
       // que está de fato acontecendo do lado da Focus NFe/prefeitura.
-      await supabaseAdmin
+      const { error: erroUpdate } = await supabaseAdmin
         .from('contas_receber')
         .update({ nfse_erro_detalhe: `[debug] status="${resultado.status}" - ${JSON.stringify(resultado)}` })
         .eq('id', contaId);
+      if (erroUpdate) erroGravacao = erroUpdate.message;
     }
 
+    if (erroGravacao) {
+      return json(
+        { error: `A consulta funcionou, mas falhou ao gravar o resultado no banco: ${erroGravacao}`, resultado },
+        500,
+      );
+    }
     return json({ ok: true, resultado });
   }
 
