@@ -57,7 +57,17 @@ function formatarDocumento(digitos: string): string {
   return digitos;
 }
 
-function formatarEnderecoTomador(d: DadosPreviaDanfse): string {
+interface EnderecoTomador {
+  logradouroTomador: string;
+  numeroTomador: string;
+  complementoTomador: string;
+  bairroTomador: string;
+  cepTomador: string;
+  cidadeTomador: string;
+  ufTomador: string;
+}
+
+function formatarEnderecoTomador(d: EnderecoTomador): string {
   const rua = [d.logradouroTomador, d.numeroTomador].filter(Boolean).join(', ');
   const linha1 = [rua, d.complementoTomador].filter(Boolean).join(' - ');
   const linha2 = [d.bairroTomador, d.cidadeTomador && d.ufTomador ? `${d.cidadeTomador}/${d.ufTomador}` : d.cidadeTomador]
@@ -225,6 +235,155 @@ export function abrirPreviaDanfse(d: DadosPreviaDanfse) {
             As alíquotas e os valores de CBS/IBS não são enviados por nós - são calculados automaticamente pela
             plataforma Sefin Nacional a partir desses códigos, no momento da autorização. Por isso não aparecem
             aqui na prévia; eles só existem no DANFSe oficial, depois que a nota for transmitida e autorizada.
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+  janela.document.close();
+}
+
+// Dados fixos da CVF pra emissão - mesmos valores usados de verdade na
+// edge function emitir-nfse (inscrição municipal, Simples Nacional,
+// regime especial), reaproveitados aqui pra montar o DANFSe oficial sem
+// precisar buscar isso de novo no banco.
+const INSCRICAO_MUNICIPAL_PRESTADOR = '20147606';
+const CODIGO_OPCAO_SIMPLES_NACIONAL_PADRAO = 3;
+const REGIME_ESPECIAL_TRIBUTACAO_PADRAO = 0;
+
+// DANFSe OFICIAL - gerado pelo próprio Q-CVF a partir dos dados já
+// autorizados (número da nota + código de verificação vieram da Focus
+// NFe/Sefin Nacional, já gravados em contas_receber). Diferente da
+// prévia, isso é um documento auxiliar de verdade: a nota já existe e
+// está autorizada, só o LAYOUT do PDF é nosso (o documento fiscal em si
+// é o XML já registrado na prefeitura - qualquer sistema pode gerar seu
+// próprio DANFSe, a autenticidade se confere pelo código de verificação
+// no portal da prefeitura, não pelo layout do PDF). Criado pra não
+// depender do link do PDF hospedado pela Focus/AWS (às vezes indisponível
+// - AccessDenied no S3 deles, fora do nosso controle).
+export interface DadosDanfseOficial extends EnderecoTomador {
+  numeroNotaFiscal: string;
+  codigoVerificacao: string;
+  dataEmissao: string;
+  razaoSocialTomador: string;
+  documentoTomador: string;
+  telefoneTomador: string;
+  emailTomador: string;
+  descricaoServico: string;
+  valorServico: number;
+  aliquotaIss: number | null;
+}
+
+export function abrirDanfseOficial(d: DadosDanfseOficial) {
+  const janela = window.open('', '_blank', 'width=900,height=1000');
+  if (!janela) {
+    alert('Não foi possível abrir a janela do DANFSe (verifique o bloqueador de pop-ups).');
+    return;
+  }
+
+  const valorServicoFmt = `R$ ${Number(d.valorServico).toFixed(2)}`;
+  const valorIss =
+    d.aliquotaIss != null ? `R$ ${((Number(d.valorServico) * d.aliquotaIss) / 100).toFixed(2)}` : 'Não informado';
+
+  janela.document.open();
+  janela.document.write(`
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>DANFSe - NF ${d.numeroNotaFiscal}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; background: #ccc; }
+        .acoes { text-align: center; padding: 10px; }
+        .acoes button {
+          padding: 10px 20px; border-radius: 6px; border: none; background: #344d95;
+          color: #fff; font-size: 13px; cursor: pointer;
+        }
+        .folha { width: 210mm; min-height: 297mm; margin: 12px auto; background: #fff; padding: 10mm; }
+        .aviso {
+          text-align: center; font-size: 10px; color: #555; border: 1px solid #999; border-radius: 4px;
+          padding: 4px; margin-bottom: 8px;
+        }
+        h1 { font-size: 15px; text-align: center; margin: 0 0 2px; }
+        h2 { font-size: 10px; text-align: center; margin: 0 0 12px; color: #555; font-weight: 400; }
+        .secao { border: 1px solid #999; border-radius: 4px; margin-bottom: 8px; }
+        .secao-titulo {
+          background: #1f6f4a; color: #fff; font-size: 10px; font-weight: 700;
+          padding: 3px 8px; letter-spacing: 0.04em; text-transform: uppercase;
+        }
+        .secao-corpo { padding: 8px; font-size: 11px; }
+        .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 16px; }
+        .grade-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }
+        .campo .rot { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+        .campo .val { font-size: 12px; font-weight: 600; }
+        .descricao { white-space: pre-line; font-size: 11px; line-height: 1.5; }
+        @media print {
+          @page { size: A4; margin: 0; }
+          body { background: #fff; }
+          .acoes { display: none; }
+          .folha { margin: 0; width: 100%; min-height: 100vh; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="acoes">
+        <button onclick="window.print()">Imprimir / salvar PDF</button>
+      </div>
+      <div class="folha">
+        <div class="aviso">
+          DANFSe gerado pelo sistema Q-CVF a partir dos dados já autorizados pela Sefin Nacional. Para conferir a
+          autenticidade, consulte o código de verificação abaixo no portal da prefeitura de Ribeirão Preto
+          (issnetonline.com.br/ribeiraopreto).
+        </div>
+        <h1>DANFSe - Documento Auxiliar da Nota Fiscal de Serviços eletrônica</h1>
+        <h2>NFS-e Nacional - Simples Nacional</h2>
+
+        <div class="secao">
+          <div class="secao-titulo">Identificação da nota fiscal</div>
+          <div class="secao-corpo grade">
+            <div class="campo"><div class="rot">Número da nota fiscal</div><div class="val">${d.numeroNotaFiscal}</div></div>
+            <div class="campo"><div class="rot">Data de emissão</div><div class="val">${d.dataEmissao}</div></div>
+            <div class="campo" style="grid-column: 1 / -1;"><div class="rot">Código de verificação</div><div class="val" style="word-break: break-all;">${d.codigoVerificacao}</div></div>
+          </div>
+        </div>
+
+        <div class="secao">
+          <div class="secao-titulo">Prestador de serviços</div>
+          <div class="secao-corpo grade">
+            <div class="campo"><div class="rot">Razão social</div><div class="val">${EMPRESA.razaoSocial}</div></div>
+            <div class="campo"><div class="rot">CNPJ</div><div class="val">${EMPRESA.cnpj}</div></div>
+            <div class="campo"><div class="rot">Inscrição municipal</div><div class="val">${INSCRICAO_MUNICIPAL_PRESTADOR}</div></div>
+            <div class="campo" style="grid-column: 1 / -1;"><div class="rot">Endereço</div><div class="val">${EMPRESA.endereco}</div></div>
+            <div class="campo"><div class="rot">Situação Simples Nacional</div><div class="val">${descricaoSimplesNacional(CODIGO_OPCAO_SIMPLES_NACIONAL_PADRAO)}</div></div>
+            <div class="campo"><div class="rot">Regime especial</div><div class="val">${REGIME_ESPECIAL_TRIBUTACAO_PADRAO === 0 ? 'Nenhum' : `Código ${REGIME_ESPECIAL_TRIBUTACAO_PADRAO}`}</div></div>
+          </div>
+        </div>
+
+        <div class="secao">
+          <div class="secao-titulo">Tomador de serviços</div>
+          <div class="secao-corpo grade-2">
+            <div class="campo"><div class="rot">Razão social</div><div class="val">${d.razaoSocialTomador}</div></div>
+            <div class="campo"><div class="rot">${d.documentoTomador.replace(/\D/g, '').length === 14 ? 'CNPJ' : 'CPF'}</div><div class="val">${formatarDocumento(d.documentoTomador)}</div></div>
+            <div class="campo" style="grid-column: 1 / -1;"><div class="rot">Endereço</div><div class="val">${formatarEnderecoTomador(d)}</div></div>
+            <div class="campo"><div class="rot">Telefone</div><div class="val">${d.telefoneTomador || '-'}</div></div>
+            <div class="campo"><div class="rot">E-mail</div><div class="val">${d.emailTomador || '-'}</div></div>
+          </div>
+        </div>
+
+        <div class="secao">
+          <div class="secao-titulo">Discriminação dos serviços</div>
+          <div class="secao-corpo descricao">${d.descricaoServico}</div>
+        </div>
+
+        <div class="secao">
+          <div class="secao-titulo">Valores</div>
+          <div class="secao-corpo grade">
+            <div class="campo"><div class="rot">Valor do serviço</div><div class="val">${valorServicoFmt}</div></div>
+            <div class="campo"><div class="rot">Alíquota ISS</div><div class="val">${d.aliquotaIss != null ? `${d.aliquotaIss.toFixed(2)}%` : 'Não informada'}</div></div>
+            <div class="campo"><div class="rot">Valor do ISS</div><div class="val">${valorIss}</div></div>
+            <div class="campo"><div class="rot">Município da prestação/incidência</div><div class="val">Ribeirão Preto/SP</div></div>
           </div>
         </div>
       </div>

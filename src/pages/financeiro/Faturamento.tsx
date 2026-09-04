@@ -18,7 +18,7 @@ import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { totalOrcamento } from '../../lib/valorOrcamento';
 import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
-import { abrirPreviaDanfse } from '../../lib/previaDanfse';
+import { abrirPreviaDanfse, abrirDanfseOficial } from '../../lib/previaDanfse';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -892,6 +892,44 @@ export function Faturamento() {
     });
   }
 
+  // DANFSe da nota JÁ AUTORIZADA, gerado pelo nosso sistema - não depende
+  // do link hospedado pela Focus/AWS ("Ver PDF (Focus)"), que pode ficar
+  // temporariamente indisponível (AccessDenied no S3 deles). Busca o
+  // cadastro completo do cliente na hora (a linha da tabela só tem o id).
+  async function visualizarDanfseOficial(l: LinhaFaturamento) {
+    if (!l.nf_numero || !l.clienteId) return;
+    setErro(null);
+    try {
+      const { data: cliente, error } = await supabase
+        .from('clientes')
+        .select('cnpj, razao_social, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep, telefone, email')
+        .eq('id', l.clienteId)
+        .single();
+      if (error || !cliente) throw error ?? new Error('Cliente não encontrado.');
+      abrirDanfseOficial({
+        numeroNotaFiscal: l.nf_numero,
+        codigoVerificacao: l.nf_chave_acesso ?? 'Não registrado',
+        dataEmissao: l.nf_data_emissao ?? '-',
+        razaoSocialTomador: cliente.razao_social,
+        documentoTomador: cliente.cnpj ?? '',
+        logradouroTomador: cliente.logradouro ?? '',
+        numeroTomador: cliente.numero_endereco ?? '',
+        complementoTomador: cliente.complemento ?? '',
+        bairroTomador: cliente.bairro ?? '',
+        cepTomador: cliente.cep ?? '',
+        cidadeTomador: cliente.cidade ?? '',
+        ufTomador: cliente.uf ?? '',
+        telefoneTomador: cliente.telefone ?? '',
+        emailTomador: cliente.email ?? '',
+        descricaoServico: l.descricao,
+        valorServico: l.valor,
+        aliquotaIss: aliquotaIssQuery.data?.aliquota_iss != null ? Number(aliquotaIssQuery.data.aliquota_iss) : null,
+      });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    }
+  }
+
   async function confirmarEmissaoNfse() {
     if (!previaNfse || !formNfse) return;
     const sucesso = await emitirNFSe(previaNfse.linha, {
@@ -1335,9 +1373,18 @@ export function Faturamento() {
                     Enviar por e-mail
                   </button>
                 )}
+                {l.nf_numero && l.nf_tipo === 'NFS-e' && (
+                  <button className="botao-secundario" onClick={() => visualizarDanfseOficial(l)}>
+                    Ver DANFSe
+                  </button>
+                )}
                 {l.nfsePdfPath && (
-                  <button className="botao-secundario" onClick={() => window.open(l.nfsePdfPath!, '_blank')}>
-                    Ver DANFSe oficial
+                  <button
+                    className="botao-secundario"
+                    onClick={() => window.open(l.nfsePdfPath!, '_blank')}
+                    title="PDF hospedado pela Focus NFe - às vezes fica temporariamente indisponível (erro do lado deles, não nosso)"
+                  >
+                    Ver PDF (Focus)
                   </button>
                 )}
                 {l.nf_numero && l.contaId && (
