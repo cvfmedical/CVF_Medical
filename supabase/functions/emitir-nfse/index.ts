@@ -141,6 +141,29 @@ function dataEmissaoISO(): string {
   return `${partes.year}-${partes.month}-${partes.day}T${hora}:${partes.minute}:${partes.second}-0300`;
 }
 
+// Mesmo algoritmo de gerarNumeroSequencial (src/lib/numeroSequencial.ts):
+// maior sufixo numérico existente + 1, sequência própria por prefixo
+// começando em 5500. Precisa estar duplicado aqui porque a edge function
+// (Deno) não importa código do app React - usado quando "Emitir NFS-e" é
+// clicado direto num orçamento "Liberado" que ainda não tem conta a
+// receber (a conta nasce agora, junto com a emissão, em vez de exigir
+// que alguém "Lance NF" manualmente antes só pra criar o registro).
+async function proximoNumeroConta(
+  supabaseAdmin: ReturnType<typeof createClient>,
+): Promise<string> {
+  const { data, error } = await supabaseAdmin.from('contas_receber').select('numero_conta').like('numero_conta', 'CR-%');
+  if (error) throw error;
+  let maior = 5499;
+  for (const row of (data ?? []) as { numero_conta: string | null }[]) {
+    const sufixo = (row.numero_conta ?? '').slice(3);
+    if (/^\d+$/.test(sufixo)) {
+      const n = parseInt(sufixo, 10);
+      if (n > maior) maior = n;
+    }
+  }
+  return `CR-${maior + 1}`;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
@@ -190,19 +213,31 @@ Deno.serve(async (req: Request) => {
     email_tomador: string;
     descricao_servico: string;
   }>;
-  let corpo: { contaId?: number; acao?: 'emitir' | 'consultar' | 'previsualizar'; overrides?: Overrides };
+  let corpo: {
+    contaId?: number;
+    orcamentoId?: number;
+    acao?: 'emitir' | 'consultar' | 'previsualizar';
+    overrides?: Overrides;
+  };
   try {
     corpo = await req.json();
   } catch {
     return json({ error: 'Corpo inválido.' }, 400);
   }
-  const contaId = corpo.contaId;
+  // contaId: conta a receber já existente (fluxo antigo - "Lançar NF"
+  // manual já criou a conta, ou é um lançamento avulso/parcelado).
+  // orcamentoId: orçamento "Liberado" que AINDA não tem conta - usado
+  // quando "Emitir NFS-e" é clicado direto no orçamento; a conta é criada
+  // agora, dentro da ação 'emitir' (ver mais abaixo), sem NF ainda.
+  let contaId = corpo.contaId ?? null;
+  const orcamentoIdBody = corpo.orcamentoId ?? null;
   const acao = corpo.acao ?? 'emitir';
-  if (!contaId) return json({ error: 'contaId é obrigatório.' }, 400);
+  if (!contaId && !orcamentoIdBody) return json({ error: 'Informe contaId ou orcamentoId.' }, 400);
 
   const authFocus = 'Basic ' + btoa(`${focusToken}:`);
 
   if (acao === 'consultar') {
+    if (!contaId) return json({ error: 'contaId é obrigatório para consultar.' }, 400);
     const { data: conta, error: erroConta } = await supabaseAdmin
       .from('contas_receber')
       .select('id, nfse_ref')
@@ -260,16 +295,83 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, resultado });
   }
 
-  // acao === 'emitir'
-  const { data: conta, error: erroConta } = await supabaseAdmin
-    .from('contas_receber')
-    .select(
-      'id, valor, nf_numero, cliente_id, descricao, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
-    )
-    .eq('id', contaId)
-    .single();
-  if (erroConta || !conta) return json({ error: 'Conta a receber não encontrada.' }, 404);
-  if (conta.nf_numero) return json({ error: 'Essa conta já tem NF lançada.' }, 400);
+  // acao === 'emitir' ou 'previsualizar'
+  type ContaLike = {
+    id: number | null;
+    valor: number;
+    nf_numero: string | null;
+    cliente_id: number;
+    descricao: string | null;
+    orcamentos: {
+      numero_orcamento: string;
+      ordem_servico_id: number | null;
+      ordens_servico: { numero_os: string } | null;
+    } | null;
+  };
+  let conta: ContaLike;
+  // Quando a conta precisar ser criada agora (veio só orcamentoId), guarda
+  // o orçamento pra vincular - só usado dentro do bloco de criação, mais
+  // abaixo, depois que 'previsualizar' já tiver retornado.
+  let orcamentoIdParaCriarConta: number | null = null;
+
+  if (contaId) {
+    const { data: contaExistente, error: erroConta } = await supabaseAdmin
+      .from('contas_receber')
+      .select(
+        'id, valor, nf_numero, cliente_id, descricao, orcamento_id, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+      )
+      .eq('id', contaId)
+      .single();
+    if (erroConta || !contaExistente) return json({ error: 'Conta a receber não encontrada.' }, 404);
+    if (contaExistente.nf_numero) return json({ error: 'Essa conta já tem NF lançada.' }, 400);
+    conta = contaExistente as unknown as ContaLike;
+  } else {
+    // Sem conta ainda - monta os dados direto do orçamento (mesma fórmula
+    // de src/lib/valorOrcamento.ts: valor_fixo_contrato OU soma dos itens,
+    // menos desconto, zerado se for bonificação).
+    const { data: orcRow, error: erroOrc } = await supabaseAdmin
+      .from('orcamentos')
+      .select(
+        'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade), ordens_servico(numero_os, cliente_id)',
+      )
+      .eq('id', orcamentoIdBody)
+      .single();
+    if (erroOrc || !orcRow) return json({ error: 'Orçamento não encontrado.' }, 404);
+    const orcTyped = orcRow as unknown as {
+      id: number;
+      numero_orcamento: string;
+      ordem_servico_id: number | null;
+      valor_fixo_contrato: number | null;
+      desconto: number | null;
+      bonificacao: boolean | null;
+      orcamento_itens: { preco_unitario: number | null; quantidade: number }[];
+      ordens_servico: { numero_os: string; cliente_id: number } | null;
+    };
+    const clienteIdOrc = orcTyped.ordens_servico?.cliente_id;
+    if (!clienteIdOrc) return json({ error: 'Não foi possível identificar o cliente desse orçamento.' }, 400);
+    const subtotal =
+      orcTyped.valor_fixo_contrato != null
+        ? Number(orcTyped.valor_fixo_contrato)
+        : (orcTyped.orcamento_itens ?? []).reduce(
+            (s, i) => s + (Number(i.preco_unitario) || 0) * Number(i.quantidade),
+            0,
+          );
+    const valorCalc = orcTyped.bonificacao ? 0 : Math.max(subtotal - (Number(orcTyped.desconto) || 0), 0);
+    const numeroOS = orcTyped.ordens_servico?.numero_os ?? '';
+    conta = {
+      id: null,
+      valor: valorCalc,
+      nf_numero: null,
+      cliente_id: clienteIdOrc,
+      descricao: `Orçamento ${orcTyped.numero_orcamento} - OS ${numeroOS}`,
+      orcamentos: {
+        numero_orcamento: orcTyped.numero_orcamento,
+        ordem_servico_id: orcTyped.ordem_servico_id,
+        ordens_servico: { numero_os: numeroOS },
+      },
+    };
+    orcamentoIdParaCriarConta = orcTyped.id;
+  }
   if (!conta.valor || conta.valor <= 0) return json({ error: 'Valor da conta precisa ser maior que zero.' }, 400);
 
   const { data: cliente, error: erroCliente } = await supabaseAdmin
@@ -383,7 +485,7 @@ Deno.serve(async (req: Request) => {
   // Focus NFe, mas devolve pro frontend sem transmitir nada - usado pela
   // tela de conferência antes de emitir de fato (pedido do faturamento
   // pra revisar os dados da DPS antes de mandar pro SEFAZ).
-  const ref = `qcvf-cr-${conta.id}`;
+  let ref = `qcvf-cr-${conta.id}`;
   const payload = {
     data_emissao: dataEmissaoISO(),
     serie_dps: serieDps,
@@ -468,6 +570,38 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // A partir daqui é 'emitir' de verdade. Se a conta ainda não existia
+  // (veio só orcamentoId - orçamento "Liberado" direto, sem passar por
+  // "Lançar NF" antes), cria ela AGORA, sem NF ainda - o número/chave só
+  // são preenchidos depois, quando a Focus autorizar (branch 'consultar'
+  // acima). numero_dps e a referência (ref) usados no payload/POST
+  // precisam ser recalculados com o id real recém-criado.
+  if (conta.id == null) {
+    const numeroConta = await proximoNumeroConta(supabaseAdmin);
+    const vencimento = new Date();
+    vencimento.setDate(vencimento.getDate() + 30);
+    const { data: novaConta, error: erroNovaConta } = await supabaseAdmin
+      .from('contas_receber')
+      .insert({
+        numero_conta: numeroConta,
+        orcamento_id: orcamentoIdParaCriarConta,
+        cliente_id: conta.cliente_id,
+        descricao: conta.descricao,
+        valor: conta.valor,
+        data_vencimento: vencimento.toISOString().slice(0, 10),
+        status: 'Em aberto',
+      })
+      .select('id')
+      .single();
+    if (erroNovaConta || !novaConta) {
+      return json({ error: 'Falha ao criar a conta a receber para este orçamento.' }, 500);
+    }
+    conta.id = novaConta.id;
+    contaId = novaConta.id;
+    payload.numero_dps = conta.id;
+    ref = `qcvf-cr-${conta.id}`;
+  }
+
   // Regra confirmada em teste real (2026-09-02, erro E0235 da SEFAZ
   // Nacional): quando o tomador é identificado por CNPJ (é sempre o
   // nosso caso - nunca CPF), o endereço nacional completo é OBRIGATÓRIO,
@@ -510,5 +644,5 @@ Deno.serve(async (req: Request) => {
     .update({ nfse_status: 'processando', nfse_ref: ref, nfse_erro_detalhe: null })
     .eq('id', contaId);
 
-  return json({ ok: true, ref, resultado });
+  return json({ ok: true, contaId, ref, resultado });
 });

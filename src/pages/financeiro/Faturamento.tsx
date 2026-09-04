@@ -234,8 +234,8 @@ export function Faturamento() {
   const [intervaloDiasAuto, setIntervaloDiasAuto] = useState('30');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [emitindoNfseId, setEmitindoNfseId] = useState<number | null>(null);
-  const [carregandoPreviaId, setCarregandoPreviaId] = useState<number | null>(null);
+  const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
+  const [carregandoPreviaId, setCarregandoPreviaId] = useState<string | null>(null);
   const [salvandoCadastroTomador, setSalvandoCadastroTomador] = useState(false);
   const [previaNfse, setPreviaNfse] = useState<{
     linha: LinhaFaturamento;
@@ -777,12 +777,15 @@ export function Faturamento() {
   // faturamento conferir num modal - só chama a emissão de verdade depois
   // de confirmado ali.
   async function abrirPreviaNfse(l: LinhaFaturamento) {
-    if (!l.contaId) return;
-    setCarregandoPreviaId(l.contaId);
+    if (!l.contaId && !l.orcamentoId) return;
+    setCarregandoPreviaId(l.chave);
     setErro(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfse', {
-        body: { contaId: l.contaId, acao: 'previsualizar' },
+        body: {
+          ...(l.contaId ? { contaId: l.contaId } : { orcamentoId: l.orcamentoId }),
+          acao: 'previsualizar',
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao gerar prévia da NFS-e.');
@@ -924,16 +927,25 @@ export function Faturamento() {
       descricao_servico: string;
     },
   ): Promise<boolean> {
-    if (!l.contaId) return false;
-    setEmitindoNfseId(l.contaId);
+    if (!l.contaId && !l.orcamentoId) return false;
+    setEmitindoNfseId(l.chave);
     setErro(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfse', {
-        body: { contaId: l.contaId, acao: 'emitir', ...(overrides ? { overrides } : {}) },
+        body: {
+          ...(l.contaId ? { contaId: l.contaId } : { orcamentoId: l.orcamentoId }),
+          acao: 'emitir',
+          ...(overrides ? { overrides } : {}),
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao emitir NFS-e.');
+      // Quando a conta ainda não existia (orçamento "Liberado" direto), a
+      // function acabou de criá-la agora - sem invalidar essa segunda
+      // query, a linha "pseudo" (baseada no orçamento) continuaria
+      // aparecendo do lado da nova conta real, duplicada.
       qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+      qc.invalidateQueries({ queryKey: ['faturamento-orcamentos-aprovados'] });
       return true;
     } catch (e) {
       setErro(mensagemErro(e));
@@ -945,7 +957,7 @@ export function Faturamento() {
 
   async function consultarStatusNFSe(l: LinhaFaturamento) {
     if (!l.contaId) return;
-    setEmitindoNfseId(l.contaId);
+    setEmitindoNfseId(l.chave);
     setErro(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfse', {
@@ -1283,23 +1295,23 @@ export function Faturamento() {
                 )}
               </td>
               <td className="acoes-tabela">
-                {l.contaId != null && !l.nf_numero && (!l.nfseStatus || l.nfseStatus === 'erro') && (
+                {(l.contaId != null || liberada(l.statusOS)) && !l.nf_numero && (!l.nfseStatus || l.nfseStatus === 'erro') && (
                   <button
                     className="botao-secundario"
                     onClick={() => abrirPreviaNfse(l)}
-                    disabled={carregandoPreviaId === l.contaId || emitindoNfseId === l.contaId}
+                    disabled={carregandoPreviaId === l.chave || emitindoNfseId === l.chave}
                     title={l.nfseErroDetalhe ?? undefined}
                   >
-                    {carregandoPreviaId === l.contaId ? 'Carregando...' : 'Emitir NFS-e'}
+                    {carregandoPreviaId === l.chave ? 'Carregando...' : 'Emitir NFS-e'}
                   </button>
                 )}
                 {l.contaId != null && !l.nf_numero && l.nfseStatus === 'processando' && (
                   <button
                     className="botao-secundario"
                     onClick={() => consultarStatusNFSe(l)}
-                    disabled={emitindoNfseId === l.contaId}
+                    disabled={emitindoNfseId === l.chave}
                   >
-                    {emitindoNfseId === l.contaId ? 'Verificando...' : 'Verificar status'}
+                    {emitindoNfseId === l.chave ? 'Verificando...' : 'Verificar status'}
                   </button>
                 )}
                 <button
@@ -1815,7 +1827,7 @@ export function Faturamento() {
               Visualizar DANFE (prévia)
             </button>
             <button className="botao-primario" onClick={confirmarEmissaoNfse} disabled={emitindoNfseId != null}>
-              {emitindoNfseId === previaNfse.linha.contaId ? 'Transmitindo...' : 'Confirmar e transmitir ao SEFAZ'}
+              {emitindoNfseId === previaNfse.linha.chave ? 'Transmitindo...' : 'Confirmar e transmitir ao SEFAZ'}
             </button>
           </div>
         </ModalJanela>
