@@ -15,3 +15,26 @@ export function mensagemErro(error: unknown): string {
   }
   return e.message ?? 'Erro ao processar a solicitação.';
 }
+
+// supabase.functions.invoke() joga um FunctionsHttpError genérico
+// ("Edge Function returned a non-2xx status code") sempre que a function
+// responde com status != 2xx - a mensagem específica que a function
+// devolveu (ex.: "Endereço do cliente incompleto...") fica só no corpo da
+// Response, em error.context, e nunca chega em error.message. Sem isso,
+// toda validação da function (400/404/500) aparecia pro usuário só como
+// esse texto genérico, escondendo o motivo real - descoberto ao testar a
+// emissão de NFS-e em produção (2026-09-04).
+export async function mensagemErroFuncao(error: unknown): Promise<string> {
+  const contexto = (error as { context?: unknown } | null)?.context;
+  if (contexto && typeof (contexto as Response).json === 'function') {
+    try {
+      const corpo = await (contexto as Response).clone().json();
+      if (corpo?.error) {
+        return typeof corpo.error === 'string' ? corpo.error : JSON.stringify(corpo.error);
+      }
+    } catch {
+      // corpo não era JSON (ou já tinha sido consumido) - cai no fallback abaixo.
+    }
+  }
+  return mensagemErro(error);
+}

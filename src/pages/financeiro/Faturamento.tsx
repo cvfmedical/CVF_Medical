@@ -6,7 +6,7 @@ import { useFiltrosColuna } from '../../lib/useFiltrosColuna';
 import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
-import { mensagemErro } from '../../lib/erros';
+import { mensagemErro, mensagemErroFuncao } from '../../lib/erros';
 import { linkEmail } from '../../lib/compartilhar';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
@@ -816,7 +816,7 @@ export function Faturamento() {
         descricaoServico: r.descricaoServico ?? '',
       });
     } catch (e) {
-      setErro(mensagemErro(e));
+      setErro(await mensagemErroFuncao(e));
     } finally {
       setCarregandoPreviaId(null);
     }
@@ -948,7 +948,7 @@ export function Faturamento() {
       qc.invalidateQueries({ queryKey: ['faturamento-orcamentos-aprovados'] });
       return true;
     } catch (e) {
-      setErro(mensagemErro(e));
+      setErro(await mensagemErroFuncao(e));
       return false;
     } finally {
       setEmitindoNfseId(null);
@@ -967,7 +967,7 @@ export function Faturamento() {
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar status.');
       qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
     } catch (e) {
-      setErro(mensagemErro(e));
+      setErro(await mensagemErroFuncao(e));
     } finally {
       setEmitindoNfseId(null);
     }
@@ -1802,7 +1802,11 @@ export function Faturamento() {
             </div>
             <div className="campo-form" style={{ flex: 1 }}>
               <label>Número</label>
-              <input type="text" value={String(previaNfse.payload.numero_dps)} disabled />
+              <input
+                type="text"
+                value={previaNfse.payload.numero_dps == null ? '(novo, definido ao confirmar)' : String(previaNfse.payload.numero_dps)}
+                disabled
+              />
             </div>
             <div className="campo-form" style={{ flex: 2 }}>
               <label>Data/hora de emissão</label>
