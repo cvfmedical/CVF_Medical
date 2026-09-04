@@ -288,6 +288,20 @@ Deno.serve(async (req: Request) => {
     });
     const resultado = await resp.json().catch(() => ({}));
 
+    // BUG CONFIRMADO da própria API da Focus (2026-09-04, chamado com
+    // Natan Coelho/suporte): o campo "url_danfse" (e "url") retornado pela
+    // consulta vem com o caminho errado - "DANFSes" (e minúsculo) - mas o
+    // objeto de verdade no S3 deles fica em "DANFSEs" (E maiúsculo,
+    // confirmado testando os dois: maiúsculo dá HTTP 200, minúsculo dá
+    // AccessDenied). Não é aleatório nem depende de navegador/referer -
+    // testamos o MESMO link em abas diferentes e o resultado dependia só
+    // dessa letra. Corrige aqui pra não gravar um link que sabemos que
+    // está quebrado - se a Focus corrigir o bug deles no futuro, meio
+    // caminho (replace não encontra "DANFSes" minúsculo) e o link original
+    // já vem certo, sem quebrar nada.
+    const corrigirUrlDanfse = (url: string | null | undefined): string | null =>
+      url ? url.replace('/DANFSes/', '/DANFSEs/') : null;
+
     // Todas as gravações abaixo agora conferem erro - antes, uma falha aqui
     // (ex.: 2026-09-04, "value too long for type character varying(44)" no
     // nf_chave_acesso, dimensionado pra chave de acesso da NF-e tradicional
@@ -305,7 +319,7 @@ Deno.serve(async (req: Request) => {
           nf_chave_acesso: resultado.codigo_verificacao ?? null,
           nf_data_emissao: resultado.data_emissao ? String(resultado.data_emissao).slice(0, 10) : null,
           nfse_status: 'autorizada',
-          nfse_pdf_path: resultado.url_danfse ?? null,
+          nfse_pdf_path: corrigirUrlDanfse(resultado.url_danfse),
           nfse_erro_detalhe: null,
         })
         .eq('id', contaId);
