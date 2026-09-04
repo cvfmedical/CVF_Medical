@@ -1119,6 +1119,8 @@ export function Faturamento() {
         </div>
       </div>
 
+      {erro && !linhaSelecionada && !previaNfse && <p className="erro-login">{erro}</p>}
+
       {liberadas.length > 0 && (
         <div
           style={{
@@ -1288,10 +1290,10 @@ export function Faturamento() {
                   <Badge tono="ambar">Não faturado</Badge>
                 )}
                 {!l.nf_numero && l.nfseStatus === 'processando' && (
-                  <>
+                  <span title={l.nfseErroDetalhe ?? 'Ainda sem retorno da Focus NFe/prefeitura - clique em "Verificar status" de novo em instantes.'}>
                     {' '}
                     <Badge tono="copper">NFS-e processando</Badge>
-                  </>
+                  </span>
                 )}
                 {!l.nf_numero && l.nfseStatus === 'erro' && (
                   <span title={l.nfseErroDetalhe ?? undefined}>
