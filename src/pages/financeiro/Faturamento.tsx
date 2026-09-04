@@ -1561,6 +1561,24 @@ export function Faturamento() {
             direto pro SEFAZ via Focus NFe - não dá pra editar depois de transmitida.
           </p>
 
+          <div
+            style={{
+              display: 'inline-block',
+              fontSize: 12,
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: 6,
+              marginBottom: 8,
+              color: '#fff',
+              background:
+                previaNfse.resumoSomenteLeitura.ambiente === 'producao' ? 'var(--red-600, #c0392b)' : '#8a6d00',
+            }}
+          >
+            {previaNfse.resumoSomenteLeitura.ambiente === 'producao'
+              ? 'AMBIENTE: PRODUÇÃO - nota fiscal real, vale para a Receita/prefeitura'
+              : 'AMBIENTE: HOMOLOGAÇÃO - nota de teste, não tem validade fiscal'}
+          </div>
+
           <h2 style={{ fontSize: 13, marginTop: 12 }}>Prestador (CVF Medical)</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             <div className="campo-form" style={{ flex: 1 }}>
