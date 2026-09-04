@@ -883,6 +883,12 @@ export function Faturamento() {
       aliquotaIss: previaNfse.resumoSomenteLeitura.aliquotaIss,
       codigoTributacaoNacionalIss: String(previaNfse.payload.codigo_tributacao_nacional_iss),
       codigoNbs: String(previaNfse.payload.codigo_nbs),
+      inscricaoMunicipalPrestador: String(previaNfse.payload.inscricao_municipal_prestador ?? ''),
+      codigoOpcaoSimplesNacional: Number(previaNfse.payload.codigo_opcao_simples_nacional),
+      regimeEspecialTributacao: Number(previaNfse.payload.regime_especial_tributacao),
+      codigoIndicadorOperacao: String(previaNfse.payload.codigo_indicador_operacao),
+      ibsCbsSituacaoTributaria: String(previaNfse.payload.ibs_cbs_situacao_tributaria),
+      ibsCbsClassificacaoTributaria: String(previaNfse.payload.ibs_cbs_classificacao_tributaria),
     });
   }
 

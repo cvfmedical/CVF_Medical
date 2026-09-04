@@ -28,6 +28,26 @@ export interface DadosPreviaDanfse {
   aliquotaIss: number | null;
   codigoTributacaoNacionalIss: string;
   codigoNbs: string;
+  inscricaoMunicipalPrestador: string;
+  codigoOpcaoSimplesNacional: number;
+  regimeEspecialTributacao: number;
+  codigoIndicadorOperacao: string;
+  ibsCbsSituacaoTributaria: string;
+  ibsCbsClassificacaoTributaria: string;
+}
+
+// Texto descritivo do código de tributação nacional do ISSQN - fixo pra
+// CVF (140201, "Assistência técnica"), confirmado na Ficha Cadastral da
+// prefeitura (2026-09-04). Só usado pra exibição na prévia; o valor
+// enviado de verdade é sempre o código, não esse texto.
+const DESCRICAO_ATIVIDADE_MUNICIPAL: Record<string, string> = {
+  '140201': '14.02.01 - Assistência técnica',
+};
+
+function descricaoSimplesNacional(codigo: number): string {
+  if (codigo === 3) return 'Optante - Microempresa ou Empresa de Pequeno Porte (ME/EPP)';
+  if (codigo === 1) return 'Não optante';
+  return `Código ${codigo}`;
 }
 
 function formatarDocumento(digitos: string): string {
@@ -150,7 +170,10 @@ export function abrirPreviaDanfse(d: DadosPreviaDanfse) {
           <div class="secao-corpo grade">
             <div class="campo"><div class="rot">Razão social</div><div class="val">${EMPRESA.razaoSocial}</div></div>
             <div class="campo"><div class="rot">CNPJ</div><div class="val">${EMPRESA.cnpj}</div></div>
-            <div class="campo"><div class="rot">Endereço</div><div class="val">${EMPRESA.endereco}</div></div>
+            <div class="campo"><div class="rot">Inscrição municipal</div><div class="val">${d.inscricaoMunicipalPrestador}</div></div>
+            <div class="campo" style="grid-column: 1 / -1;"><div class="rot">Endereço</div><div class="val">${EMPRESA.endereco}</div></div>
+            <div class="campo"><div class="rot">Situação Simples Nacional</div><div class="val">${descricaoSimplesNacional(d.codigoOpcaoSimplesNacional)}</div></div>
+            <div class="campo"><div class="rot">Regime especial</div><div class="val">${d.regimeEspecialTributacao === 0 ? 'Nenhum' : `Código ${d.regimeEspecialTributacao}`}</div></div>
           </div>
         </div>
 
@@ -186,8 +209,22 @@ export function abrirPreviaDanfse(d: DadosPreviaDanfse) {
             <div class="campo"><div class="rot">Alíquota ISS</div><div class="val">${d.aliquotaIss != null ? `${d.aliquotaIss.toFixed(2)}%` : 'Não informada'}</div></div>
             <div class="campo"><div class="rot">Valor do ISS</div><div class="val">${valorIss}</div></div>
             <div class="campo"><div class="rot">Código NBS</div><div class="val">${d.codigoNbs}</div></div>
-            <div class="campo"><div class="rot">Cód. tributação (ISS)</div><div class="val">${d.codigoTributacaoNacionalIss}</div></div>
-            <div class="campo"><div class="rot">Município da prestação</div><div class="val">Ribeirão Preto/SP</div></div>
+            <div class="campo"><div class="rot">Cód. tributação (ISS)</div><div class="val">${d.codigoTributacaoNacionalIss}${DESCRICAO_ATIVIDADE_MUNICIPAL[d.codigoTributacaoNacionalIss] ? ` - ${DESCRICAO_ATIVIDADE_MUNICIPAL[d.codigoTributacaoNacionalIss]}` : ''}</div></div>
+            <div class="campo"><div class="rot">Município da prestação/incidência</div><div class="val">Ribeirão Preto/SP</div></div>
+          </div>
+        </div>
+
+        <div class="secao">
+          <div class="secao-titulo">Imposto e contribuição sobre bens e serviços - IBS/CBS</div>
+          <div class="secao-corpo grade">
+            <div class="campo"><div class="rot">Cód. indicador de operação</div><div class="val">${d.codigoIndicadorOperacao}</div></div>
+            <div class="campo"><div class="rot">Situação tributária (CST)</div><div class="val">${d.ibsCbsSituacaoTributaria}</div></div>
+            <div class="campo"><div class="rot">Classificação tributária</div><div class="val">${d.ibsCbsClassificacaoTributaria}</div></div>
+          </div>
+          <div class="secao-corpo" style="padding-top: 0; font-size: 10px; color: #a33;">
+            As alíquotas e os valores de CBS/IBS não são enviados por nós - são calculados automaticamente pela
+            plataforma Sefin Nacional a partir desses códigos, no momento da autorização. Por isso não aparecem
+            aqui na prévia; eles só existem no DANFSe oficial, depois que a nota for transmitida e autorizada.
           </div>
         </div>
       </div>

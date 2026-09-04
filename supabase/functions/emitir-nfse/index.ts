@@ -636,7 +636,19 @@ Deno.serve(async (req: Request) => {
       .from('contas_receber')
       .update({ nfse_status: 'erro', nfse_erro_detalhe: detalheCompleto })
       .eq('id', contaId);
-    return json({ error: 'Falha ao emitir NFS-e', detalhe: resultado }, 502);
+    // A mensagem da Focus (resultado.mensagem) vai direto no "error" - antes
+    // só ia um texto genérico "Falha ao emitir NFS-e" pro frontend, e o
+    // motivo real (ex.: token inválido, série errada) só aparecia consultando
+    // nfse_erro_detalhe no banco. Descoberto no primeiro teste real de
+    // produção (2026-09-04): erro 401 "Access token inválido" ficou
+    // escondido atrás desse texto genérico.
+    const mensagemFocus =
+      typeof resultado?.mensagem === 'string'
+        ? resultado.mensagem
+        : typeof resultado?.erro === 'string'
+          ? resultado.erro
+          : JSON.stringify(resultado);
+    return json({ error: `Falha ao emitir NFS-e (HTTP ${resp.status}): ${mensagemFocus}`, detalhe: resultado }, 502);
   }
 
   await supabaseAdmin
