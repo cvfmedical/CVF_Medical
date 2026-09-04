@@ -216,9 +216,10 @@ Deno.serve(async (req: Request) => {
   let corpo: {
     contaId?: number;
     orcamentoId?: number;
-    acao?: 'emitir' | 'consultar' | 'previsualizar' | 'reenviar_email';
+    acao?: 'emitir' | 'consultar' | 'previsualizar' | 'reenviar_email' | 'cancelar';
     overrides?: Overrides;
     emails?: string[];
+    justificativa?: string;
   };
   try {
     corpo = await req.json();
@@ -269,6 +270,48 @@ Deno.serve(async (req: Request) => {
     if (!resp.ok) {
       const mensagemFocus = typeof resultado?.mensagem === 'string' ? resultado.mensagem : JSON.stringify(resultado);
       return json({ error: `Falha ao reenviar e-mail pela Focus NFe (HTTP ${resp.status}): ${mensagemFocus}` }, 502);
+    }
+    return json({ ok: true, resultado });
+  }
+
+  if (acao === 'cancelar') {
+    // Cancelamento DE VERDADE junto à prefeitura/Sefin Nacional -
+    // documentado em doc.focusnfe.com.br/reference/cancelar_nfse_nacional.md
+    // (DELETE /v2/nfsen/{ref}, corpo opcional {justificativa}). Diferente do
+    // "Remover NF" do frontend (que só apaga campos aqui no nosso banco,
+    // sem avisar ninguém) - isso é IRREVERSÍVEL e só funciona dentro do
+    // prazo que a prefeitura permite (Focus recusa fora do prazo).
+    if (!contaId) return json({ error: 'contaId é obrigatório.' }, 400);
+    const { data: conta, error: erroConta } = await supabaseAdmin
+      .from('contas_receber')
+      .select('id, nfse_ref, nfse_status')
+      .eq('id', contaId)
+      .single();
+    if (erroConta || !conta) return json({ error: 'Conta a receber não encontrada.' }, 404);
+    if (!conta.nfse_ref) return json({ error: 'Essa conta não tem NFS-e emitida por aqui pra cancelar.' }, 400);
+    if (conta.nfse_status === 'cancelada') return json({ error: 'Essa NFS-e já está cancelada.' }, 400);
+
+    const justificativa = typeof corpo.justificativa === 'string' ? corpo.justificativa.trim() : '';
+    const resp = await fetch(`${focusBaseUrl}/v2/nfsen/${conta.nfse_ref}`, {
+      method: 'DELETE',
+      headers: { Authorization: authFocus, 'Content-Type': 'application/json' },
+      body: JSON.stringify(justificativa ? { justificativa } : {}),
+    });
+    const resultado = await resp.json().catch(() => ({}));
+    if (!resp.ok || resultado.status === 'erro_cancelamento') {
+      const mensagens = Array.isArray(resultado?.erros)
+        ? resultado.erros.map((e: { mensagem?: string }) => e.mensagem).join('; ')
+        : null;
+      const mensagemFocus = mensagens ?? (typeof resultado?.mensagem === 'string' ? resultado.mensagem : JSON.stringify(resultado));
+      return json({ error: `Falha ao cancelar NFS-e (HTTP ${resp.status}): ${mensagemFocus}`, detalhe: resultado }, 502);
+    }
+
+    const { error: erroUpdate } = await supabaseAdmin
+      .from('contas_receber')
+      .update({ nfse_status: 'cancelada', nfse_erro_detalhe: null })
+      .eq('id', contaId);
+    if (erroUpdate) {
+      return json({ error: `Cancelou na prefeitura, mas falhou ao gravar isso no nosso banco: ${erroUpdate.message}` }, 500);
     }
     return json({ ok: true, resultado });
   }

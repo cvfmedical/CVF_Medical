@@ -41,6 +41,7 @@ interface ContaReceber {
   nfse_status: string | null;
   nfse_erro_detalhe: string | null;
   nfse_pdf_path: string | null;
+  nfse_ref: string | null;
   orcamentos: {
     numero_orcamento: string;
     ordem_servico_id: number;
@@ -90,6 +91,7 @@ interface LinhaFaturamento {
   nfseStatus: string | null;
   nfseErroDetalhe: string | null;
   nfsePdfPath: string | null;
+  nfseRef: string | null;
 }
 
 const formVazio = {
@@ -236,6 +238,7 @@ export function Faturamento() {
   const [salvando, setSalvando] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
   const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
+  const [cancelandoNfseId, setCancelandoNfseId] = useState<string | null>(null);
   const [carregandoPreviaId, setCarregandoPreviaId] = useState<string | null>(null);
   const [salvandoCadastroTomador, setSalvandoCadastroTomador] = useState(false);
   const [previaNfse, setPreviaNfse] = useState<{
@@ -292,7 +295,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('contas_receber')
         .select(
-          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, nfse_status, nfse_erro_detalhe, nfse_pdf_path, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, nfse_status, nfse_erro_detalhe, nfse_pdf_path, nfse_ref, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
         )
         .neq('status', 'Cancelado')
         .order('id', { ascending: false });
@@ -355,6 +358,7 @@ export function Faturamento() {
       nfseStatus: c.nfse_status,
       nfseErroDetalhe: c.nfse_erro_detalhe,
       nfsePdfPath: c.nfse_pdf_path,
+      nfseRef: c.nfse_ref,
     })),
     ...(orcamentosQuery.data ?? [])
       // Garantia e bonificação (cortesia) somam R$ 0,00 - não há o que
@@ -386,6 +390,7 @@ export function Faturamento() {
           nfseStatus: null,
           nfseErroDetalhe: null,
           nfsePdfPath: null,
+          nfseRef: null,
         };
       }),
   ];
@@ -929,6 +934,42 @@ export function Faturamento() {
     }
   }
 
+  // Cancela de verdade na Focus NFe/Sefin Nacional (DELETE /v2/nfsen/{ref}) -
+  // diferente de "Remover NF" (mais abaixo), que só apaga os campos AQUI no
+  // nosso banco, sem avisar a prefeitura. Isso é IRREVERSÍVEL e só funciona
+  // dentro do prazo que a prefeitura permite - passado esse prazo, a Focus
+  // recusa e o erro real aparece na tela (via mensagemErroFuncao).
+  async function cancelarNfseOficial(l: LinhaFaturamento) {
+    if (!l.contaId || !l.nfseRef) return;
+    const justificativa = window.prompt(
+      `Cancelar a NFS-e ${l.nf_numero} de verdade junto à prefeitura? Essa ação é IRREVERSÍVEL.\n\nJustificativa (opcional, mas pode ser exigida pela prefeitura):`,
+      '',
+    );
+    if (justificativa === null) return; // cancelou o prompt
+    pedirConfirmacao(
+      async () => {
+        setCancelandoNfseId(l.chave);
+        setErro(null);
+        try {
+          const { data, error } = await supabase.functions.invoke('emitir-nfse', {
+            body: { contaId: l.contaId, acao: 'cancelar', justificativa: justificativa || undefined },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao cancelar NFS-e.');
+          qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+        } catch (e) {
+          setErro(await mensagemErroFuncao(e));
+        } finally {
+          setCancelandoNfseId(null);
+        }
+      },
+      {
+        titulo: 'Cancelar NFS-e',
+        mensagem: `Confirma o cancelamento definitivo da NFS-e nº ${l.nf_numero} junto à prefeitura? Não tem como desfazer.`,
+      },
+    );
+  }
+
   async function confirmarEmissaoNfse() {
     if (!previaNfse || !formNfse) return;
     const sucesso = await emitirNFSe(previaNfse.linha, {
@@ -1311,7 +1352,15 @@ export function Faturamento() {
               <td>{l.descricao}</td>
               <td>R$ {Number(l.valor).toFixed(2)}</td>
               <td>
-                {l.nf_numero ? (
+                {l.nfseStatus === 'cancelada' ? (
+                  <>
+                    <Badge tono="danger">NFS-e cancelada</Badge>{' '}
+                    <span className="mono" style={{ fontSize: 12, textDecoration: 'line-through' }}>
+                      {l.nf_tipo} {l.nf_numero}
+                      {l.nf_serie ? `/${l.nf_serie}` : ''}
+                    </span>
+                  </>
+                ) : l.nf_numero ? (
                   <>
                     <Badge tono="teal">Faturado</Badge>{' '}
                     <span className="mono" style={{ fontSize: 12 }}>
@@ -1391,8 +1440,22 @@ export function Faturamento() {
                     {enviandoEmailOficialId === l.chave ? 'Enviando...' : 'Reenviar NF oficial por e-mail'}
                   </button>
                 )}
-                {l.nf_numero && l.contaId && (
-                  <button className="botao-secundario perigo" onClick={() => removerNota(l)}>
+                {l.nf_numero && l.nfseRef && l.nfseStatus !== 'cancelada' && (
+                  <button
+                    className="botao-secundario perigo"
+                    onClick={() => cancelarNfseOficial(l)}
+                    disabled={cancelandoNfseId === l.chave}
+                    title="Cancela de verdade junto à prefeitura (Focus NFe) - irreversível, só funciona dentro do prazo permitido"
+                  >
+                    {cancelandoNfseId === l.chave ? 'Cancelando...' : 'Cancelar NF'}
+                  </button>
+                )}
+                {l.nf_numero && l.contaId && !l.nfseRef && (
+                  <button
+                    className="botao-secundario perigo"
+                    onClick={() => removerNota(l)}
+                    title="Apaga só os dados aqui do nosso sistema - use quando a NF foi lançada manualmente (fora do nosso sistema) e precisa corrigir um registro local errado"
+                  >
                     Remover NF
                   </button>
                 )}
