@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { proximoNumeroDeJob, sufixoNumerico, numeroHerdadoOuNovo } from '../../lib/numeroSequencial';
 import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { useAuth } from '../../contexts/AuthContext';
-import { mensagemErro } from '../../lib/erros';
+import { mensagemErro, mensagemErroFuncao } from '../../lib/erros';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { IconClipboardList, IconMail, IconPencil, IconPlus, IconPrinter, IconQrcode, IconShare, IconTrash, IconX } from '@tabler/icons-react';
@@ -173,6 +173,8 @@ export function EntradaEquipamento() {
     limparTudo,
     algumFiltroAtivo,
   } = useFiltrosColuna();
+  const [consultandoRemessa, setConsultandoRemessa] = useState(false);
+  const [avisoRemessa, setAvisoRemessa] = useState<string | null>(null);
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
   // Envio em lote (igual ao Financeiro): manda o e-mail de chegada de
   // várias entradas do mesmo cliente num só e-mail, em vez de um por um.
@@ -418,6 +420,7 @@ export function EntradaEquipamento() {
     setSubgrupoEquipamento('');
     setClienteFinalId('');
     setErro(null);
+    setAvisoRemessa(null);
     setModalAberto(true);
   }
 
@@ -431,6 +434,60 @@ export function EntradaEquipamento() {
 
   function removerCondicaoDaLista(descricao: string) {
     setCondicoesSelecionadas((lista) => lista.filter((c) => c !== descricao));
+  }
+
+  // Consulta a NF-e de remessa (que o cliente emitiu) direto na Focus, pela
+  // chave de acesso, e preenche número/série/CFOP/valor/data automaticamente
+  // - evita digitar esses dados à mão e garante que batem com a nota real.
+  // Só consulta, nunca grava nada sozinha (mesmo princípio da prévia de NFS-e).
+  async function consultarNotaRemessa() {
+    const chave = form.nf_remessa_chave_acesso.replace(/\D/g, '');
+    if (chave.length !== 44) {
+      setAvisoRemessa('Chave de acesso precisa ter 44 dígitos.');
+      return;
+    }
+    setConsultandoRemessa(true);
+    setAvisoRemessa(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+        body: { acao: 'consultar_remessa', chaveAcesso: chave },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar a nota.');
+      const d = data.dados as {
+        numero: string | number | null;
+        serie: string | number | null;
+        cfop: string | null;
+        valorTotal: string | number | null;
+        dataEmissao: string | null;
+        cnpjEmitente: string | null;
+        nomeEmitente: string | null;
+        chaveNfe: string | null;
+      };
+      setForm((f) => ({
+        ...f,
+        nf_remessa_numero: d.numero != null ? String(d.numero) : f.nf_remessa_numero,
+        nf_remessa_serie: d.serie != null ? String(d.serie) : f.nf_remessa_serie,
+        nf_remessa_cfop: d.cfop ?? f.nf_remessa_cfop,
+        nf_remessa_valor: d.valorTotal != null ? String(d.valorTotal) : f.nf_remessa_valor,
+        nf_remessa_data_emissao: d.dataEmissao ? String(d.dataEmissao).slice(0, 10) : f.nf_remessa_data_emissao,
+        nf_remessa_chave_acesso: d.chaveNfe ?? chave,
+      }));
+      const clienteSelecionado = clientesQuery.data?.find((c) => String(c.id) === form.cliente_id);
+      const cnpjCliente = clienteSelecionado?.cnpj?.replace(/\D/g, '') ?? '';
+      const cnpjNota = (d.cnpjEmitente ?? '').replace(/\D/g, '');
+      if (clienteSelecionado && cnpjCliente && cnpjNota && cnpjCliente !== cnpjNota) {
+        setAvisoRemessa(
+          `Atenção: o CNPJ do emitente desta nota (${d.nomeEmitente ?? cnpjNota}) não bate com o cliente selecionado nesta entrada (${clienteSelecionado.razao_social}). Confira se é o cliente certo.`,
+        );
+      } else {
+        setAvisoRemessa(null);
+      }
+    } catch (e) {
+      setAvisoRemessa(await mensagemErroFuncao(e));
+    } finally {
+      setConsultandoRemessa(false);
+    }
   }
 
   function removerFotoSelecionada(indice: number) {
@@ -468,6 +525,7 @@ export function EntradaEquipamento() {
     setSubgrupoEquipamento(e.subgrupo ?? '');
     setClienteFinalId(e.cliente_final_id ? String(e.cliente_final_id) : '');
     setErro(null);
+    setAvisoRemessa(null);
     setModalAberto(true);
     carregarFotosExistentes(e.id);
   }
@@ -1276,12 +1334,28 @@ export function EntradaEquipamento() {
             </div>
             <div className="campo-form">
               <label>Chave de acesso</label>
-              <input
-                type="text"
-                maxLength={44}
-                value={form.nf_remessa_chave_acesso}
-                onChange={(e) => setForm((f) => ({ ...f, nf_remessa_chave_acesso: e.target.value }))}
-              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  maxLength={44}
+                  style={{ flex: 1 }}
+                  value={form.nf_remessa_chave_acesso}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_chave_acesso: e.target.value }))}
+                />
+                <button
+                  type="button"
+                  className="botao-secundario"
+                  onClick={consultarNotaRemessa}
+                  disabled={consultandoRemessa}
+                >
+                  {consultandoRemessa ? 'Consultando...' : 'Consultar por chave de acesso'}
+                </button>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Preenche número/série/CFOP/valor/data automaticamente com os dados reais da nota, consultados
+                direto na Focus/SEFAZ.
+              </p>
+              {avisoRemessa && <p className="erro-login">{avisoRemessa}</p>}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div className="campo-form" style={{ flex: 1 }}>

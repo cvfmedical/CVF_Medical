@@ -8,13 +8,14 @@ import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/st
 import { imprimirOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { imprimirEtiquetaDespacho, imprimirEtiquetasDespachoLote, type DadosEtiquetaDespacho } from '../../lib/etiquetaDespacho';
 import { IconPrinter, IconTruckDelivery } from '@tabler/icons-react';
-import { mensagemErro } from '../../lib/erros';
+import { mensagemErro, mensagemErroFuncao } from '../../lib/erros';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { linkEmail } from '../../lib/compartilhar';
 import { ModalJanela } from '../../components/ModalJanela';
+import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 
 interface EntregaRow {
   id: number;
@@ -29,8 +30,25 @@ interface EntregaRow {
   nf_devolucao_cfop: string | null;
   nf_devolucao_data_emissao: string | null;
   nf_devolucao_valor: number | null;
+  nfe_devolucao_status: string | null;
+  nfe_devolucao_ref: string | null;
+  nfe_devolucao_erro_detalhe: string | null;
   confirmado_pelo_cliente_em: string | null;
   finalizado_manualmente_em: string | null;
+}
+
+// Resumo devolvido pela previsualizar_devolucao da emitir-nfe - só os
+// campos que a tela de conferência realmente mostra.
+interface ResumoDevolucao {
+  ambiente: 'homologacao' | 'producao';
+  razaoSocialDestinatario: string;
+  documentoDestinatario: string | null;
+  numeroOS: string;
+  descricaoItem: string;
+  cfop: string;
+  ncm: string;
+  numeroRemessa: string | null;
+  chaveRemessa: string | null;
 }
 
 export function Entrega() {
@@ -39,9 +57,23 @@ export function Entrega() {
   const { funcionario } = useAuth();
   const { opcoes, porId, isLoading } = useOrdensServicoOpcoes();
   const { codigoEntradaPorOS } = useEntradaOrcamentoPorOS();
+  const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
   const [imprimindoLote, setImprimindoLote] = useState(false);
   const [selecionandoEtiquetas, setSelecionandoEtiquetas] = useState(false);
   const [osSelecionadas, setOsSelecionadas] = useState<Set<number>>(new Set());
+
+  // Emissão de NF-e de devolução (integração Focus NF-e) - ação separada da
+  // listagem, não dá pra encaixar no formulário genérico do CrudPage porque
+  // precisa de uma tela de conferência antes de transmitir de verdade (mesmo
+  // padrão já usado na emissão de NFS-e em Faturamento.tsx).
+  const [devolucaoAlvo, setDevolucaoAlvo] = useState<EntregaRow | null>(null);
+  const [previaDevolucao, setPreviaDevolucao] = useState<{ payload: unknown; resumo: ResumoDevolucao } | null>(null);
+  const [carregandoPreviaDevolucao, setCarregandoPreviaDevolucao] = useState(false);
+  const [valorBemDevolucao, setValorBemDevolucao] = useState('');
+  const [emitindoDevolucao, setEmitindoDevolucao] = useState(false);
+  const [erroDevolucao, setErroDevolucao] = useState<string | null>(null);
+  const [consultandoStatusDevolucaoId, setConsultandoStatusDevolucaoId] = useState<number | null>(null);
+  const [cancelandoDevolucaoId, setCancelandoDevolucaoId] = useState<number | null>(null);
 
   // Nº do orçamento de cada OS - pra saber a que orçamento essa entrega se
   // refere, sem precisar abrir a OS. Com orçamentos alternativos, prioriza
@@ -405,6 +437,127 @@ export function Entrega() {
     qc.invalidateQueries({ queryKey: ['entregas'] });
   }
 
+  // Abre a tela de conferência da NF-e de devolução (Focus NF-e) - só monta
+  // o payload e mostra, nunca transmite sozinha. A transmissão de verdade só
+  // acontece depois de confirmar com senha (emitirDevolucaoConfirmada).
+  async function abrirPreviaDevolucao(row: EntregaRow) {
+    setDevolucaoAlvo(row);
+    setPreviaDevolucao(null);
+    setErroDevolucao(null);
+    setValorBemDevolucao('');
+    setCarregandoPreviaDevolucao(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+        body: { acao: 'previsualizar_devolucao', entregaId: row.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao gerar a prévia da NF-e.');
+      setPreviaDevolucao({ payload: data.payload, resumo: data.resumo });
+    } catch (e) {
+      setErroDevolucao(await mensagemErroFuncao(e));
+    } finally {
+      setCarregandoPreviaDevolucao(false);
+    }
+  }
+
+  function fecharPreviaDevolucao() {
+    setDevolucaoAlvo(null);
+    setPreviaDevolucao(null);
+    setErroDevolucao(null);
+    setValorBemDevolucao('');
+  }
+
+  // Transmite de fato pra SEFAZ - irreversível (só dá pra cancelar até 24h
+  // depois), por isso exige confirmar a senha antes, igual ao cancelamento
+  // de NFS-e.
+  function emitirDevolucaoConfirmada() {
+    if (!devolucaoAlvo) return;
+    const valor = Number(valorBemDevolucao.replace(',', '.'));
+    if (!valor || valor <= 0) {
+      setErroDevolucao('Informe o valor do bem devolvido antes de transmitir.');
+      return;
+    }
+    const alvo = devolucaoAlvo;
+    pedirConfirmacao(
+      async () => {
+        setEmitindoDevolucao(true);
+        setErroDevolucao(null);
+        try {
+          const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+            body: { acao: 'emitir_devolucao', entregaId: alvo.id, valorBem: valor },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao emitir a NF-e de devolução.');
+          qc.invalidateQueries({ queryKey: ['entregas'] });
+          fecharPreviaDevolucao();
+        } catch (e) {
+          setErroDevolucao(await mensagemErroFuncao(e));
+        } finally {
+          setEmitindoDevolucao(false);
+        }
+      },
+      {
+        titulo: 'Emitir NF-e de devolução',
+        mensagem: `Confirma a transmissão da NF-e de devolução para a SEFAZ, referente à OS ${previaDevolucao?.resumo.numeroOS ?? alvo.ordem_servico_id}? Depois de autorizada, só é possível cancelar em até 24h.`,
+      },
+    );
+  }
+
+  // Poll de status - a autorização de verdade só aparece na consulta, não na
+  // resposta do POST inicial (mesmo padrão assíncrono já usado na NFS-e).
+  async function consultarStatusDevolucao(row: EntregaRow) {
+    setConsultandoStatusDevolucaoId(row.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+        body: { acao: 'consultar_devolucao', entregaId: row.id },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        alert(typeof data.error === 'string' ? data.error : 'Falha ao consultar o status da NF-e.');
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ['entregas'] });
+    } catch (e) {
+      alert(await mensagemErroFuncao(e));
+    } finally {
+      setConsultandoStatusDevolucaoId(null);
+    }
+  }
+
+  // Cancelamento de verdade na SEFAZ - só possível até 24h após a emissão
+  // (bem mais curto que o prazo da NFS-e).
+  function cancelarDevolucao(row: EntregaRow) {
+    const justificativa = window.prompt(
+      `Cancelar a NF-e de devolução ${row.nf_devolucao_numero} de verdade junto à SEFAZ? Essa ação é IRREVERSÍVEL e só funciona até 24h após a emissão.\n\nJustificativa (opcional):`,
+      '',
+    );
+    if (justificativa === null) return;
+    pedirConfirmacao(
+      async () => {
+        setCancelandoDevolucaoId(row.id);
+        try {
+          const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+            body: { acao: 'cancelar_devolucao', entregaId: row.id, justificativa: justificativa || undefined },
+          });
+          if (error) throw error;
+          if (data?.error) {
+            alert(typeof data.error === 'string' ? data.error : 'Falha ao cancelar a NF-e de devolução.');
+            return;
+          }
+          qc.invalidateQueries({ queryKey: ['entregas'] });
+        } catch (e) {
+          alert(await mensagemErroFuncao(e));
+        } finally {
+          setCancelandoDevolucaoId(null);
+        }
+      },
+      {
+        titulo: 'Cancelar NF-e de devolução',
+        mensagem: `Confirma o cancelamento definitivo da NF-e nº ${row.nf_devolucao_numero} junto à SEFAZ? Não tem como desfazer.`,
+      },
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
@@ -617,7 +770,31 @@ export function Entrega() {
         },
         { chave: 'forma_devolucao', label: 'Forma de devolução' },
         { chave: 'codigo_rastreio', label: 'Rastreio', render: (r) => r.codigo_rastreio || '-', mono: true },
-        { chave: 'nf_devolucao_numero', label: 'NF devolução', mono: true },
+        {
+          chave: 'nf_devolucao_numero',
+          label: 'NF devolução',
+          mono: true,
+          render: (r) => {
+            if (r.nfe_devolucao_status === 'cancelada') {
+              return (
+                <Badge tono="danger">
+                  Cancelada{r.nf_devolucao_numero ? ` (${r.nf_devolucao_numero})` : ''}
+                </Badge>
+              );
+            }
+            if (r.nfe_devolucao_status === 'erro') {
+              return (
+                <span title={r.nfe_devolucao_erro_detalhe ?? undefined}>
+                  <Badge tono="danger">Erro na emissão</Badge>
+                </span>
+              );
+            }
+            if (r.nfe_devolucao_status === 'processando') {
+              return <Badge tono="copper">Processando...</Badge>;
+            }
+            return r.nf_devolucao_numero || '-';
+          },
+        },
         { chave: 'data_entrega', label: 'Data', render: (r) => (r.data_entrega ? new Date(r.data_entrega).toLocaleString('pt-BR') : '-') },
         {
           chave: 'confirmado_pelo_cliente_em',
@@ -671,6 +848,35 @@ export function Entrega() {
               onClick={() => finalizarManualmente(row)}
             >
               Finalizar
+            </button>
+          )}
+          {!row.nf_devolucao_numero && !row.nfe_devolucao_ref && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Emitir a NF-e de devolução (Focus NF-e) referente ao equipamento consertado"
+              onClick={() => abrirPreviaDevolucao(row)}
+            >
+              Emitir NF-e de devolução
+            </button>
+          )}
+          {row.nfe_devolucao_ref && row.nfe_devolucao_status !== 'autorizada' && row.nfe_devolucao_status !== 'cancelada' && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Consultar o status da NF-e de devolução na SEFAZ"
+              onClick={() => consultarStatusDevolucao(row)}
+              disabled={consultandoStatusDevolucaoId === row.id}
+            >
+              {consultandoStatusDevolucaoId === row.id ? 'Consultando...' : 'Verificar status NF-e'}
+            </button>
+          )}
+          {row.nfe_devolucao_status === 'autorizada' && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Cancelar a NF-e de devolução junto à SEFAZ (só até 24h após a emissão)"
+              onClick={() => cancelarDevolucao(row)}
+              disabled={cancelandoDevolucaoId === row.id}
+            >
+              {cancelandoDevolucaoId === row.id ? 'Cancelando...' : 'Cancelar NF-e'}
             </button>
           )}
         </>
@@ -790,6 +996,92 @@ export function Entrega() {
         </div>
       </ModalJanela>
     )}
+
+    {devolucaoAlvo && (
+      <ModalJanela titulo="Emitir NF-e de devolução" aoFechar={fecharPreviaDevolucao} larguraMax={520}>
+        {carregandoPreviaDevolucao && <p style={{ fontSize: 13 }}>Gerando prévia...</p>}
+        {previaDevolucao && (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+              Confira os dados antes de transmitir. Depois de "Confirmar e transmitir", a nota vai direto pra SEFAZ
+              via Focus NFe - não dá pra editar depois de transmitida.
+            </p>
+            <div
+              style={{
+                display: 'inline-block',
+                fontSize: 12,
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: 6,
+                marginBottom: 8,
+                color: '#fff',
+                background: previaDevolucao.resumo.ambiente === 'producao' ? 'var(--red-600, #c0392b)' : '#8a6d00',
+              }}
+            >
+              {previaDevolucao.resumo.ambiente === 'producao'
+                ? 'AMBIENTE: PRODUÇÃO - nota fiscal real, vale para a SEFAZ'
+                : 'AMBIENTE: HOMOLOGAÇÃO - nota de teste, não tem validade fiscal'}
+            </div>
+
+            <div className="campo-form">
+              <label>Destinatário</label>
+              <input
+                type="text"
+                value={`${previaDevolucao.resumo.razaoSocialDestinatario} (${previaDevolucao.resumo.documentoDestinatario ?? '-'})`}
+                disabled
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="campo-form" style={{ flex: 2 }}>
+                <label>Item devolvido</label>
+                <input type="text" value={previaDevolucao.resumo.descricaoItem} disabled />
+              </div>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>CFOP</label>
+                <input type="text" value={previaDevolucao.resumo.cfop} disabled />
+              </div>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>NCM</label>
+                <input type="text" value={previaDevolucao.resumo.ncm} disabled />
+              </div>
+            </div>
+            <div className="campo-form">
+              <label>NF de remessa referenciada</label>
+              <input
+                type="text"
+                value={previaDevolucao.resumo.numeroRemessa ?? 'Nenhuma (sem chave de acesso cadastrada na Entrada)'}
+                disabled
+              />
+            </div>
+            <div className="campo-form">
+              <label>Valor do bem devolvido (R$) - não é o valor do reparo, já faturado à parte via NFS-e</label>
+              <input
+                type="number"
+                step="0.01"
+                autoFocus
+                value={valorBemDevolucao}
+                onChange={(e) => setValorBemDevolucao(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        {erroDevolucao && <p className="erro-login">{erroDevolucao}</p>}
+        <div className="modal-acoes">
+          <button className="botao-secundario" onClick={fecharPreviaDevolucao} disabled={emitindoDevolucao}>
+            Cancelar
+          </button>
+          <button
+            className="botao-primario"
+            onClick={emitirDevolucaoConfirmada}
+            disabled={!previaDevolucao || emitindoDevolucao}
+          >
+            {emitindoDevolucao ? 'Transmitindo...' : 'Confirmar e transmitir'}
+          </button>
+        </div>
+      </ModalJanela>
+    )}
+
+    {ModalConfirmacao}
     </div>
   );
 }
