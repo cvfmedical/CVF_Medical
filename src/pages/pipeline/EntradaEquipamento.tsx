@@ -52,6 +52,7 @@ interface Entrada {
   numero_controle_cliente: string | null;
   eh_otica: boolean | null;
   catalogo_otica_id: number | null;
+  produto_servico_id: number | null;
   cliente_final_id: number | null;
   grupo: string | null;
   subgrupo: string | null;
@@ -113,6 +114,125 @@ async function gerarCodigoEntrada(): Promise<string> {
   return `ENT-${n}`;
 }
 
+// === Entrada por NF-e (import em lote, item a item) ===
+// Mesmo formato usado tanto pela consulta na Focus (emitir-nfe,
+// acao=consultar_remessa) quanto pelo parser de XML abaixo - permite
+// tratar os dois caminhos de forma idêntica no resto do fluxo de import.
+interface CabecalhoNotaXml {
+  naturezaOperacao: string | null;
+  numero: string | null;
+  serie: string | null;
+  dataEmissao: string | null;
+  cnpjEmitente: string | null;
+  nomeEmitente: string | null;
+  chaveNfe: string | null;
+}
+
+interface ItemNotaXml {
+  codigoProduto: string | null;
+  descricao: string | null;
+  ncm: string | null;
+  cfop: string | null;
+  cst: string | null;
+  quantidade: string | number | null;
+  valorUnitario: string | number | null;
+  valorTotal: string | number | null;
+  icmsBaseCalculo: string | number | null;
+  icmsValor: string | number | null;
+  icmsAliquota: string | number | null;
+  ipiBaseCalculo: string | number | null;
+  ipiValor: string | number | null;
+  ipiAliquota: string | number | null;
+}
+
+// Um item da nota + os campos que só existem no momento do import (editáveis
+// pelo usuário na tela de conferência, antes de confirmar).
+interface ItemImportavel extends ItemNotaXml {
+  chave: string; // key React - índice não serve porque dá pra remover linha
+  numeroSerie: string;
+  // Descrição/fabricante editáveis: a descrição começa com o texto real da
+  // NF (mais específico que qualquer rótulo de catálogo), o fabricante só é
+  // preenchido se o usuário escolher um "Tipo de equipamento" abaixo.
+  equipamentoDesc: string;
+  equipamentoFab: string;
+  tipoEquipamentoSelecionado: string; // "" | "otica:<id>" | "produto:<id>", mesmo formato do combobox principal
+  ehOtica: boolean | null;
+  catalogoOticaId: string;
+  produtoServicoId: string;
+  grupo: string;
+  subgrupo: string;
+  incluir: boolean;
+}
+
+// Extrai cabeçalho + TODOS os itens (<det>) do XML da NF-e - ao contrário do
+// extrairDadosXmlNfe usado na Entrada manual (que só lê o primeiro item),
+// aqui uma nota com vários produtos gera uma linha por item, cada uma virando
+// sua própria Entrada depois. Só lê o arquivo no navegador, nunca envia pra
+// nenhum servidor.
+function extrairNotaXmlCompleta(xmlTexto: string): { cabecalho: CabecalhoNotaXml; itens: ItemNotaXml[] } {
+  const doc = new DOMParser().parseFromString(xmlTexto, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length > 0) {
+    throw new Error('Arquivo XML inválido ou corrompido.');
+  }
+  const textoTag = (tag: string, escopo: Element | Document): string | null =>
+    escopo.getElementsByTagName(tag)[0]?.textContent?.trim() || null;
+
+  const infNFe = doc.getElementsByTagName('infNFe')[0];
+  if (!infNFe) throw new Error('XML não parece ser uma NF-e (tag <infNFe> não encontrada).');
+  const emit = doc.getElementsByTagName('emit')[0];
+  const ide = doc.getElementsByTagName('ide')[0];
+
+  let chave = textoTag('chNFe', doc); // presente quando o XML é o "nfeProc" completo (com protocolo)
+  if (!chave) {
+    const id = infNFe.getAttribute('Id') ?? ''; // formato "NFe" + 44 dígitos, quando só a NF-e sem protocolo
+    chave = id.replace(/\D/g, '') || null;
+  }
+
+  const cabecalho: CabecalhoNotaXml = {
+    naturezaOperacao: ide ? textoTag('natOp', ide) : null,
+    numero: ide ? textoTag('nNF', ide) : null,
+    serie: ide ? textoTag('serie', ide) : null,
+    dataEmissao: ide ? (textoTag('dhEmi', ide) ?? textoTag('dEmi', ide)) : null,
+    cnpjEmitente: emit ? textoTag('CNPJ', emit) : null,
+    nomeEmitente: emit ? textoTag('xNome', emit) : null,
+    chaveNfe: chave,
+  };
+
+  const dets = Array.from(doc.getElementsByTagName('det'));
+  if (dets.length === 0) throw new Error('Nenhum item (<det>) encontrado no XML.');
+
+  const itens: ItemNotaXml[] = dets.map((det) => {
+    const prod = det.getElementsByTagName('prod')[0];
+    // O grupo de tributação do ICMS/IPI muda de nome conforme o regime/CST
+    // do EMISSOR (ICMS00, ICMS10, ICMSSN102 etc.; IPITrib ou IPINT) - em vez
+    // de listar todas as variações, pega o primeiro filho de <ICMS>/<IPI>,
+    // seja qual for o nome, e lê CST/CSOSN/vBC/pICMS/vICMS de dentro dele.
+    const icmsWrapper = det.getElementsByTagName('ICMS')[0];
+    const icmsDetalhe = icmsWrapper?.children[0] ?? null;
+    const ipiWrapper = det.getElementsByTagName('IPI')[0];
+    const ipiDetalhe = ipiWrapper?.children[0] ?? null;
+
+    return {
+      codigoProduto: prod ? textoTag('cProd', prod) : null,
+      descricao: prod ? textoTag('xProd', prod) : null,
+      ncm: prod ? textoTag('NCM', prod) : null,
+      cfop: prod ? textoTag('CFOP', prod) : null,
+      cst: icmsDetalhe ? (textoTag('CST', icmsDetalhe) ?? textoTag('CSOSN', icmsDetalhe)) : null,
+      quantidade: prod ? textoTag('qCom', prod) : null,
+      valorUnitario: prod ? textoTag('vUnCom', prod) : null,
+      valorTotal: prod ? textoTag('vProd', prod) : null,
+      icmsBaseCalculo: icmsDetalhe ? textoTag('vBC', icmsDetalhe) : null,
+      icmsValor: icmsDetalhe ? textoTag('vICMS', icmsDetalhe) : null,
+      icmsAliquota: icmsDetalhe ? textoTag('pICMS', icmsDetalhe) : null,
+      ipiBaseCalculo: ipiDetalhe ? textoTag('vBC', ipiDetalhe) : null,
+      ipiValor: ipiDetalhe ? textoTag('vIPI', ipiDetalhe) : null,
+      ipiAliquota: ipiDetalhe ? textoTag('pIPI', ipiDetalhe) : null,
+    };
+  });
+
+  return { cabecalho, itens };
+}
+
 const formVazio = {
   cliente_id: '',
   equipamento_desc: '',
@@ -145,6 +265,10 @@ export function EntradaEquipamento() {
   // cobrir entrada digitada na mão.
   const [ehOtica, setEhOtica] = useState<boolean | null>(null);
   const [catalogoOticaId, setCatalogoOticaId] = useState('');
+  // Espelha catalogoOticaId, mas pro lado "produto/serviço" do combobox -
+  // faltava essa coluna (bug real: emitir-nfe já lia produto_servico_id da
+  // Entrada pro fallback de NCM, mas nada aqui gravava esse id).
+  const [produtoServicoId, setProdutoServicoId] = useState('');
   // Valor do combobox único "Selecionar tipo de equipamento" - combina
   // catálogo de óticas e produtos/serviços num só campo, no formato
   // "otica:<id>" ou "produto:<id>" (ver selecionarTipoEquipamento).
@@ -176,6 +300,22 @@ export function EntradaEquipamento() {
   const [consultandoRemessa, setConsultandoRemessa] = useState(false);
   const [avisoRemessa, setAvisoRemessa] = useState<string | null>(null);
   const inputXmlRemessaRef = useRef<HTMLInputElement>(null);
+
+  // Entrada por NF-e (import em lote) - uma NF pode trazer vários itens, e
+  // cada item vira sua própria Entrada automaticamente, com os dados
+  // fiscais completos (NCM/CST/ICMS/IPI) já preenchidos - sobrando pro
+  // usuário só tirar foto e mandar o e-mail de chegada (já existentes na
+  // tabela principal, reaproveitados sem mudança nenhuma).
+  const [modalImportNfAberto, setModalImportNfAberto] = useState(false);
+  const [importCabecalho, setImportCabecalho] = useState<CabecalhoNotaXml | null>(null);
+  const [importItens, setImportItens] = useState<ItemImportavel[]>([]);
+  const [importClienteId, setImportClienteId] = useState('');
+  const [importAvisoCliente, setImportAvisoCliente] = useState<string | null>(null);
+  const [importConsultandoChave, setImportConsultandoChave] = useState(false);
+  const [importChaveDigitada, setImportChaveDigitada] = useState('');
+  const [importErro, setImportErro] = useState<string | null>(null);
+  const [importSalvando, setImportSalvando] = useState(false);
+  const inputXmlImportRef = useRef<HTMLInputElement>(null);
   const [enviandoEmailId, setEnviandoEmailId] = useState<number | null>(null);
   // Envio em lote (igual ao Financeiro): manda o e-mail de chegada de
   // várias entradas do mesmo cliente num só e-mail, em vez de um por um.
@@ -197,6 +337,7 @@ export function EntradaEquipamento() {
       editando,
       ehOtica,
       catalogoOticaId,
+      produtoServicoId,
       tipoEquipamentoSelecionado,
       grupoEquipamento,
       subgrupoEquipamento,
@@ -213,6 +354,7 @@ export function EntradaEquipamento() {
       setEditando((e.editando as Entrada | null) ?? null);
       setEhOtica((e.ehOtica as boolean | null) ?? null);
       setCatalogoOticaId((e.catalogoOticaId as string) ?? '');
+      setProdutoServicoId((e.produtoServicoId as string) ?? '');
       setTipoEquipamentoSelecionado((e.tipoEquipamentoSelecionado as string) ?? '');
       setGrupoEquipamento((e.grupoEquipamento as string) ?? '');
       setSubgrupoEquipamento((e.subgrupoEquipamento as string) ?? '');
@@ -315,6 +457,7 @@ export function EntradaEquipamento() {
       }));
       setEhOtica(true);
       setCatalogoOticaId(id);
+      setProdutoServicoId('');
       setGrupoEquipamento(item.grupo ?? '');
       setSubgrupoEquipamento(item.subgrupo ?? '');
     } else if (tipo === 'produto') {
@@ -327,6 +470,7 @@ export function EntradaEquipamento() {
       }));
       setEhOtica(false);
       setCatalogoOticaId('');
+      setProdutoServicoId(id);
       setGrupoEquipamento(item.categoria ?? '');
       setSubgrupoEquipamento(item.subgrupo ?? '');
     }
@@ -416,6 +560,7 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(null);
     setCatalogoOticaId('');
+    setProdutoServicoId('');
     setTipoEquipamentoSelecionado('');
     setGrupoEquipamento('');
     setSubgrupoEquipamento('');
@@ -552,6 +697,196 @@ export function EntradaEquipamento() {
     setFotos((lista) => lista.filter((_, i) => i !== indice));
   }
 
+  // === Entrada por NF-e (import em lote, item a item) ===
+
+  function novoItemImportavel(item: ItemNotaXml): ItemImportavel {
+    return {
+      ...item,
+      chave: crypto.randomUUID(),
+      numeroSerie: '',
+      equipamentoDesc: item.descricao ?? '',
+      equipamentoFab: '',
+      tipoEquipamentoSelecionado: '',
+      ehOtica: null,
+      catalogoOticaId: '',
+      produtoServicoId: '',
+      grupo: '',
+      subgrupo: '',
+      incluir: true,
+    };
+  }
+
+  // Casa o CNPJ do emitente da nota com um cliente já cadastrado (só
+  // dígitos, comparação exata) - se não achar, deixa em branco com aviso
+  // pro usuário escolher na mão ou cadastrar o cliente antes.
+  function aplicarCabecalhoEItensImport(cabecalho: CabecalhoNotaXml, itens: ItemNotaXml[]) {
+    setImportCabecalho(cabecalho);
+    setImportItens(itens.map(novoItemImportavel));
+    const cnpjNota = (cabecalho.cnpjEmitente ?? '').replace(/\D/g, '');
+    const clienteEncontrado = cnpjNota
+      ? clientesQuery.data?.find((c) => (c.cnpj ?? '').replace(/\D/g, '') === cnpjNota)
+      : null;
+    if (clienteEncontrado) {
+      setImportClienteId(String(clienteEncontrado.id));
+      setImportAvisoCliente(null);
+    } else {
+      setImportClienteId('');
+      setImportAvisoCliente(
+        cnpjNota
+          ? 'CNPJ do emitente não corresponde a nenhum cliente cadastrado - selecione manualmente ou cadastre o cliente antes de confirmar.'
+          : null,
+      );
+    }
+  }
+
+  function abrirImportNf() {
+    setModalImportNfAberto(true);
+    setImportCabecalho(null);
+    setImportItens([]);
+    setImportClienteId('');
+    setImportAvisoCliente(null);
+    setImportChaveDigitada('');
+    setImportErro(null);
+  }
+
+  function fecharImportNf() {
+    setModalImportNfAberto(false);
+  }
+
+  async function consultarNfPorChaveImport() {
+    const chave = importChaveDigitada.replace(/\D/g, '');
+    if (chave.length !== 44) {
+      setImportErro('Chave de acesso precisa ter 44 dígitos.');
+      return;
+    }
+    setImportConsultandoChave(true);
+    setImportErro(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+        body: { acao: 'consultar_remessa', chaveAcesso: chave },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar a nota.');
+      aplicarCabecalhoEItensImport(data.cabecalho as CabecalhoNotaXml, data.itens as ItemNotaXml[]);
+    } catch (e) {
+      setImportErro(await mensagemErroFuncao(e));
+    } finally {
+      setImportConsultandoChave(false);
+    }
+  }
+
+  async function importarXmlParaImport(arquivo: File) {
+    setImportErro(null);
+    try {
+      const texto = await arquivo.text();
+      const { cabecalho, itens } = extrairNotaXmlCompleta(texto);
+      aplicarCabecalhoEItensImport(cabecalho, itens);
+    } catch (e) {
+      setImportErro(e instanceof Error ? e.message : 'Falha ao ler o XML.');
+    }
+  }
+
+  function atualizarItemImport(chaveItem: string, patch: Partial<ItemImportavel>) {
+    setImportItens((lista) => lista.map((it) => (it.chave === chaveItem ? { ...it, ...patch } : it)));
+  }
+
+  function removerItemImport(chaveItem: string) {
+    setImportItens((lista) => lista.filter((it) => it.chave !== chaveItem));
+  }
+
+  // Mesma lógica de selecionarTipoEquipamento, mas aplicada a UM item da
+  // lista de import (não ao form principal) - não sobrescreve a descrição
+  // do equipamento (que já veio da própria NF, mais específica que o rótulo
+  // genérico do catálogo), só fabricante/classificação/grupo-subgrupo.
+  function selecionarTipoEquipamentoImport(chaveItem: string, valor: string) {
+    const [tipo, id] = valor.split(':');
+    if (tipo === 'otica') {
+      const item = catalogoQuery.data?.find((c) => String(c.id) === id);
+      if (!item) return;
+      atualizarItemImport(chaveItem, {
+        tipoEquipamentoSelecionado: valor,
+        equipamentoFab: item.fabricante,
+        ehOtica: true,
+        catalogoOticaId: id,
+        produtoServicoId: '',
+        grupo: item.grupo ?? '',
+        subgrupo: item.subgrupo ?? '',
+      });
+    } else if (tipo === 'produto') {
+      const item = produtosCatalogoQuery.data?.find((p) => String(p.id) === id);
+      if (!item) return;
+      atualizarItemImport(chaveItem, {
+        tipoEquipamentoSelecionado: valor,
+        equipamentoFab: item.marca_fabricante ?? '',
+        ehOtica: false,
+        catalogoOticaId: '',
+        produtoServicoId: id,
+        grupo: item.categoria ?? '',
+        subgrupo: item.subgrupo ?? '',
+      });
+    }
+  }
+
+  // Cria uma Entrada por item marcado - sequencialmente (gerarCodigoEntrada
+  // recalcula o próximo número toda vez, sem reservar; em paralelo geraria
+  // códigos ENT- duplicados).
+  async function confirmarImportacaoNf() {
+    if (!importClienteId) {
+      setImportErro('Selecione o cliente antes de confirmar.');
+      return;
+    }
+    const itensParaCriar = importItens.filter((it) => it.incluir);
+    if (itensParaCriar.length === 0) {
+      setImportErro('Nenhum item selecionado pra importar.');
+      return;
+    }
+    setImportSalvando(true);
+    setImportErro(null);
+    try {
+      for (const item of itensParaCriar) {
+        const codigo = await gerarCodigoEntrada();
+        const { error } = await supabase.from('entradas_equipamento').insert({
+          codigo_entrada: codigo,
+          cliente_id: Number(importClienteId),
+          equipamento_desc: item.equipamentoDesc || null,
+          equipamento_fab: item.equipamentoFab || null,
+          equipamento_sn: item.numeroSerie || null,
+          eh_otica: item.ehOtica,
+          catalogo_otica_id: item.catalogoOticaId ? Number(item.catalogoOticaId) : null,
+          produto_servico_id: item.produtoServicoId ? Number(item.produtoServicoId) : null,
+          grupo: item.grupo || null,
+          subgrupo: item.subgrupo || null,
+          nf_remessa_numero: importCabecalho?.numero ?? null,
+          nf_remessa_serie: importCabecalho?.serie ?? null,
+          nf_remessa_chave_acesso: importCabecalho?.chaveNfe ?? null,
+          nf_remessa_cfop: item.cfop ?? null,
+          nf_remessa_data_emissao: importCabecalho?.dataEmissao ? String(importCabecalho.dataEmissao).slice(0, 10) : null,
+          nf_remessa_valor: item.valorTotal != null ? Number(item.valorTotal) : null,
+          nf_remessa_natureza_operacao: importCabecalho?.naturezaOperacao ?? null,
+          nf_remessa_codigo_produto_cliente: item.codigoProduto ?? null,
+          nf_remessa_ncm: item.ncm ?? null,
+          nf_remessa_cst: item.cst ?? null,
+          nf_remessa_quantidade: item.quantidade != null ? Number(item.quantidade) : null,
+          nf_remessa_valor_unitario: item.valorUnitario != null ? Number(item.valorUnitario) : null,
+          nf_remessa_icms_base_calculo: item.icmsBaseCalculo != null ? Number(item.icmsBaseCalculo) : null,
+          nf_remessa_icms_valor: item.icmsValor != null ? Number(item.icmsValor) : null,
+          nf_remessa_icms_aliquota: item.icmsAliquota != null ? Number(item.icmsAliquota) : null,
+          nf_remessa_ipi_base_calculo: item.ipiBaseCalculo != null ? Number(item.ipiBaseCalculo) : null,
+          nf_remessa_ipi_valor: item.ipiValor != null ? Number(item.ipiValor) : null,
+          nf_remessa_ipi_aliquota: item.ipiAliquota != null ? Number(item.ipiAliquota) : null,
+          recebido_por: funcionario?.id ?? null,
+        });
+        if (error) throw error;
+      }
+      qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
+      setModalImportNfAberto(false);
+    } catch (e) {
+      setImportErro(mensagemErro(e));
+    } finally {
+      setImportSalvando(false);
+    }
+  }
+
   function abrirEdicao(e: Entrada) {
     setEditando(e);
     setForm({
@@ -574,11 +909,14 @@ export function EntradaEquipamento() {
     setCondicaoParaAdicionar('');
     setEhOtica(e.eh_otica ?? null);
     setCatalogoOticaId(e.catalogo_otica_id ? String(e.catalogo_otica_id) : '');
-    // Só dá pra reconstruir o valor do combobox quando veio do catálogo de
-    // óticas (guarda o id); quando não-ótica, só o grupo/subgrupo ficaram
-    // salvos - o combobox some em branco, mas o filtro do checklist abaixo
-    // continua funcionando com o que já está salvo.
-    setTipoEquipamentoSelecionado(e.catalogo_otica_id ? `otica:${e.catalogo_otica_id}` : '');
+    setProdutoServicoId(e.produto_servico_id ? String(e.produto_servico_id) : '');
+    setTipoEquipamentoSelecionado(
+      e.catalogo_otica_id
+        ? `otica:${e.catalogo_otica_id}`
+        : e.produto_servico_id
+          ? `produto:${e.produto_servico_id}`
+          : '',
+    );
     setGrupoEquipamento(e.grupo ?? '');
     setSubgrupoEquipamento(e.subgrupo ?? '');
     setClienteFinalId(e.cliente_final_id ? String(e.cliente_final_id) : '');
@@ -651,6 +989,7 @@ export function EntradaEquipamento() {
         numero_controle_cliente: form.numero_controle_cliente || null,
         eh_otica: ehOtica,
         catalogo_otica_id: catalogoOticaId ? Number(catalogoOticaId) : null,
+        produto_servico_id: produtoServicoId ? Number(produtoServicoId) : null,
         cliente_final_id: clienteFinalId ? Number(clienteFinalId) : null,
         grupo: grupoEquipamento || null,
         subgrupo: subgrupoEquipamento || null,
@@ -1017,6 +1356,9 @@ export function EntradaEquipamento() {
               Limpar filtros
             </button>
           )}
+          <button className="botao-secundario botao-pequeno" onClick={abrirImportNf}>
+            <IconPlus size={16} /> Entrada por NF-e
+          </button>
           <button className="botao-primario botao-pequeno" onClick={abrirNova}>
             <IconPlus size={16} /> Nova entrada
           </button>
@@ -1595,6 +1937,166 @@ export function EntradaEquipamento() {
                 Fechar
               </button>
             </div>
+        </ModalJanela>
+      )}
+
+      {modalImportNfAberto && (
+        <ModalJanela titulo="Entrada por NF-e" aoFechar={fecharImportNf} larguraMax={900}>
+          {!importCabecalho && (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
+                Importe a NF-e de remessa (recebida do cliente) - cada produto/item da nota vira automaticamente uma
+                Entrada, com os dados fiscais já preenchidos (NCM, CFOP, ICMS/IPI quando existir). Sobra só tirar a
+                foto do equipamento e mandar o e-mail de chegada, já disponíveis na listagem depois de importar.
+              </p>
+              <div className="campo-form">
+                <label>Chave de acesso</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    maxLength={44}
+                    style={{ flex: 1 }}
+                    value={importChaveDigitada}
+                    onChange={(e) => setImportChaveDigitada(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="botao-secundario"
+                    onClick={consultarNfPorChaveImport}
+                    disabled={importConsultandoChave}
+                  >
+                    {importConsultandoChave ? 'Consultando...' : 'Consultar'}
+                  </button>
+                  <button type="button" className="botao-secundario" onClick={() => inputXmlImportRef.current?.click()}>
+                    Importar XML
+                  </button>
+                  <input
+                    type="file"
+                    accept=".xml,text/xml"
+                    ref={inputXmlImportRef}
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0];
+                      if (arquivo) importarXmlParaImport(arquivo);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+              </div>
+              {importErro && <p className="erro-login">{importErro}</p>}
+            </>
+          )}
+
+          {importCabecalho && (
+            <>
+              <div className="campo-form">
+                <label>Cliente (emitente da nota)</label>
+                <ComboboxBusca
+                  opcoes={(clientesQuery.data ?? []).map((c) => ({ value: String(c.id), label: c.razao_social }))}
+                  valor={importClienteId}
+                  onChange={setImportClienteId}
+                />
+                {importAvisoCliente && <p className="erro-login">{importAvisoCliente}</p>}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                NF {importCabecalho.numero ?? '-'}/{importCabecalho.serie ?? '-'} -{' '}
+                {importCabecalho.dataEmissao ? new Date(importCabecalho.dataEmissao).toLocaleDateString('pt-BR') : '-'} -{' '}
+                {importItens.length} item(ns) encontrados.
+              </p>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table className="tabela-crud" style={{ minWidth: 900 }}>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Descrição</th>
+                      <th>NCM</th>
+                      <th>CFOP</th>
+                      <th>Qtd</th>
+                      <th>Valor</th>
+                      <th>Nº de série</th>
+                      <th>Tipo de equipamento</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importItens.map((item) => (
+                      <tr key={item.chave} style={{ opacity: item.incluir ? 1 : 0.4 }}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={item.incluir}
+                            onChange={(e) => atualizarItemImport(item.chave, { incluir: e.target.checked })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            style={{ minWidth: 180 }}
+                            value={item.equipamentoDesc}
+                            onChange={(e) => atualizarItemImport(item.chave, { equipamentoDesc: e.target.value })}
+                          />
+                        </td>
+                        <td className="mono">{item.ncm ?? '-'}</td>
+                        <td className="mono">
+                          {item.cfop ?? '-'}
+                          {item.cfop && !['5915', '6915'].includes(item.cfop) && (
+                            <div style={{ fontSize: 10, color: 'var(--danger-500, #c0392b)' }}>não é remessa p/ conserto</div>
+                          )}
+                        </td>
+                        <td className="mono">{item.quantidade ?? '-'}</td>
+                        <td className="mono">{item.valorTotal != null ? `R$ ${Number(item.valorTotal).toFixed(2)}` : '-'}</td>
+                        <td>
+                          <input
+                            type="text"
+                            style={{ width: 110 }}
+                            value={item.numeroSerie}
+                            onChange={(e) => atualizarItemImport(item.chave, { numeroSerie: e.target.value })}
+                          />
+                        </td>
+                        <td style={{ minWidth: 200 }}>
+                          <ComboboxBusca
+                            opcoes={opcoesTipoEquipamento}
+                            valor={item.tipoEquipamentoSelecionado}
+                            onChange={(v) => selecionarTipoEquipamentoImport(item.chave, v)}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="botao-icone perigo"
+                            title="Remover este item (não vira Entrada)"
+                            onClick={() => removerItemImport(item.chave)}
+                          >
+                            <IconTrash size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {importErro && <p className="erro-login">{importErro}</p>}
+
+              <div className="modal-acoes">
+                <button className="botao-secundario" onClick={fecharImportNf} disabled={importSalvando}>
+                  Cancelar
+                </button>
+                <button
+                  className="botao-primario"
+                  onClick={confirmarImportacaoNf}
+                  disabled={importSalvando || importItens.filter((i) => i.incluir).length === 0}
+                >
+                  {importSalvando
+                    ? 'Importando...'
+                    : `Confirmar importação (${importItens.filter((i) => i.incluir).length} entrada${
+                        importItens.filter((i) => i.incluir).length === 1 ? '' : 's'
+                      })`}
+                </button>
+              </div>
+            </>
+          )}
         </ModalJanela>
       )}
     </div>
