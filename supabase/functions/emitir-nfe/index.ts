@@ -176,8 +176,14 @@ Deno.serve(async (req: Request) => {
   // acesso) - só devolve os dados pro formulário preencher, nunca grava
   // nada sozinha. Endpoint confirmado via teste direto (curl): o caminho é
   // "nfes_recebidas" (plural) - "nfe_recebidas" (singular) dá 404. Com
-  // "?completa=1" a Focus devolve numero/serie/cfop dentro de
-  // "requisicao_nota_fiscal" (sem isso só vem um resumo sem esses campos).
+  // "?completa=1" a Focus devolve o detalhe de cada item dentro de
+  // "requisicao_nota_fiscal.itens[]" (sem isso só vem um resumo sem esses
+  // campos). Uma NF pode ter vários itens/produtos - devolve TODOS, não só
+  // o primeiro, pra virarem uma Entrada cada um no frontend. Campos de item
+  // confirmados na doc da Focus: codigo_produto, descricao, codigo_ncm,
+  // cfop, quantidade_comercial, valor_unitario_comercial, valor_bruto,
+  // icms_situacao_tributaria, icms_base_calculo, icms_aliquota, icms_valor
+  // - IPI não é documentado nesse endpoint (fica null; só o XML garante).
   if (acao === 'consultar_remessa') {
     const chave = apenasDigitos(corpo.chaveAcesso);
     if (chave.length !== 44) return json({ error: 'Chave de acesso precisa ter 44 dígitos.' }, 400);
@@ -192,18 +198,34 @@ Deno.serve(async (req: Request) => {
     }
 
     const reqNota = resultado?.requisicao_nota_fiscal ?? {};
-    const primeiroItem = Array.isArray(reqNota.itens) ? reqNota.itens[0] : null;
-    const dados = {
+    const cabecalho = {
+      naturezaOperacao: reqNota.natureza_operacao ?? null,
       numero: reqNota.numero ?? resultado.numero ?? null,
       serie: reqNota.serie ?? resultado.serie ?? null,
-      cfop: primeiroItem?.cfop ?? null,
-      valorTotal: reqNota.valor_total ?? resultado.valor_total ?? null,
       dataEmissao: resultado.data_emissao ?? null,
       cnpjEmitente: reqNota.cnpj_emitente ?? resultado.documento_emitente ?? resultado.cnpj_emitente ?? null,
       nomeEmitente: reqNota.nome_emitente ?? resultado.nome_emitente ?? null,
       chaveNfe: apenasDigitos(reqNota.chave_nfe ?? resultado.chave_nfe ?? chave),
     };
-    return json({ ok: true, dados, resultado });
+    const itensNota = Array.isArray(reqNota.itens) ? reqNota.itens : [];
+    const itens = itensNota.map((it: Record<string, unknown>) => ({
+      codigoProduto: (it.codigo_produto as string) ?? null,
+      descricao: (it.descricao as string) ?? null,
+      ncm: (it.codigo_ncm as string) ?? null,
+      cfop: (it.cfop as string) ?? null,
+      cst: (it.icms_situacao_tributaria as string) ?? null,
+      quantidade: (it.quantidade_comercial as string | number) ?? null,
+      valorUnitario: (it.valor_unitario_comercial as string | number) ?? null,
+      valorTotal: (it.valor_bruto as string | number) ?? null,
+      icmsBaseCalculo: (it.icms_base_calculo as string | number) ?? null,
+      icmsValor: (it.icms_valor as string | number) ?? null,
+      icmsAliquota: (it.icms_aliquota as string | number) ?? null,
+      // IPI não é documentado no retorno da consulta por chave - só o XML garante.
+      ipiBaseCalculo: null,
+      ipiValor: null,
+      ipiAliquota: null,
+    }));
+    return json({ ok: true, cabecalho, itens, resultado });
   }
 
   // === Ações relacionadas à DEVOLUÇÃO (emitida por nós) ===
@@ -296,7 +318,7 @@ Deno.serve(async (req: Request) => {
   const { data: entrega, error: erroEntrega } = await supabaseAdmin
     .from('entregas')
     .select(
-      'id, ordem_servico_id, nf_devolucao_numero, ordens_servico(id, numero_os, cliente_id, optica_desc, optica_fab, cliente_nome, entradas_equipamento(nf_remessa_chave_acesso, nf_remessa_numero, catalogo_otica_id, produto_servico_id))',
+      'id, ordem_servico_id, nf_devolucao_numero, ordens_servico(id, numero_os, cliente_id, optica_desc, optica_fab, cliente_nome, entradas_equipamento(nf_remessa_chave_acesso, nf_remessa_numero, nf_remessa_ncm, catalogo_otica_id, produto_servico_id))',
     )
     .eq('id', corpo.entregaId)
     .single();
@@ -312,7 +334,13 @@ Deno.serve(async (req: Request) => {
         optica_desc: string | null;
         optica_fab: string | null;
         cliente_nome: string;
-        entradas_equipamento: { nf_remessa_chave_acesso: string | null; nf_remessa_numero: string | null; catalogo_otica_id: number | null; produto_servico_id: number | null }[] | null;
+        entradas_equipamento: {
+          nf_remessa_chave_acesso: string | null;
+          nf_remessa_numero: string | null;
+          nf_remessa_ncm: string | null;
+          catalogo_otica_id: number | null;
+          produto_servico_id: number | null;
+        }[] | null;
       } | null;
     }
   ).ordens_servico;
@@ -339,11 +367,15 @@ Deno.serve(async (req: Request) => {
   const cfop = cfopDevolucao(cliente.uf);
   const idDest = idDestino(cliente.uf);
 
-  // NCM do item: tenta o catálogo específico (ótica ou produto/serviço)
-  // vinculado na Entrada; se não achar, cai no padrão confirmado na nota
-  // real (90181910) - nunca fica sem NCM.
+  // NCM do item: prioridade máxima pro NCM REAL que veio na própria nota de
+  // remessa (guardado em nf_remessa_ncm, importado via consulta/XML) - só
+  // cai pro catálogo (ótica/produto vinculado) ou pro padrão fixo
+  // (90181910) quando essa entrada não tem NCM próprio (ex: entrada
+  // cadastrada manualmente, sem importar NF-e).
   let ncmItem = NCM_PADRAO;
-  if (entradaEquip?.catalogo_otica_id) {
+  if (entradaEquip?.nf_remessa_ncm) {
+    ncmItem = entradaEquip.nf_remessa_ncm;
+  } else if (entradaEquip?.catalogo_otica_id) {
     const { data: cat } = await supabaseAdmin.from('catalogo_oticas').select('ncm').eq('id', entradaEquip.catalogo_otica_id).maybeSingle();
     if (cat?.ncm) ncmItem = cat.ncm;
   } else if (entradaEquip?.produto_servico_id) {
