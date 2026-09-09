@@ -781,12 +781,17 @@ export function OrcamentoFinanceiro() {
   async function buscarRelatorioOSHtml(): Promise<string> {
     if (!orcamentoSelecionado?.ordens_servico) return '';
     const itens: ItemRelatorioOS[] = await Promise.all(
-      (itensQuery.data ?? []).map(async (item) => ({
-        nome: item.produtos_servicos?.nome ?? item.descricao_servico ?? '-',
-        quantidade: item.quantidade,
-        observacao: item.observacao,
-        fotoUrl: primeiraFotoItem(item) ? await urlAssinadaFoto(primeiraFotoItem(item)!) : null,
-      })),
+      (itensQuery.data ?? []).map(async (item) => {
+        const caminhosNovos = (item.orcamento_itens_fotos ?? []).map((f) => f.storage_path);
+        const caminhos = caminhosNovos.length > 0 ? caminhosNovos : item.foto_peca_danificada_path ? [item.foto_peca_danificada_path] : [];
+        const fotosUrls = (await Promise.all(caminhos.map((c) => urlAssinadaFoto(c)))).filter((u): u is string => !!u);
+        return {
+          nome: item.produtos_servicos?.nome ?? item.descricao_servico ?? '-',
+          quantidade: item.quantidade,
+          observacao: item.observacao,
+          fotosUrls,
+        };
+      }),
     );
     return montarCorpoRelatorioOS(
       {

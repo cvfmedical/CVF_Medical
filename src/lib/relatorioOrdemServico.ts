@@ -10,7 +10,9 @@ export interface ItemRelatorioOS {
   nome: string;
   quantidade: number;
   observacao: string | null;
-  fotoUrl: string | null;
+  // Um item pode ter mais de uma foto (peça danificada fotografada de
+  // vários ângulos, por exemplo) - mostra todas, não só uma.
+  fotosUrls: string[];
 }
 
 export interface DadosOSParaRelatorio {
@@ -45,7 +47,11 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
         <td>${item.nome}</td>
         <td class="col-qtd">${item.quantidade}</td>
         <td>${item.observacao ?? '-'}</td>
-        <td class="col-foto">${item.fotoUrl ? `<img class="foto-item" src="${item.fotoUrl}" />` : '-'}</td>
+        <td class="col-foto">${
+          item.fotosUrls.length > 0
+            ? `<div style="display:flex; flex-wrap:wrap; gap:4px;">${item.fotosUrls.map((u) => `<img class="foto-item" src="${u}" />`).join('')}</div>`
+            : '-'
+        }</td>
       </tr>`,
     )
     .join('');

@@ -554,16 +554,17 @@ export function OrcamentoTecnico() {
     if (!orcamentoQuery.data || !osDetalheQuery.data) return;
     const itens: ItemRelatorioOS[] = await Promise.all(
       (itensQuery.data ?? []).map(async (item) => {
-        // Um item pode ter várias fotos agora - o relatório usa só a
-        // primeira como representativa (evita inflar o PDF). Prioriza a
-        // tabela nova; cai pro campo legado só se por algum motivo não
-        // tiver sido migrado.
-        const caminhoFoto = item.orcamento_itens_fotos?.[0]?.storage_path ?? item.foto_peca_danificada_path;
+        // Um item pode ter várias fotos agora - mostra TODAS no relatório.
+        // Prioriza a tabela nova; cai pro campo legado só se por algum
+        // motivo esse item não tiver nenhuma foto lá.
+        const caminhosNovos = (item.orcamento_itens_fotos ?? []).map((f) => f.storage_path);
+        const caminhos = caminhosNovos.length > 0 ? caminhosNovos : item.foto_peca_danificada_path ? [item.foto_peca_danificada_path] : [];
+        const fotosUrls = (await Promise.all(caminhos.map((c) => urlAssinadaFoto(c)))).filter((u): u is string => !!u);
         return {
           nome: nomeItem(item),
           quantidade: item.quantidade,
           observacao: item.observacao,
-          fotoUrl: caminhoFoto ? await urlAssinadaFoto(caminhoFoto) : null,
+          fotosUrls,
         };
       }),
     );
