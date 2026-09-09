@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { sufixoNumerico, numeroHerdadoOuNovo } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
-import { enviarArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
+import { enviarArquivoStorage, excluirArquivoStorage, urlAssinadaFoto } from '../../lib/storage';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { IconPencil, IconPhoto, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
@@ -59,6 +59,9 @@ interface ItemOrcamento {
   observacao: string | null;
   descricao_servico: string | null;
   foto_peca_danificada_path: string | null;
+  // Várias fotos por item (mesmo padrão de fotos_entrada) - o campo
+  // singular acima é o legado (era só 1 foto), migrado pra cá.
+  orcamento_itens_fotos: { id: number; storage_path: string }[];
 }
 
 interface OSOpcao {
@@ -79,7 +82,12 @@ export function OrcamentoTecnico() {
   const [observacaoParaAdicionar, setObservacaoParaAdicionar] = useState('');
   const [observacoesSelecionadas, setObservacoesSelecionadas] = useState<string[]>([]);
   const [justificativaLivre, setJustificativaLivre] = useState('');
-  const [fotoItem, setFotoItem] = useState<File | null>(null);
+  // Várias fotos por item: fotosNovasItem são arquivos ainda não enviados
+  // (só sobem pro storage ao salvar); fotosExistentesItem são as já
+  // salvas (carregadas ao abrir "Editar item"), com URL assinada pra
+  // exibir e um botão de excluir cada uma.
+  const [fotosNovasItem, setFotosNovasItem] = useState<File[]>([]);
+  const [fotosExistentesItem, setFotosExistentesItem] = useState<{ id: number; storage_path: string; url: string | null }[]>([]);
   // Observações técnicas gerais (não por item) - essencial quando o serviço
   // não envolve troca de peça (ex.: "PEÇA DE MÃO DE SHAVER" travada, resolvido
   // só com limpeza/ajuste, sem adicionar item nenhum).
@@ -276,7 +284,9 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<ItemOrcamento[]> => {
       const { data, error } = await supabase
         .from('orcamento_itens')
-        .select('id, produto_servico_id, quantidade, observacao, descricao_servico, foto_peca_danificada_path')
+        .select(
+          'id, produto_servico_id, quantidade, observacao, descricao_servico, foto_peca_danificada_path, orcamento_itens_fotos(id, storage_path)',
+        )
         .eq('orcamento_id', orcamentoQuery.data!.id);
       if (error) throw error;
       return data as ItemOrcamento[];
@@ -342,9 +352,19 @@ export function OrcamentoTecnico() {
     setObservacoesSelecionadas([]);
     setObservacaoParaAdicionar('');
     setJustificativaLivre('');
-    setFotoItem(null);
+    setFotosNovasItem([]);
+    setFotosExistentesItem([]);
     setErro(null);
     setModalAberto(true);
+  }
+
+  async function carregarFotosExistentesItem(item: ItemOrcamento) {
+    setFotosExistentesItem([]);
+    const fotos = item.orcamento_itens_fotos ?? [];
+    const comUrl = await Promise.all(
+      fotos.map(async (f) => ({ ...f, url: await urlAssinadaFoto(f.storage_path) })),
+    );
+    setFotosExistentesItem(comUrl);
   }
 
   // Reaproveita o mesmo modal de "Adicionar item" pra editar um item já
@@ -362,9 +382,22 @@ export function OrcamentoTecnico() {
     setObservacoesSelecionadas([]);
     setObservacaoParaAdicionar('');
     setJustificativaLivre(item.observacao ?? '');
-    setFotoItem(null);
+    setFotosNovasItem([]);
+    carregarFotosExistentesItem(item);
     setErro(null);
     setModalAberto(true);
+  }
+
+  async function excluirFotoExistenteItem(foto: { id: number; storage_path: string }) {
+    if (!confirm('Excluir esta foto?')) return;
+    const { error } = await supabase.from('orcamento_itens_fotos').delete().eq('id', foto.id);
+    if (error) {
+      alert(mensagemErro(error));
+      return;
+    }
+    await excluirArquivoStorage(foto.storage_path);
+    setFotosExistentesItem((lista) => lista.filter((f) => f.id !== foto.id));
+    qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data?.id] });
   }
 
   function adicionarObservacaoNaLista() {
@@ -399,25 +432,23 @@ export function OrcamentoTecnico() {
         observacao: observacaoFinal,
         descricao_servico: novoItem.descricao_servico.trim() || null,
       };
+      let itemId = editandoItemId;
       if (editandoItemId) {
-        // Só troca a foto se uma nova foi escolhida - sem isso, editar
-        // item sem mexer na foto apagaria a foto já anexada.
-        const fotoPath = fotoItem
-          ? await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, fotoItem)
-          : undefined;
-        const { error } = await supabase
-          .from('orcamento_itens')
-          .update({ ...camposComuns, ...(fotoPath !== undefined ? { foto_peca_danificada_path: fotoPath } : {}) })
-          .eq('id', editandoItemId);
+        const { error } = await supabase.from('orcamento_itens').update(camposComuns).eq('id', editandoItemId);
         if (error) throw error;
       } else {
-        const fotoPath = fotoItem ? await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, fotoItem) : null;
-        const { error } = await supabase.from('orcamento_itens').insert({
-          orcamento_id: orcamentoQuery.data.id,
-          ...camposComuns,
-          foto_peca_danificada_path: fotoPath,
-        });
+        const { data: inserido, error } = await supabase
+          .from('orcamento_itens')
+          .insert({ orcamento_id: orcamentoQuery.data.id, ...camposComuns })
+          .select('id')
+          .single();
         if (error) throw error;
+        itemId = inserido.id;
+      }
+      for (const foto of fotosNovasItem) {
+        const caminho = await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, foto);
+        const { error: erroFoto } = await supabase.from('orcamento_itens_fotos').insert({ item_id: itemId, storage_path: caminho });
+        if (erroFoto) throw erroFoto;
       }
       setModalAberto(false);
       setEditandoItemId(null);
@@ -443,9 +474,18 @@ export function OrcamentoTecnico() {
     if (url) window.open(url, '_blank');
   }
 
-  // Adicionar/trocar foto de um item já existente - independe de `travado`
-  // de propósito: é só uma evidência anexada, não muda preço/descrição/
-  // quantidade, então continua permitido mesmo em orçamentos já
+  // Atalho rápido na listagem: abre só a primeira foto direto (navegador
+  // bloqueia várias janelas abertas de uma vez via loop) - pra ver TODAS
+  // as fotos de uma vez, "Editar item" mostra a lista completa.
+  async function verFotosItem(item: ItemOrcamento) {
+    const fotos = item.orcamento_itens_fotos ?? [];
+    if (fotos.length === 0) return;
+    await verFoto(fotos[0].storage_path);
+  }
+
+  // Adicionar mais uma foto a um item já existente - independe de
+  // `travado` de propósito: é só uma evidência anexada, não muda preço/
+  // descrição/quantidade, então continua permitido mesmo em orçamentos já
   // precificados/entregues (ex.: complementar fotos depois da entrega).
   // Input por item, dentro de um <label> (mesmo padrão já usado em
   // TesteResolucao.tsx) - mais confiável entre navegadores do que abrir o
@@ -460,7 +500,7 @@ export function OrcamentoTecnico() {
     setErro(null);
     try {
       const caminho = await enviarArquivoStorage(`orcamento_${orcamentoQuery.data.id}`, arquivo);
-      const { error } = await supabase.from('orcamento_itens').update({ foto_peca_danificada_path: caminho }).eq('id', itemId);
+      const { error } = await supabase.from('orcamento_itens_fotos').insert({ item_id: itemId, storage_path: caminho });
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['itens-orcamento', orcamentoQuery.data.id] });
     } catch (err) {
@@ -649,15 +689,22 @@ export function OrcamentoTecnico() {
                   <td>{item.quantidade}</td>
                   <td>{item.observacao}</td>
                   <td className="acoes-tabela">
-                    {item.foto_peca_danificada_path && (
-                      <button className="botao-icone" title="Ver foto" onClick={() => verFoto(item.foto_peca_danificada_path)}>
+                    {(item.orcamento_itens_fotos ?? []).length > 0 && (
+                      <button
+                        className="botao-icone"
+                        title={`Ver foto (${item.orcamento_itens_fotos.length} no total - abre a primeira; edite o item pra ver todas)`}
+                        onClick={() => verFotosItem(item)}
+                      >
                         <IconPhoto size={16} />
+                        {item.orcamento_itens_fotos.length > 1 && (
+                          <span style={{ fontSize: 10, marginLeft: 2 }}>{item.orcamento_itens_fotos.length}</span>
+                        )}
                       </button>
                     )}
                     <input
                       type="file"
                       accept="image/*"
-                      title={item.foto_peca_danificada_path ? 'Trocar foto' : 'Adicionar foto'}
+                      title="Adicionar foto"
                       disabled={itemEnviandoFoto === item.id}
                       style={{ width: 130, fontSize: 11 }}
                       onChange={(e) => aoEscolherFotoItem(item.id, e)}
@@ -823,22 +870,53 @@ export function OrcamentoTecnico() {
               </p>
             </div>
             <div className="campo-form">
-              <label>Foto da peça danificada (opcional{editandoItemId ? ' - deixe em branco pra manter a foto atual' : ''})</label>
+              <label>Fotos da peça danificada (opcional, pode adicionar mais de uma)</label>
+              {fotosExistentesItem.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  {fotosExistentesItem.map((f) => (
+                    <div key={f.id} style={{ position: 'relative' }}>
+                      {f.url && (
+                        <a href={f.url} target="_blank" rel="noreferrer">
+                          <img src={f.url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4 }} />
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Excluir esta foto"
+                        style={{ position: 'absolute', top: -6, right: -6, background: '#fff', borderRadius: '50%' }}
+                        onClick={() => excluirFotoExistenteItem(f)}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input type="file" accept="image/*" onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)} />
-                <CapturaFoto onCapturar={(arquivo) => setFotoItem(arquivo)} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setFotosNovasItem((lista) => [...lista, ...Array.from(e.target.files ?? [])])}
+                />
+                <CapturaFoto onCapturar={(arquivo) => setFotosNovasItem((lista) => [...lista, arquivo])} />
               </div>
-              {fotoItem && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
-                  <span>{fotoItem.name}</span>
-                  <button
-                    type="button"
-                    className="botao-icone perigo"
-                    title="Remover foto selecionada"
-                    onClick={() => setFotoItem(null)}
-                  >
-                    <IconX size={14} />
-                  </button>
+              {fotosNovasItem.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                  {fotosNovasItem.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                      <span>{f.name}</span>
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover foto selecionada"
+                        onClick={() => setFotosNovasItem((lista) => lista.filter((_, j) => j !== i))}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

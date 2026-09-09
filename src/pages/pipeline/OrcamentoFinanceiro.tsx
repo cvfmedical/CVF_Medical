@@ -83,6 +83,10 @@ interface ItemOrcamento {
   observacao: string | null;
   descricao_servico: string | null;
   foto_peca_danificada_path: string | null;
+  // Item pode ter várias fotos agora (OrcamentoTecnico.tsx) - aqui só
+  // usamos a primeira como representativa nos relatórios/PDFs (ver
+  // primeiraFotoItem() abaixo), pra não inflar o documento com muitas.
+  orcamento_itens_fotos: { storage_path: string }[];
   produtos_servicos: {
     nome: string;
     preco_unitario: number | null;
@@ -91,6 +95,15 @@ interface ItemOrcamento {
     preco_valor3: number | null;
     grupo_contagem_preco: string | null;
   } | null;
+}
+
+// Um item pode ter várias fotos (OrcamentoTecnico.tsx) - nos relatórios/
+// PDFs usa só a primeira como representativa, pra não inflar o documento.
+// foto_peca_danificada_path é o campo legado (só 1 foto) - mantido como
+// fallback pra itens antigos que por algum motivo não tenham sido
+// migrados pra orcamento_itens_fotos.
+function primeiraFotoItem(item: { foto_peca_danificada_path: string | null; orcamento_itens_fotos?: { storage_path: string }[] }): string | null {
+  return item.orcamento_itens_fotos?.[0]?.storage_path ?? item.foto_peca_danificada_path ?? null;
 }
 
 interface Cliente {
@@ -322,7 +335,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3, grupo_contagem_preco)',
+          'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, orcamento_itens_fotos(storage_path), produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3, grupo_contagem_preco)',
         )
         .eq('orcamento_id', selecionadoId!);
       if (error) throw error;
@@ -772,7 +785,7 @@ export function OrcamentoFinanceiro() {
         nome: item.produtos_servicos?.nome ?? item.descricao_servico ?? '-',
         quantidade: item.quantidade,
         observacao: item.observacao,
-        fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
+        fotoUrl: primeiraFotoItem(item) ? await urlAssinadaFoto(primeiraFotoItem(item)!) : null,
       })),
     );
     return montarCorpoRelatorioOS(
@@ -1188,7 +1201,7 @@ export function OrcamentoFinanceiro() {
         const { data: itensData, error: errItens } = await supabase
           .from('orcamento_itens')
           .select(
-            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3, grupo_contagem_preco)',
+            'id, produto_servico_id, quantidade, preco_unitario, observacao, descricao_servico, foto_peca_danificada_path, orcamento_itens_fotos(storage_path), produtos_servicos(nome, preco_unitario, preco_valor1, preco_valor2, preco_valor3, grupo_contagem_preco)',
           )
           .eq('orcamento_id', o.id);
         if (errItens) throw errItens;
@@ -1245,7 +1258,7 @@ export function OrcamentoFinanceiro() {
               nome: it.produtos_servicos?.nome ?? it.descricao_servico ?? '-',
               quantidade: it.quantidade,
               observacao: it.observacao ?? '',
-              fotoDataUri: (await fotoParaDataUri(it.foto_peca_danificada_path)) ?? undefined,
+              fotoDataUri: (await fotoParaDataUri(primeiraFotoItem(it))) ?? undefined,
             })),
           ),
           observacoesTecnico: o.observacoes_tecnico,
@@ -1944,8 +1957,16 @@ export function OrcamentoFinanceiro() {
                       />
                     </td>
                     <td className="acoes-tabela">
-                      {item.foto_peca_danificada_path && (
-                        <button className="botao-icone" title="Ver foto da peça" onClick={() => verFoto(item.foto_peca_danificada_path)}>
+                      {primeiraFotoItem(item) && (
+                        <button
+                          className="botao-icone"
+                          title={
+                            item.orcamento_itens_fotos?.length > 1
+                              ? `Ver foto (${item.orcamento_itens_fotos.length} no total - abra em Orçamento Técnico pra ver todas)`
+                              : 'Ver foto da peça'
+                          }
+                          onClick={() => verFoto(primeiraFotoItem(item))}
+                        >
                           <IconPhoto size={16} />
                         </button>
                       )}
