@@ -216,6 +216,8 @@ Deno.serve(async (req: Request) => {
   let corpo: {
     contaId?: number;
     orcamentoId?: number;
+    orcamentoIds?: number[];
+    parcelas?: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[];
     acao?: 'emitir' | 'consultar' | 'previsualizar' | 'reenviar_email' | 'cancelar';
     overrides?: Overrides;
     emails?: string[];
@@ -231,10 +233,19 @@ Deno.serve(async (req: Request) => {
   // orcamentoId: orçamento "Liberado" que AINDA não tem conta - usado
   // quando "Emitir NFS-e" é clicado direto no orçamento; a conta é criada
   // agora, dentro da ação 'emitir' (ver mais abaixo), sem NF ainda.
+  // orcamentoIds: MESMA ideia, mas pra consolidar vários orçamentos do
+  // MESMO cliente numa nota só (pedido do usuário, 2026-09-09) - soma o
+  // valor de todos, cria uma "conta"/parcela por item de `parcelas` (ou
+  // uma conta única, se `parcelas` não vier), todas compartilhando a
+  // mesma NF (nfse_ref) no final.
   let contaId = corpo.contaId ?? null;
   const orcamentoIdBody = corpo.orcamentoId ?? null;
+  const orcamentoIdsBody =
+    Array.isArray(corpo.orcamentoIds) && corpo.orcamentoIds.length > 0 ? corpo.orcamentoIds : null;
   const acao = corpo.acao ?? 'emitir';
-  if (!contaId && !orcamentoIdBody) return json({ error: 'Informe contaId ou orcamentoId.' }, 400);
+  if (!contaId && !orcamentoIdBody && !orcamentoIdsBody) {
+    return json({ error: 'Informe contaId, orcamentoId ou orcamentoIds.' }, 400);
+  }
 
   const authFocus = 'Basic ' + btoa(`${focusToken}:`);
 
@@ -306,10 +317,14 @@ Deno.serve(async (req: Request) => {
       return json({ error: `Falha ao cancelar NFS-e (HTTP ${resp.status}): ${mensagemFocus}`, detalhe: resultado }, 502);
     }
 
+    // Cancela via nfse_ref (não só o contaId clicado) - uma NF consolidada
+    // (vários orçamentos, várias parcelas) compartilha a MESMA nfse_ref
+    // entre todas as contas/parcelas envolvidas; cancelar precisa refletir
+    // nas todas, já que é UM documento fiscal só sendo cancelado.
     const { error: erroUpdate } = await supabaseAdmin
       .from('contas_receber')
       .update({ nfse_status: 'cancelada', nfse_erro_detalhe: null })
-      .eq('id', contaId);
+      .eq('nfse_ref', conta.nfse_ref);
     if (erroUpdate) {
       return json({ error: `Cancelou na prefeitura, mas falhou ao gravar isso no nosso banco: ${erroUpdate.message}` }, 500);
     }
@@ -352,6 +367,10 @@ Deno.serve(async (req: Request) => {
     // longo) ficava completamente muda: a function respondia 200 OK com o
     // status "autorizado" de verdade, mas a conta continuava presa em
     // "processando" pra sempre, sem nenhum sinal de erro em lugar nenhum.
+    // Atualiza por nfse_ref (não só o contaId consultado) - uma NF
+    // consolidada compartilha a MESMA nfse_ref entre todas as
+    // contas/parcelas envolvidas, e o número/chave/status autorizados
+    // valem pra NF inteira, não só pra parcela que disparou a consulta.
     let erroGravacao: string | null = null;
     if (resultado.status === 'autorizado') {
       const { error: erroUpdate } = await supabaseAdmin
@@ -365,7 +384,7 @@ Deno.serve(async (req: Request) => {
           nfse_pdf_path: corrigirUrlDanfse(resultado.url_danfse),
           nfse_erro_detalhe: null,
         })
-        .eq('id', contaId);
+        .eq('nfse_ref', conta.nfse_ref);
       if (erroUpdate) erroGravacao = erroUpdate.message;
     } else if (resultado.status === 'erro_autorizacao' || resultado.status === 'negado') {
       // A emissão é assíncrona - o erro de negócio de verdade (ex.: "Série
@@ -380,13 +399,13 @@ Deno.serve(async (req: Request) => {
       const { error: erroUpdate } = await supabaseAdmin
         .from('contas_receber')
         .update({ nfse_status: 'erro', nfse_erro_detalhe: detalhe })
-        .eq('id', contaId);
+        .eq('nfse_ref', conta.nfse_ref);
       if (erroUpdate) erroGravacao = erroUpdate.message;
     } else if (resultado.status === 'cancelado') {
       const { error: erroUpdate } = await supabaseAdmin
         .from('contas_receber')
         .update({ nfse_status: 'cancelada' })
-        .eq('id', contaId);
+        .eq('nfse_ref', conta.nfse_ref);
       if (erroUpdate) erroGravacao = erroUpdate.message;
     } else {
       // Status ainda não é nenhum dos terminais conhecidos - grava a
@@ -397,7 +416,7 @@ Deno.serve(async (req: Request) => {
       const { error: erroUpdate } = await supabaseAdmin
         .from('contas_receber')
         .update({ nfse_erro_detalhe: `[debug] status="${resultado.status}" - ${JSON.stringify(resultado)}` })
-        .eq('id', contaId);
+        .eq('nfse_ref', conta.nfse_ref);
       if (erroUpdate) erroGravacao = erroUpdate.message;
     }
 
@@ -417,17 +436,20 @@ Deno.serve(async (req: Request) => {
     nf_numero: string | null;
     cliente_id: number;
     descricao: string | null;
-    orcamentos: {
-      numero_orcamento: string;
-      ordem_servico_id: number | null;
-      ordens_servico: { numero_os: string } | null;
-    } | null;
+    // Lista (1 item no fluxo normal, N num consolidado) - substitui o
+    // antigo campo singular "orcamentos" pra tratar os dois casos com o
+    // mesmo código mais abaixo (descrição do serviço, busca do
+    // equipamento etc.).
+    orcamentosRefs: { numero_orcamento: string; ordem_servico_id: number | null }[];
   };
   let conta: ContaLike;
-  // Quando a conta precisar ser criada agora (veio só orcamentoId), guarda
-  // o orçamento pra vincular - só usado dentro do bloco de criação, mais
-  // abaixo, depois que 'previsualizar' já tiver retornado.
+  // Quando a conta (ou as N parcelas) precisarem ser criadas agora (veio
+  // só orcamentoId/orcamentoIds, sem contaId), guarda o(s) orçamento(s)
+  // pra vincular - só usado dentro do bloco de criação, mais abaixo,
+  // depois que 'previsualizar' já tiver retornado.
   let orcamentoIdParaCriarConta: number | null = null;
+  let orcamentosIdsParaCriarContas: number[] | null = null;
+  let parcelasBody: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[] | null = null;
 
   if (contaId) {
     const { data: contaExistente, error: erroConta } = await supabaseAdmin
@@ -439,7 +461,86 @@ Deno.serve(async (req: Request) => {
       .single();
     if (erroConta || !contaExistente) return json({ error: 'Conta a receber não encontrada.' }, 404);
     if (contaExistente.nf_numero) return json({ error: 'Essa conta já tem NF lançada.' }, 400);
-    conta = contaExistente as unknown as ContaLike;
+    const contaExistenteTyped = contaExistente as unknown as {
+      id: number;
+      valor: number;
+      nf_numero: string | null;
+      cliente_id: number;
+      descricao: string | null;
+      orcamentos: { numero_orcamento: string; ordem_servico_id: number | null } | null;
+    };
+    conta = {
+      ...contaExistenteTyped,
+      orcamentosRefs: contaExistenteTyped.orcamentos ? [contaExistenteTyped.orcamentos] : [],
+    };
+  } else if (orcamentoIdsBody) {
+    // NOVO (2026-09-09): consolida vários orçamentos do MESMO cliente
+    // numa nota só - soma o valor de cada um pela mesma fórmula de
+    // src/lib/valorOrcamento.ts, confere que todos são do mesmo cliente
+    // (uma NFS-e só tem um tomador), e monta a descrição combinada mais
+    // abaixo (bloco descricaoServicoPadrao).
+    const { data: orcRows, error: erroOrcs } = await supabaseAdmin
+      .from('orcamentos')
+      .select(
+        'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade), ordens_servico(numero_os, cliente_id)',
+      )
+      .in('id', orcamentoIdsBody);
+    type OrcConsolidado = {
+      id: number;
+      numero_orcamento: string;
+      ordem_servico_id: number | null;
+      valor_fixo_contrato: number | null;
+      desconto: number | null;
+      bonificacao: boolean | null;
+      orcamento_itens: { preco_unitario: number | null; quantidade: number }[];
+      ordens_servico: { numero_os: string; cliente_id: number } | null;
+    };
+    const orcsTyped = (orcRows ?? []) as unknown as OrcConsolidado[];
+    if (erroOrcs || orcsTyped.length !== orcamentoIdsBody.length) {
+      return json({ error: 'Um ou mais orçamentos não foram encontrados.' }, 404);
+    }
+    const clientesDistintos = new Set(orcsTyped.map((o) => o.ordens_servico?.cliente_id).filter((v): v is number => v != null));
+    if (clientesDistintos.size !== 1) {
+      return json({ error: 'Todos os orçamentos selecionados precisam ser do mesmo cliente.' }, 400);
+    }
+    const clienteIdConsolidado = [...clientesDistintos][0];
+    const totalOrc = (o: OrcConsolidado): number => {
+      const subtotal =
+        o.valor_fixo_contrato != null
+          ? Number(o.valor_fixo_contrato)
+          : (o.orcamento_itens ?? []).reduce((s, i) => s + (Number(i.preco_unitario) || 0) * Number(i.quantidade), 0);
+      return o.bonificacao ? 0 : Math.max(subtotal - (Number(o.desconto) || 0), 0);
+    };
+    const valorTotal = orcsTyped.reduce((soma, o) => soma + totalOrc(o), 0);
+    conta = {
+      id: null,
+      valor: valorTotal,
+      nf_numero: null,
+      cliente_id: clienteIdConsolidado,
+      descricao: orcsTyped
+        .map((o) => `Orçamento ${o.numero_orcamento} - OS ${o.ordens_servico?.numero_os ?? ''}`)
+        .join('; '),
+      orcamentosRefs: orcsTyped.map((o) => ({ numero_orcamento: o.numero_orcamento, ordem_servico_id: o.ordem_servico_id })),
+    };
+    orcamentosIdsParaCriarContas = orcamentoIdsBody;
+    // Sem `parcelas` no corpo, trata como uma parcela única (o total
+    // inteiro, vencimento padrão de 30 dias) - mesma regra do fluxo de 1
+    // orçamento só.
+    const vencimentoPadrao = new Date();
+    vencimentoPadrao.setDate(vencimentoPadrao.getDate() + 30);
+    parcelasBody =
+      Array.isArray(corpo.parcelas) && corpo.parcelas.length > 0
+        ? corpo.parcelas
+        : [{ valor: valorTotal, vencimento: vencimentoPadrao.toISOString().slice(0, 10) }];
+    const somaParcelas = parcelasBody.reduce((s, p) => s + Number(p.valor), 0);
+    if (Math.abs(somaParcelas - valorTotal) > 0.01) {
+      return json(
+        {
+          error: `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) precisa bater com o total dos orçamentos (R$ ${valorTotal.toFixed(2)}).`,
+        },
+        400,
+      );
+    }
   } else {
     // Sem conta ainda - monta os dados direto do orçamento (mesma fórmula
     // de src/lib/valorOrcamento.ts: valor_fixo_contrato OU soma dos itens,
@@ -479,11 +580,7 @@ Deno.serve(async (req: Request) => {
       nf_numero: null,
       cliente_id: clienteIdOrc,
       descricao: `Orçamento ${orcTyped.numero_orcamento} - OS ${numeroOS}`,
-      orcamentos: {
-        numero_orcamento: orcTyped.numero_orcamento,
-        ordem_servico_id: orcTyped.ordem_servico_id,
-        ordens_servico: { numero_os: numeroOS },
-      },
+      orcamentosRefs: [{ numero_orcamento: orcTyped.numero_orcamento, ordem_servico_id: orcTyped.ordem_servico_id }],
     };
     orcamentoIdParaCriarConta = orcTyped.id;
   }
@@ -556,23 +653,21 @@ Deno.serve(async (req: Request) => {
   // junto do payload sobre o grupo ser tudo-ou-nada no schema.
   const enderecoTomadorCompleto = codigoMunicipioTomador != null && !!cepTomador && !!logradouroTomador;
 
-  const orc = (
-    conta as unknown as {
-      orcamentos: { numero_orcamento: string; ordem_servico_id: number | null; ordens_servico: { numero_os: string } | null } | null;
-    }
-  ).orcamentos;
-
   // O que veio pra manutenção (ex.: "CAMISA PARA ARTROSCOPIA", "160mm x
   // 4mm x 30° - ARTROSCOPIA DE JOELHO/OMBRO") - cada OS tem no máximo uma
-  // entrada de equipamento (confirmado: nenhuma OS tem mais de uma), então
-  // dá pra usar direto como a 3ª linha da descrição do serviço.
-  const { data: entradaEquip } = orc?.ordem_servico_id
-    ? await supabaseAdmin
-        .from('entradas_equipamento')
-        .select('equipamento_desc')
-        .eq('ordem_servico_id', orc.ordem_servico_id)
-        .maybeSingle()
-    : { data: null };
+  // entrada de equipamento (confirmado: nenhuma OS tem mais de uma). Numa
+  // nota consolidada (vários orçamentos), busca a de CADA OS envolvida e
+  // junta - pro caso normal (1 orçamento) o resultado é idêntico a antes.
+  const osIds = conta.orcamentosRefs.map((o) => o.ordem_servico_id).filter((v): v is number => v != null);
+  const { data: entradasEquip } =
+    osIds.length > 0
+      ? await supabaseAdmin.from('entradas_equipamento').select('equipamento_desc, ordem_servico_id').in('ordem_servico_id', osIds)
+      : { data: null };
+  const descricaoEquipamentos =
+    (entradasEquip ?? [])
+      .map((e) => e.equipamento_desc)
+      .filter((v): v is string => !!v)
+      .join('; ') || 'Instrumental cirúrgico';
 
   // Valor aproximado dos tributos (Lei 12.741/2012 - Lei da Transparência
   // Fiscal): não é o percentual, é o R$ daquela nota específica, calculado
@@ -583,13 +678,23 @@ Deno.serve(async (req: Request) => {
       ? (Number(conta.valor) * (percentualTotalTributosFederais + percentualTotalTributosMunicipais)) / 100
       : null;
 
+  // Referência ao(s) orçamento(s) - singular igual sempre foi quando só
+  // tem um; concatenado quando a nota consolida vários (pedido do
+  // usuário, 2026-09-09).
+  const referenciaOrcamentos =
+    conta.orcamentosRefs.length > 1
+      ? `REFERENTE AOS ORÇAMENTOS - ORC: ${conta.orcamentosRefs.map((o) => o.numero_orcamento).join(', ')}`
+      : conta.orcamentosRefs[0]
+        ? `REFERENTE AO ORÇAMENTO - ORC: ${conta.orcamentosRefs[0].numero_orcamento}`
+        : conta.descricao || 'Prestação de serviço';
+
   // Formato fixo pedido pelo usuário (2026-09-02): 4 linhas sempre nessa
   // ordem - texto fixo, referência ao orçamento, o que veio pra
   // manutenção, e o valor (não percentual) dos tributos daquela nota.
   const descricaoServicoPadrao = [
-    'MANUTENÇÃO EM EQUIPAMENTO',
-    orc ? `REFERENTE AO ORÇAMENTO - ORC: ${orc.numero_orcamento}` : conta.descricao || 'Prestação de serviço',
-    entradaEquip?.equipamento_desc || 'Instrumental cirúrgico',
+    conta.orcamentosRefs.length > 1 ? 'MANUTENÇÃO EM EQUIPAMENTOS' : 'MANUTENÇÃO EM EQUIPAMENTO',
+    referenciaOrcamentos,
+    descricaoEquipamentos,
     valorAproxTributos != null
       ? `Valor aproximado dos tributos: R$ ${valorAproxTributos.toFixed(2)} (Fonte: IBPT - Lei 12.741/2012)`
       : 'Valor aproximado dos tributos: não informado',
@@ -681,40 +786,88 @@ Deno.serve(async (req: Request) => {
         aliquotaIss,
         percentualTotalTributosFederais,
         percentualTotalTributosMunicipais,
+        numeroOrcamentos: conta.orcamentosRefs.map((o) => o.numero_orcamento),
       },
     });
   }
 
-  // A partir daqui é 'emitir' de verdade. Se a conta ainda não existia
-  // (veio só orcamentoId - orçamento "Liberado" direto, sem passar por
-  // "Lançar NF" antes), cria ela AGORA, sem NF ainda - o número/chave só
-  // são preenchidos depois, quando a Focus autorizar (branch 'consultar'
-  // acima). numero_dps e a referência (ref) usados no payload/POST
-  // precisam ser recalculados com o id real recém-criado.
+  // A partir daqui é 'emitir' de verdade. Se a conta (ou as N parcelas)
+  // ainda não existiam (veio só orcamentoId/orcamentoIds, sem contaId),
+  // cria agora, sem NF ainda - o número/chave só são preenchidos depois,
+  // quando a Focus autorizar (branch 'consultar' acima). numero_dps e a
+  // referência (ref) usados no payload/POST precisam ser recalculados com
+  // o id real recém-criado. Todos os ids criados (1 no caso normal, N
+  // numa nota consolidada parcelada) ficam em `idsContasParaAtualizarNf`,
+  // usado mais abaixo pra gravar o resultado da Focus em TODAS as contas
+  // envolvidas, não só na âncora usada pro numero_dps.
+  let idsContasParaAtualizarNf: number[] = conta.id != null ? [conta.id] : [];
   if (conta.id == null) {
-    const numeroConta = await proximoNumeroConta(supabaseAdmin);
-    const vencimento = new Date();
-    vencimento.setDate(vencimento.getDate() + 30);
-    const { data: novaConta, error: erroNovaConta } = await supabaseAdmin
-      .from('contas_receber')
-      .insert({
-        numero_conta: numeroConta,
-        orcamento_id: orcamentoIdParaCriarConta,
-        cliente_id: conta.cliente_id,
-        descricao: conta.descricao,
-        valor: conta.valor,
-        data_vencimento: vencimento.toISOString().slice(0, 10),
-        status: 'Em aberto',
-      })
-      .select('id')
-      .single();
-    if (erroNovaConta || !novaConta) {
-      return json({ error: 'Falha ao criar a conta a receber para este orçamento.' }, 500);
+    if (orcamentosIdsParaCriarContas && parcelasBody) {
+      const idsCriados: number[] = [];
+      for (let i = 0; i < parcelasBody.length; i++) {
+        const p = parcelasBody[i];
+        const numeroConta = await proximoNumeroConta(supabaseAdmin);
+        const descricaoParcela =
+          parcelasBody.length > 1 ? `${conta.descricao} - Parcela ${i + 1}/${parcelasBody.length}` : conta.descricao;
+        const { data: novaParcela, error: erroNovaParcela } = await supabaseAdmin
+          .from('contas_receber')
+          .insert({
+            numero_conta: numeroConta,
+            orcamento_id: orcamentosIdsParaCriarContas[0],
+            orcamentos_ids: orcamentosIdsParaCriarContas,
+            cliente_id: conta.cliente_id,
+            descricao: descricaoParcela,
+            valor: Number(p.valor),
+            data_vencimento: p.vencimento,
+            status: 'Em aberto',
+            boleto_numero: p.boletoNumero || null,
+            boleto_linha_digitavel: p.boletoLinhaDigitavel || null,
+            boleto_vencimento: p.vencimento,
+          })
+          .select('id')
+          .single();
+        if (erroNovaParcela || !novaParcela) {
+          return json(
+            {
+              error: `Falha ao criar a parcela ${i + 1}/${parcelasBody.length}: ${erroNovaParcela?.message ?? 'erro desconhecido'}`,
+              idsJaCriados: idsCriados,
+            },
+            500,
+          );
+        }
+        idsCriados.push(novaParcela.id);
+      }
+      idsContasParaAtualizarNf = idsCriados;
+      conta.id = idsCriados[0]; // âncora pro numero_dps/ref - a NF em si é UMA só
+      contaId = idsCriados[0];
+      payload.numero_dps = conta.id;
+      ref = `qcvf-cr-${conta.id}`;
+    } else {
+      const numeroConta = await proximoNumeroConta(supabaseAdmin);
+      const vencimento = new Date();
+      vencimento.setDate(vencimento.getDate() + 30);
+      const { data: novaConta, error: erroNovaConta } = await supabaseAdmin
+        .from('contas_receber')
+        .insert({
+          numero_conta: numeroConta,
+          orcamento_id: orcamentoIdParaCriarConta,
+          cliente_id: conta.cliente_id,
+          descricao: conta.descricao,
+          valor: conta.valor,
+          data_vencimento: vencimento.toISOString().slice(0, 10),
+          status: 'Em aberto',
+        })
+        .select('id')
+        .single();
+      if (erroNovaConta || !novaConta) {
+        return json({ error: 'Falha ao criar a conta a receber para este orçamento.' }, 500);
+      }
+      conta.id = novaConta.id;
+      contaId = novaConta.id;
+      idsContasParaAtualizarNf = [conta.id];
+      payload.numero_dps = conta.id;
+      ref = `qcvf-cr-${conta.id}`;
     }
-    conta.id = novaConta.id;
-    contaId = novaConta.id;
-    payload.numero_dps = conta.id;
-    ref = `qcvf-cr-${conta.id}`;
   }
 
   // Regra confirmada em teste real (2026-09-02, erro E0235 da SEFAZ
@@ -750,7 +903,7 @@ Deno.serve(async (req: Request) => {
     await supabaseAdmin
       .from('contas_receber')
       .update({ nfse_status: 'erro', nfse_erro_detalhe: detalheCompleto })
-      .eq('id', contaId);
+      .in('id', idsContasParaAtualizarNf);
     // A mensagem da Focus (resultado.mensagem) vai direto no "error" - antes
     // só ia um texto genérico "Falha ao emitir NFS-e" pro frontend, e o
     // motivo real (ex.: token inválido, série errada) só aparecia consultando
@@ -769,7 +922,7 @@ Deno.serve(async (req: Request) => {
   await supabaseAdmin
     .from('contas_receber')
     .update({ nfse_status: 'processando', nfse_ref: ref, nfse_erro_detalhe: null })
-    .eq('id', contaId);
+    .in('id', idsContasParaAtualizarNf);
 
-  return json({ ok: true, contaId, ref, resultado });
+  return json({ ok: true, contaId, contaIds: idsContasParaAtualizarNf, ref, resultado });
 });

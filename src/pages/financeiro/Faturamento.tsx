@@ -19,6 +19,7 @@ import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { totalOrcamento } from '../../lib/valorOrcamento';
 import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
 import { abrirPreviaDanfse } from '../../lib/previaDanfse';
+import { IconTrash } from '@tabler/icons-react';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -242,7 +243,9 @@ export function Faturamento() {
   const [carregandoPreviaId, setCarregandoPreviaId] = useState<string | null>(null);
   const [salvandoCadastroTomador, setSalvandoCadastroTomador] = useState(false);
   const [previaNfse, setPreviaNfse] = useState<{
-    linha: LinhaFaturamento;
+    // 1 item no fluxo normal - 2+ quando é uma NF consolidada pra vários
+    // orçamentos do mesmo cliente (seleção múltipla abaixo).
+    linhas: LinhaFaturamento[];
     payload: Record<string, unknown>;
     resumoSomenteLeitura: {
       ambiente: 'homologacao' | 'producao';
@@ -250,8 +253,16 @@ export function Faturamento() {
       aliquotaIss: number | null;
       percentualTotalTributosFederais: number | null;
       percentualTotalTributosMunicipais: number | null;
+      numeroOrcamentos: string[];
     };
   } | null>(null);
+  // Seleção múltipla pra consolidar vários orçamentos "liberados" (sem NF
+  // ainda, sem conta ainda) do MESMO cliente numa nota só.
+  const [selecionadasFaturar, setSelecionadasFaturar] = useState<Set<string>>(new Set());
+  const [parceladoConsolidado, setParceladoConsolidado] = useState(false);
+  const [parcelasConsolidado, setParcelasConsolidado] = useState<
+    { valor: string; vencimento: string; boletoNumero: string; boletoLinhaDigitavel: string }[]
+  >([]);
   const [formNfse, setFormNfse] = useState<{
     razaoSocial: string;
     documento: string;
@@ -782,22 +793,51 @@ export function Faturamento() {
   // (mesmo payload que seria enviado, mas sem transmitir) pro setor de
   // faturamento conferir num modal - só chama a emissão de verdade depois
   // de confirmado ali.
-  async function abrirPreviaNfse(l: LinhaFaturamento) {
-    if (!l.contaId && !l.orcamentoId) return;
-    setCarregandoPreviaId(l.chave);
+  // Confere se todas as linhas marcadas são do mesmo cliente - uma NFS-e
+  // só tem um tomador, não dá pra consolidar orçamentos de clientes
+  // diferentes. Mesmo padrão de clienteComumDas() já usado em Entrega.tsx.
+  function clienteComumDasLinhas(linhas: LinhaFaturamento[]): number | null {
+    const clienteIds = new Set(linhas.map((l) => l.clienteId).filter((id): id is number => id != null));
+    return clienteIds.size === 1 ? [...clienteIds][0] : null;
+  }
+
+  function alternarSelecaoFaturar(chave: string) {
+    setSelecionadasFaturar((s) => {
+      const nova = new Set(s);
+      if (nova.has(chave)) nova.delete(chave);
+      else nova.add(chave);
+      return nova;
+    });
+  }
+
+  async function abrirPreviaNfse(linhas: LinhaFaturamento[]) {
+    if (linhas.length === 0) return;
+    if (linhas.length === 1 && !linhas[0].contaId && !linhas[0].orcamentoId) return;
+    // Consolidando vários: só faz sentido pra orçamentos "liberados" que
+    // ainda não têm conta nenhuma (contaId == null) - já teria uma NF/
+    // conta própria se já existisse.
+    if (linhas.length > 1 && linhas.some((l) => l.contaId != null || !l.orcamentoId)) {
+      setErro('Só é possível consolidar orçamentos ainda sem conta/NF lançada.');
+      return;
+    }
+    const chaveCarregando = linhas.length === 1 ? linhas[0].chave : 'consolidado';
+    setCarregandoPreviaId(chaveCarregando);
     setErro(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfse', {
-        body: {
-          ...(l.contaId ? { contaId: l.contaId } : { orcamentoId: l.orcamentoId }),
-          acao: 'previsualizar',
-        },
+        body:
+          linhas.length === 1
+            ? {
+                ...(linhas[0].contaId ? { contaId: linhas[0].contaId } : { orcamentoId: linhas[0].orcamentoId }),
+                acao: 'previsualizar',
+              }
+            : { orcamentoIds: linhas.map((l) => l.orcamentoId!), acao: 'previsualizar' },
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao gerar prévia da NFS-e.');
       const r = data.resumo;
       setPreviaNfse({
-        linha: l,
+        linhas,
         payload: data.payload,
         resumoSomenteLeitura: {
           ambiente: r.ambiente,
@@ -805,6 +845,7 @@ export function Faturamento() {
           aliquotaIss: r.aliquotaIss,
           percentualTotalTributosFederais: r.percentualTotalTributosFederais,
           percentualTotalTributosMunicipais: r.percentualTotalTributosMunicipais,
+          numeroOrcamentos: r.numeroOrcamentos ?? [],
         },
       });
       setFormNfse({
@@ -821,6 +862,12 @@ export function Faturamento() {
         email: r.emailTomador ?? '',
         descricaoServico: r.descricaoServico ?? '',
       });
+      setParceladoConsolidado(false);
+      setParcelasConsolidado(
+        linhas.length > 1
+          ? [{ valor: String(r.valorServico), vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' }]
+          : [],
+      );
     } catch (e) {
       setErro(await mensagemErroFuncao(e));
     } finally {
@@ -837,7 +884,7 @@ export function Faturamento() {
   // cadastro do cliente - assim a correção (ex.: endereço que faltava) vale
   // pras próximas notas também, não só pra essa.
   async function salvarDadosTomador() {
-    if (!previaNfse?.linha.clienteId || !formNfse) return;
+    if (!previaNfse?.linhas[0]?.clienteId || !formNfse) return;
     setSalvandoCadastroTomador(true);
     setErro(null);
     try {
@@ -856,7 +903,7 @@ export function Faturamento() {
           telefone: formNfse.telefone,
           email: formNfse.email,
         })
-        .eq('id', previaNfse.linha.clienteId);
+        .eq('id', previaNfse.linhas[0].clienteId);
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['clientes-opcoes-faturamento'] });
     } catch (e) {
@@ -972,7 +1019,31 @@ export function Faturamento() {
 
   async function confirmarEmissaoNfse() {
     if (!previaNfse || !formNfse) return;
-    const sucesso = await emitirNFSe(previaNfse.linha, {
+    let parcelasParaEnviar: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[] | undefined;
+    if (previaNfse.linhas.length > 1) {
+      if (parceladoConsolidado) {
+        if (parcelasConsolidado.some((p) => !p.valor || !p.vencimento)) {
+          setErro('Preencha valor e vencimento de todas as parcelas.');
+          return;
+        }
+        const somaParcelas = parcelasConsolidado.reduce((s, p) => s + Number(p.valor), 0);
+        if (Math.abs(somaParcelas - previaNfse.resumoSomenteLeitura.valorServico) > 0.01) {
+          setErro(
+            `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) precisa bater com o valor total (R$ ${previaNfse.resumoSomenteLeitura.valorServico.toFixed(2)}).`,
+          );
+          return;
+        }
+        parcelasParaEnviar = parcelasConsolidado.map((p) => ({
+          valor: Number(p.valor),
+          vencimento: p.vencimento,
+          boletoNumero: p.boletoNumero || undefined,
+          boletoLinhaDigitavel: p.boletoLinhaDigitavel || undefined,
+        }));
+      } else {
+        parcelasParaEnviar = undefined; // 1 parcela só, com o total - a function usa vencimento padrão de 30 dias
+      }
+    }
+    const sucesso = await emitirNFSe(previaNfse.linhas, parcelasParaEnviar, {
       razao_social_tomador: formNfse.razaoSocial,
       documento_tomador: formNfse.documento,
       logradouro_tomador: formNfse.logradouro,
@@ -986,7 +1057,10 @@ export function Faturamento() {
       email_tomador: formNfse.email,
       descricao_servico: formNfse.descricaoServico,
     });
-    if (sucesso) fecharPreviaNfse();
+    if (sucesso) {
+      fecharPreviaNfse();
+      setSelecionadasFaturar(new Set());
+    }
   }
 
   // Emissão automática de NFS-e pela Focus NFe - alternativa ao "Lançar
@@ -995,7 +1069,8 @@ export function Faturamento() {
   // "processando", o técnico usa "Verificar status" pra puxar o resultado
   // final (autorizada/erro) da Focus NFe.
   async function emitirNFSe(
-    l: LinhaFaturamento,
+    linhas: LinhaFaturamento[],
+    parcelas?: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[],
     overrides?: {
       razao_social_tomador: string;
       documento_tomador: string;
@@ -1011,13 +1086,18 @@ export function Faturamento() {
       descricao_servico: string;
     },
   ): Promise<boolean> {
-    if (!l.contaId && !l.orcamentoId) return false;
-    setEmitindoNfseId(l.chave);
+    const l = linhas[0];
+    if (linhas.length === 1 && !l.contaId && !l.orcamentoId) return false;
+    setEmitindoNfseId(linhas.length === 1 ? l.chave : 'consolidado');
     setErro(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfse', {
         body: {
-          ...(l.contaId ? { contaId: l.contaId } : { orcamentoId: l.orcamentoId }),
+          ...(linhas.length === 1
+            ? l.contaId
+              ? { contaId: l.contaId }
+              : { orcamentoId: l.orcamentoId }
+            : { orcamentoIds: linhas.map((x) => x.orcamentoId!), ...(parcelas ? { parcelas } : {}) }),
           acao: 'emitir',
           ...(overrides ? { overrides } : {}),
         },
@@ -1215,6 +1295,44 @@ export function Faturamento() {
         </div>
       )}
 
+      {selecionadasFaturar.size > 0 &&
+        (() => {
+          const linhasSelecionadas = linhasParaFaturar.filter((l) => selecionadasFaturar.has(l.chave));
+          const clienteConsolidado = clienteComumDasLinhas(linhasSelecionadas);
+          return (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                background: 'var(--paper-50)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                marginBottom: 16,
+                fontSize: 13,
+              }}
+            >
+              <span>{linhasSelecionadas.length} orçamento(s) selecionado(s) pra consolidar numa NF só.</span>
+              {clienteConsolidado == null && (
+                <span className="erro-login" style={{ margin: 0 }}>
+                  Os orçamentos marcados são de clientes diferentes - selecione só orçamentos do mesmo cliente.
+                </span>
+              )}
+              <button className="botao-secundario botao-pequeno" onClick={() => setSelecionadasFaturar(new Set())}>
+                Limpar seleção
+              </button>
+              <button
+                className="botao-primario botao-pequeno"
+                disabled={linhasSelecionadas.length < 2 || clienteConsolidado == null}
+                onClick={() => abrirPreviaNfse(linhasSelecionadas)}
+              >
+                Lançar NF consolidada ({linhasSelecionadas.length})
+              </button>
+            </div>
+          );
+        })()}
+
       {naoLiberadas.length > 0 && (
         <div
           style={{
@@ -1258,6 +1376,7 @@ export function Faturamento() {
       <table className="tabela-crud">
         <thead>
           <tr>
+            <th></th>
             {[
               ['codigo_entrada', 'Entrada'],
               ['numero_os', 'OS'],
@@ -1275,6 +1394,7 @@ export function Faturamento() {
             <th></th>
           </tr>
           <tr>
+            <th></th>
             {COLUNAS_FILTRAVEIS.map((chave) => {
               const valoresDisponiveis = Array.from(
                 new Set(linhasParaFaturar.map((l) => String(valorColuna(l, chave) ?? ''))),
@@ -1304,6 +1424,16 @@ export function Faturamento() {
         <tbody>
           {linhasOrdenadasFiltradas.map((l) => (
             <tr key={l.chave}>
+              <td>
+                {l.contaId == null && l.orcamentoId != null && !l.nf_numero && (
+                  <input
+                    type="checkbox"
+                    title="Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente"
+                    checked={selecionadasFaturar.has(l.chave)}
+                    onChange={() => alternarSelecaoFaturar(l.chave)}
+                  />
+                )}
+              </td>
               <td>
                 {l.ordemServicoId ? (
                   <span
@@ -1392,7 +1522,7 @@ export function Faturamento() {
                 {(l.contaId != null || liberada(l.statusOS)) && !l.nf_numero && (!l.nfseStatus || l.nfseStatus === 'erro') && (
                   <button
                     className="botao-secundario"
-                    onClick={() => abrirPreviaNfse(l)}
+                    onClick={() => abrirPreviaNfse([l])}
                     disabled={carregandoPreviaId === l.chave || emitindoNfseId === l.chave}
                     title={l.nfseErroDetalhe ?? undefined}
                   >
@@ -1686,7 +1816,11 @@ export function Faturamento() {
       )}
       {previaNfse && formNfse && (
         <ModalJanela
-          titulo={`Emissão de NFS-e - ${previaNfse.linha.numero}`}
+          titulo={
+            previaNfse.linhas.length > 1
+              ? `Emissão de NFS-e consolidada - ${previaNfse.linhas.length} orçamentos`
+              : `Emissão de NFS-e - ${previaNfse.linhas[0].numero}`
+          }
           aoFechar={fecharPreviaNfse}
           larguraMax={640}
         >
@@ -1712,6 +1846,12 @@ export function Faturamento() {
               ? 'AMBIENTE: PRODUÇÃO - nota fiscal real, vale para a Receita/prefeitura'
               : 'AMBIENTE: HOMOLOGAÇÃO - nota de teste, não tem validade fiscal'}
           </div>
+
+          {previaNfse.linhas.length > 1 && (
+            <p style={{ fontSize: 13 }}>
+              <strong>Orçamentos incluídos:</strong> {previaNfse.resumoSomenteLeitura.numeroOrcamentos.join(', ')}
+            </p>
+          )}
 
           <h2 style={{ fontSize: 13, marginTop: 12 }}>Prestador (CVF Medical)</h2>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1936,6 +2076,88 @@ export function Faturamento() {
             </div>
           </div>
 
+          {previaNfse.linhas.length > 1 && (
+            <>
+              <h2 style={{ fontSize: 13, marginTop: 16 }}>Cobrança</h2>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={parceladoConsolidado}
+                  onChange={(e) => {
+                    setParceladoConsolidado(e.target.checked);
+                    if (e.target.checked && parcelasConsolidado.length < 2) {
+                      setParcelasConsolidado([
+                        { valor: '', vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' },
+                        { valor: '', vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' },
+                      ]);
+                    }
+                  }}
+                />
+                Dividir em mais de um boleto (a NF continua sendo UMA só, pro valor total)
+              </label>
+              {parceladoConsolidado && (
+                <div style={{ marginTop: 8 }}>
+                  {parcelasConsolidado.map((p, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
+                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                        <label>Parcela {i + 1} - Valor (R$)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={p.valor}
+                          onChange={(e) =>
+                            setParcelasConsolidado((lista) => lista.map((x, j) => (j === i ? { ...x, valor: e.target.value } : x)))
+                          }
+                        />
+                      </div>
+                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                        <label>Vencimento</label>
+                        <input
+                          type="date"
+                          value={p.vencimento}
+                          onChange={(e) =>
+                            setParcelasConsolidado((lista) => lista.map((x, j) => (j === i ? { ...x, vencimento: e.target.value } : x)))
+                          }
+                        />
+                      </div>
+                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                        <label>Boleto (opcional)</label>
+                        <input
+                          type="text"
+                          value={p.boletoNumero}
+                          onChange={(e) =>
+                            setParcelasConsolidado((lista) => lista.map((x, j) => (j === i ? { ...x, boletoNumero: e.target.value } : x)))
+                          }
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="botao-icone perigo"
+                        title="Remover parcela"
+                        onClick={() => setParcelasConsolidado((lista) => lista.filter((_, j) => j !== i))}
+                      >
+                        <IconTrash size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="botao-secundario botao-pequeno"
+                    onClick={() =>
+                      setParcelasConsolidado((lista) => [...lista, { valor: '', vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' }])
+                    }
+                  >
+                    + Adicionar parcela
+                  </button>
+                  <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                    Boleto continua manual (cola o número/linha digitável depois de gerar no banco) - a soma das
+                    parcelas precisa bater com o valor total (R$ {previaNfse.resumoSomenteLeitura.valorServico.toFixed(2)}).
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
           {erro && <p className="erro-login">{erro}</p>}
 
           <div className="modal-acoes">
@@ -1953,7 +2175,7 @@ export function Faturamento() {
               Visualizar DANFE (prévia)
             </button>
             <button className="botao-primario" onClick={confirmarEmissaoNfse} disabled={emitindoNfseId != null}>
-              {emitindoNfseId === previaNfse.linha.chave ? 'Transmitindo...' : 'Confirmar e transmitir ao SEFAZ'}
+              {emitindoNfseId != null ? 'Transmitindo...' : 'Confirmar e transmitir ao SEFAZ'}
             </button>
           </div>
         </ModalJanela>
