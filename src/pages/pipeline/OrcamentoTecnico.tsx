@@ -553,12 +553,19 @@ export function OrcamentoTecnico() {
   async function imprimirRelatorioTecnico() {
     if (!orcamentoQuery.data || !osDetalheQuery.data) return;
     const itens: ItemRelatorioOS[] = await Promise.all(
-      (itensQuery.data ?? []).map(async (item) => ({
-        nome: nomeItem(item),
-        quantidade: item.quantidade,
-        observacao: item.observacao,
-        fotoUrl: item.foto_peca_danificada_path ? await urlAssinadaFoto(item.foto_peca_danificada_path) : null,
-      })),
+      (itensQuery.data ?? []).map(async (item) => {
+        // Um item pode ter várias fotos agora - o relatório usa só a
+        // primeira como representativa (evita inflar o PDF). Prioriza a
+        // tabela nova; cai pro campo legado só se por algum motivo não
+        // tiver sido migrado.
+        const caminhoFoto = item.orcamento_itens_fotos?.[0]?.storage_path ?? item.foto_peca_danificada_path;
+        return {
+          nome: nomeItem(item),
+          quantidade: item.quantidade,
+          observacao: item.observacao,
+          fotoUrl: caminhoFoto ? await urlAssinadaFoto(caminhoFoto) : null,
+        };
+      }),
     );
     const c = clienteQuery.data;
     const clienteEndereco = c
