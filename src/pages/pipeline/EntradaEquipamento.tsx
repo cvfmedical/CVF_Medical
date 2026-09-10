@@ -37,6 +37,11 @@ interface Entrada {
   equipamento_desc: string | null;
   equipamento_fab: string | null;
   equipamento_sn: string | null;
+  // Número de série declarado na NF-e de remessa (pode divergir do que
+  // está de fato gravado no equipamento - equipamento_sn - por erro do
+  // fornecedor, etiqueta trocada etc.). Preenchido automaticamente na
+  // importação por NF-e, mas editável.
+  equipamento_sn_nf: string | null;
   defeito_relatado: string | null;
   condicao_chegada: string | null;
   status: string;
@@ -238,6 +243,7 @@ const formVazio = {
   equipamento_desc: '',
   equipamento_fab: '',
   equipamento_sn: '',
+  equipamento_sn_nf: '',
   defeito_relatado: '',
   nf_remessa_numero: '',
   nf_remessa_serie: '',
@@ -851,6 +857,7 @@ export function EntradaEquipamento() {
           equipamento_desc: item.equipamentoDesc || null,
           equipamento_fab: item.equipamentoFab || null,
           equipamento_sn: item.numeroSerie || null,
+          equipamento_sn_nf: item.numeroSerie || null,
           eh_otica: item.ehOtica,
           catalogo_otica_id: item.catalogoOticaId ? Number(item.catalogoOticaId) : null,
           produto_servico_id: item.produtoServicoId ? Number(item.produtoServicoId) : null,
@@ -894,6 +901,7 @@ export function EntradaEquipamento() {
       equipamento_desc: e.equipamento_desc ?? '',
       equipamento_fab: e.equipamento_fab ?? '',
       equipamento_sn: e.equipamento_sn ?? '',
+      equipamento_sn_nf: e.equipamento_sn_nf ?? '',
       defeito_relatado: e.defeito_relatado ?? '',
       nf_remessa_numero: e.nf_remessa_numero ?? '',
       nf_remessa_serie: e.nf_remessa_serie ?? '',
@@ -976,6 +984,7 @@ export function EntradaEquipamento() {
         equipamento_desc: form.equipamento_desc || null,
         equipamento_fab: form.equipamento_fab || null,
         equipamento_sn: form.equipamento_sn || null,
+        equipamento_sn_nf: form.equipamento_sn_nf || null,
         defeito_relatado: form.defeito_relatado || null,
         condicao_chegada: condicoesSelecionadas.length ? condicoesSelecionadas.join('; ') : null,
         triagem_avarias: avarias,
@@ -1623,12 +1632,25 @@ export function EntradaEquipamento() {
               />
             </div>
             <div className="campo-form">
-              <label>Número de série</label>
+              <label>Número de série declarado na NF-e</label>
+              <input
+                type="text"
+                value={form.equipamento_sn_nf}
+                onChange={(e) => setForm((f) => ({ ...f, equipamento_sn_nf: e.target.value }))}
+              />
+            </div>
+            <div className="campo-form">
+              <label>Número de série conferido no equipamento</label>
               <input
                 type="text"
                 value={form.equipamento_sn}
                 onChange={(e) => setForm((f) => ({ ...f, equipamento_sn: e.target.value }))}
               />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Se divergir do declarado na NF-e (erro do fornecedor, etiqueta trocada etc.), registre aqui o
+                que está de fato gravado no equipamento - esse é o número usado no resto do sistema (etiqueta,
+                laudos, relatórios).
+              </p>
             </div>
             <div className="campo-form">
               <label>Defeito relatado</label>
