@@ -154,7 +154,12 @@ interface ItemNotaXml {
 // pelo usuário na tela de conferência, antes de confirmar).
 interface ItemImportavel extends ItemNotaXml {
   chave: string; // key React - índice não serve porque dá pra remover linha
-  numeroSerie: string;
+  // Um item da NF pode cobrir várias unidades físicas com lote/série
+  // diferentes (ex.: "Qtd=2" na nota, mas o fornecedor descreve 2 lotes
+  // distintos no texto do produto) - cada valor aqui vira uma Entrada
+  // própria na confirmação, em vez de uma só Entrada representando N
+  // unidades sem distinção.
+  numerosSerie: string[];
   // Descrição/fabricante editáveis: a descrição começa com o texto real da
   // NF (mais específico que qualquer rótulo de catálogo), o fabricante só é
   // preenchido se o usuário escolher um "Tipo de equipamento" abaixo.
@@ -706,10 +711,14 @@ export function EntradaEquipamento() {
   // === Entrada por NF-e (import em lote, item a item) ===
 
   function novoItemImportavel(item: ItemNotaXml): ItemImportavel {
+    // Já começa com um campo de nº de série/lote pra cada unidade da
+    // quantidade da NF (mínimo 1) - o usuário completa ou adiciona mais se
+    // o fornecedor descreveu lotes diferentes dentro da mesma linha.
+    const qtd = Math.max(1, Math.round(Number(item.quantidade) || 1));
     return {
       ...item,
       chave: crypto.randomUUID(),
-      numeroSerie: '',
+      numerosSerie: Array.from({ length: qtd }, () => ''),
       equipamentoDesc: item.descricao ?? '',
       equipamentoFab: '',
       tipoEquipamentoSelecionado: '',
@@ -800,6 +809,30 @@ export function EntradaEquipamento() {
     setImportItens((lista) => lista.filter((it) => it.chave !== chaveItem));
   }
 
+  function atualizarNumeroSerieImport(chaveItem: string, indice: number, valor: string) {
+    setImportItens((lista) =>
+      lista.map((it) =>
+        it.chave === chaveItem ? { ...it, numerosSerie: it.numerosSerie.map((v, i) => (i === indice ? valor : v)) } : it,
+      ),
+    );
+  }
+
+  function adicionarNumeroSerieImport(chaveItem: string) {
+    setImportItens((lista) =>
+      lista.map((it) => (it.chave === chaveItem ? { ...it, numerosSerie: [...it.numerosSerie, ''] } : it)),
+    );
+  }
+
+  function removerNumeroSerieImport(chaveItem: string, indice: number) {
+    setImportItens((lista) =>
+      lista.map((it) =>
+        it.chave === chaveItem
+          ? { ...it, numerosSerie: it.numerosSerie.length > 1 ? it.numerosSerie.filter((_, i) => i !== indice) : it.numerosSerie }
+          : it,
+      ),
+    );
+  }
+
   // Mesma lógica de selecionarTipoEquipamento, mas aplicada a UM item da
   // lista de import (não ao form principal) - não sobrescreve a descrição
   // do equipamento (que já veio da própria NF, mais específica que o rótulo
@@ -833,9 +866,15 @@ export function EntradaEquipamento() {
     }
   }
 
-  // Cria uma Entrada por item marcado - sequencialmente (gerarCodigoEntrada
-  // recalcula o próximo número toda vez, sem reservar; em paralelo geraria
-  // códigos ENT- duplicados).
+  // Cria uma Entrada por Nº de série/lote marcado - sequencialmente
+  // (gerarCodigoEntrada recalcula o próximo número toda vez, sem reservar;
+  // em paralelo geraria códigos ENT- duplicados). Um item da NF com vários
+  // números de série/lote (ex.: Qtd=2 com 2 lotes distintos) vira uma
+  // Entrada PARA CADA um, não uma só Entrada representando as N unidades -
+  // os valores fiscais de referência (base/valor de ICMS/IPI e o valor
+  // total da linha) são divididos igualmente entre as N entradas geradas,
+  // pra não duplicar o valor da nota ao somar todas; a alíquota (%) e o
+  // valor unitário não mudam, são os mesmos em cada split.
   async function confirmarImportacaoNf() {
     if (!importClienteId) {
       setImportErro('Selecione o cliente antes de confirmar.');
@@ -850,40 +889,45 @@ export function EntradaEquipamento() {
     setImportErro(null);
     try {
       for (const item of itensParaCriar) {
-        const codigo = await gerarCodigoEntrada();
-        const { error } = await supabase.from('entradas_equipamento').insert({
-          codigo_entrada: codigo,
-          cliente_id: Number(importClienteId),
-          equipamento_desc: item.equipamentoDesc || null,
-          equipamento_fab: item.equipamentoFab || null,
-          equipamento_sn: item.numeroSerie || null,
-          equipamento_sn_nf: item.numeroSerie || null,
-          eh_otica: item.ehOtica,
-          catalogo_otica_id: item.catalogoOticaId ? Number(item.catalogoOticaId) : null,
-          produto_servico_id: item.produtoServicoId ? Number(item.produtoServicoId) : null,
-          grupo: item.grupo || null,
-          subgrupo: item.subgrupo || null,
-          nf_remessa_numero: importCabecalho?.numero ?? null,
-          nf_remessa_serie: importCabecalho?.serie ?? null,
-          nf_remessa_chave_acesso: importCabecalho?.chaveNfe ?? null,
-          nf_remessa_cfop: item.cfop ?? null,
-          nf_remessa_data_emissao: importCabecalho?.dataEmissao ? String(importCabecalho.dataEmissao).slice(0, 10) : null,
-          nf_remessa_valor: item.valorTotal != null ? Number(item.valorTotal) : null,
-          nf_remessa_natureza_operacao: importCabecalho?.naturezaOperacao ?? null,
-          nf_remessa_codigo_produto_cliente: item.codigoProduto ?? null,
-          nf_remessa_ncm: item.ncm ?? null,
-          nf_remessa_cst: item.cst ?? null,
-          nf_remessa_quantidade: item.quantidade != null ? Number(item.quantidade) : null,
-          nf_remessa_valor_unitario: item.valorUnitario != null ? Number(item.valorUnitario) : null,
-          nf_remessa_icms_base_calculo: item.icmsBaseCalculo != null ? Number(item.icmsBaseCalculo) : null,
-          nf_remessa_icms_valor: item.icmsValor != null ? Number(item.icmsValor) : null,
-          nf_remessa_icms_aliquota: item.icmsAliquota != null ? Number(item.icmsAliquota) : null,
-          nf_remessa_ipi_base_calculo: item.ipiBaseCalculo != null ? Number(item.ipiBaseCalculo) : null,
-          nf_remessa_ipi_valor: item.ipiValor != null ? Number(item.ipiValor) : null,
-          nf_remessa_ipi_aliquota: item.ipiAliquota != null ? Number(item.ipiAliquota) : null,
-          recebido_por: funcionario?.id ?? null,
-        });
-        if (error) throw error;
+        const numeros = item.numerosSerie.length > 0 ? item.numerosSerie : [''];
+        const n = numeros.length;
+        const dividir = (valor: string | number | null) => (valor != null ? Number(valor) / n : null);
+        for (const numeroSerie of numeros) {
+          const codigo = await gerarCodigoEntrada();
+          const { error } = await supabase.from('entradas_equipamento').insert({
+            codigo_entrada: codigo,
+            cliente_id: Number(importClienteId),
+            equipamento_desc: item.equipamentoDesc || null,
+            equipamento_fab: item.equipamentoFab || null,
+            equipamento_sn: numeroSerie || null,
+            equipamento_sn_nf: numeroSerie || null,
+            eh_otica: item.ehOtica,
+            catalogo_otica_id: item.catalogoOticaId ? Number(item.catalogoOticaId) : null,
+            produto_servico_id: item.produtoServicoId ? Number(item.produtoServicoId) : null,
+            grupo: item.grupo || null,
+            subgrupo: item.subgrupo || null,
+            nf_remessa_numero: importCabecalho?.numero ?? null,
+            nf_remessa_serie: importCabecalho?.serie ?? null,
+            nf_remessa_chave_acesso: importCabecalho?.chaveNfe ?? null,
+            nf_remessa_cfop: item.cfop ?? null,
+            nf_remessa_data_emissao: importCabecalho?.dataEmissao ? String(importCabecalho.dataEmissao).slice(0, 10) : null,
+            nf_remessa_valor: dividir(item.valorTotal),
+            nf_remessa_natureza_operacao: importCabecalho?.naturezaOperacao ?? null,
+            nf_remessa_codigo_produto_cliente: item.codigoProduto ?? null,
+            nf_remessa_ncm: item.ncm ?? null,
+            nf_remessa_cst: item.cst ?? null,
+            nf_remessa_quantidade: n > 1 ? 1 : item.quantidade != null ? Number(item.quantidade) : null,
+            nf_remessa_valor_unitario: item.valorUnitario != null ? Number(item.valorUnitario) : null,
+            nf_remessa_icms_base_calculo: dividir(item.icmsBaseCalculo),
+            nf_remessa_icms_valor: dividir(item.icmsValor),
+            nf_remessa_icms_aliquota: item.icmsAliquota != null ? Number(item.icmsAliquota) : null,
+            nf_remessa_ipi_base_calculo: dividir(item.ipiBaseCalculo),
+            nf_remessa_ipi_valor: dividir(item.ipiValor),
+            nf_remessa_ipi_aliquota: item.ipiAliquota != null ? Number(item.ipiAliquota) : null,
+            recebido_por: funcionario?.id ?? null,
+          });
+          if (error) throw error;
+        }
       }
       qc.invalidateQueries({ queryKey: ['entradas_equipamento'] });
       setModalImportNfAberto(false);
@@ -1354,6 +1398,10 @@ export function EntradaEquipamento() {
   }
 
   if (entradasQuery.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
+
+  const totalEntradasImport = importItens
+    .filter((i) => i.incluir)
+    .reduce((acc, i) => acc + Math.max(1, i.numerosSerie.length), 0);
 
   return (
     <div>
@@ -2036,7 +2084,7 @@ export function EntradaEquipamento() {
                       <th>CFOP</th>
                       <th>Qtd</th>
                       <th>Valor</th>
-                      <th>Nº de série</th>
+                      <th>Nº de série / lote</th>
                       <th>Tipo de equipamento</th>
                       <th></th>
                     </tr>
@@ -2068,13 +2116,42 @@ export function EntradaEquipamento() {
                         </td>
                         <td className="mono">{item.quantidade ?? '-'}</td>
                         <td className="mono">{item.valorTotal != null ? `R$ ${Number(item.valorTotal).toFixed(2)}` : '-'}</td>
-                        <td>
-                          <input
-                            type="text"
-                            style={{ width: 110 }}
-                            value={item.numeroSerie}
-                            onChange={(e) => atualizarItemImport(item.chave, { numeroSerie: e.target.value })}
-                          />
+                        <td style={{ minWidth: 140 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {item.numerosSerie.map((numero, indice) => (
+                              <div key={indice} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                <input
+                                  type="text"
+                                  style={{ width: 100 }}
+                                  placeholder={item.numerosSerie.length > 1 ? `Lote ${indice + 1}` : ''}
+                                  value={numero}
+                                  onChange={(e) => atualizarNumeroSerieImport(item.chave, indice, e.target.value)}
+                                />
+                                {item.numerosSerie.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="botao-icone perigo"
+                                    title="Remover este lote"
+                                    onClick={() => removerNumeroSerieImport(item.chave, indice)}
+                                  >
+                                    <IconX size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="botao-secundario botao-pequeno"
+                              onClick={() => adicionarNumeroSerieImport(item.chave)}
+                            >
+                              + Lote
+                            </button>
+                            {item.quantidade != null && item.numerosSerie.length !== Math.round(Number(item.quantidade)) && (
+                              <span style={{ fontSize: 10, color: 'var(--danger-500, #c0392b)' }}>
+                                Qtd. na NF: {item.quantidade} - {item.numerosSerie.length} lote(s) informado(s)
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td style={{ minWidth: 200 }}>
                           <ComboboxBusca
@@ -2108,13 +2185,11 @@ export function EntradaEquipamento() {
                 <button
                   className="botao-primario"
                   onClick={confirmarImportacaoNf}
-                  disabled={importSalvando || importItens.filter((i) => i.incluir).length === 0}
+                  disabled={importSalvando || totalEntradasImport === 0}
                 >
                   {importSalvando
                     ? 'Importando...'
-                    : `Confirmar importação (${importItens.filter((i) => i.incluir).length} entrada${
-                        importItens.filter((i) => i.incluir).length === 1 ? '' : 's'
-                      })`}
+                    : `Confirmar importação (${totalEntradasImport} entrada${totalEntradasImport === 1 ? '' : 's'})`}
                 </button>
               </div>
             </>
