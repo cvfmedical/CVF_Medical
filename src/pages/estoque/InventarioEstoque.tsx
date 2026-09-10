@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../../components/Badge';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 
 interface ProdutoEstoque {
   id: number;
@@ -53,6 +54,41 @@ export function InventarioEstoque() {
   const [novoMinimo, setNovoMinimo] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // Minimizar/restaurar preservando dados entre telas (mesmo mecanismo de
+  // EntradaEquipamento.tsx). O histórico (modalHistorico) fica de fora -
+  // é só leitura, não tem dado digitado pra preservar.
+  const { minimizar: minimizarRascunhoMovimento } = useRascunhoDeTela('estoque-movimento', {
+    titulo: produtoSelecionado ? `Movimentar estoque - ${produtoSelecionado.nome}` : 'Movimentar estoque',
+    obterEstado: () => ({ produtoSelecionado, tipoMovimento, quantidadeMovimento, motivoMovimento }),
+    aoRestaurar: (e) => {
+      setProdutoSelecionado((e.produtoSelecionado as ProdutoEstoque | null) ?? null);
+      setTipoMovimento((e.tipoMovimento as 'Entrada' | 'Saída') ?? 'Entrada');
+      setQuantidadeMovimento((e.quantidadeMovimento as string) ?? '1');
+      setMotivoMovimento((e.motivoMovimento as string) ?? '');
+      setErro(null);
+      setModalMovimento(true);
+    },
+  });
+  function minimizarMovimento() {
+    minimizarRascunhoMovimento();
+    setModalMovimento(false);
+  }
+
+  const { minimizar: minimizarRascunhoMinimo } = useRascunhoDeTela('estoque-minimo', {
+    titulo: produtoSelecionado ? `Estoque mínimo - ${produtoSelecionado.nome}` : 'Estoque mínimo',
+    obterEstado: () => ({ produtoSelecionado, novoMinimo }),
+    aoRestaurar: (e) => {
+      setProdutoSelecionado((e.produtoSelecionado as ProdutoEstoque | null) ?? null);
+      setNovoMinimo((e.novoMinimo as string) ?? '');
+      setErro(null);
+      setModalMinimo(true);
+    },
+  });
+  function minimizarMinimo() {
+    minimizarRascunhoMinimo();
+    setModalMinimo(false);
+  }
 
   const query = useQuery({
     queryKey: ['produtos-estoque'],
@@ -260,6 +296,7 @@ export function InventarioEstoque() {
         <ModalJanela
           titulo={`Movimentar estoque - ${produtoSelecionado.nome}`}
           aoFechar={() => setModalMovimento(false)}
+          aoMinimizar={minimizarMovimento}
         >
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
               Estoque atual: {produtoSelecionado.quantidade_estoque} {produtoSelecionado.unidade}
@@ -337,6 +374,7 @@ export function InventarioEstoque() {
         <ModalJanela
           titulo={`Estoque mínimo - ${produtoSelecionado.nome}`}
           aoFechar={() => setModalMinimo(false)}
+          aoMinimizar={minimizarMinimo}
         >
             <div className="campo-form">
               <label>Quantidade mínima</label>

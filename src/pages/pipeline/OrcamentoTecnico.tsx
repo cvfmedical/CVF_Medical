@@ -15,6 +15,7 @@ import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { CapturaFoto } from '../../components/CapturaFoto';
 import { AlertaGarantia } from '../../components/AlertaGarantia';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 
 interface Orcamento {
   id: number;
@@ -95,6 +96,37 @@ export function OrcamentoTecnico() {
   const [salvandoObs, setSalvandoObs] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
+
+  // Minimizar/restaurar preservando dados entre telas (mesmo mecanismo de
+  // EntradaEquipamento.tsx) - sem isso, sair da tela com o modal de
+  // item aberto perde tudo, incluindo fotos já anexadas.
+  const { minimizar: minimizarRascunhoItem } = useRascunhoDeTela('orcamento-tecnico-item', {
+    titulo: editandoItemId ? 'Editar item do orçamento' : 'Adicionar item ao orçamento',
+    obterEstado: () => ({
+      novoItem,
+      editandoItemId,
+      observacaoParaAdicionar,
+      observacoesSelecionadas,
+      justificativaLivre,
+      fotosNovasItem,
+      fotosExistentesItem,
+    }),
+    aoRestaurar: (e) => {
+      setNovoItem((e.novoItem as typeof novoItem) ?? { produto_servico_id: '', quantidade: '1', descricao_servico: '' });
+      setEditandoItemId((e.editandoItemId as number | null) ?? null);
+      setObservacaoParaAdicionar((e.observacaoParaAdicionar as string) ?? '');
+      setObservacoesSelecionadas((e.observacoesSelecionadas as string[]) ?? []);
+      setJustificativaLivre((e.justificativaLivre as string) ?? '');
+      setFotosNovasItem((e.fotosNovasItem as File[]) ?? []);
+      setFotosExistentesItem((e.fotosExistentesItem as typeof fotosExistentesItem) ?? []);
+      setErro(null);
+      setModalAberto(true);
+    },
+  });
+  function minimizarItem() {
+    minimizarRascunhoItem();
+    setModalAberto(false);
+  }
 
   // Mostra tanto OS ainda em triagem (orçamento novo) quanto OS que já
   // têm um orçamento em montagem (status "Aguardando Orçamento") - antes
@@ -784,7 +816,11 @@ export function OrcamentoTecnico() {
       {ModalConfirmacao}
 
       {modalAberto && (
-        <ModalJanela titulo={editandoItemId ? 'Editar item' : 'Adicionar item'} aoFechar={() => setModalAberto(false)}>
+        <ModalJanela
+          titulo={editandoItemId ? 'Editar item' : 'Adicionar item'}
+          aoFechar={() => setModalAberto(false)}
+          aoMinimizar={minimizarItem}
+        >
             <div className="campo-form">
               <label>Peça ou serviço (deixe em branco se for só mão de obra)</label>
               <ComboboxBusca

@@ -20,6 +20,7 @@ import { totalOrcamento } from '../../lib/valorOrcamento';
 import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
 import { abrirPreviaDanfse } from '../../lib/previaDanfse';
 import { IconTrash } from '@tabler/icons-react';
+import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -236,6 +237,39 @@ export function Faturamento() {
   const [primeiroVencimentoAuto, setPrimeiroVencimentoAuto] = useState('');
   const [intervaloDiasAuto, setIntervaloDiasAuto] = useState('30');
   const [erro, setErro] = useState<string | null>(null);
+
+  // Minimizar/restaurar preservando dados entre telas (mesmo mecanismo de
+  // EntradaEquipamento.tsx) - o lançamento manual de NF envolve digitar
+  // número de boleto/linha digitável à mão, dado caro de perder ao
+  // navegar sem querer. O modal de prévia da NFS-e automática (Focus)
+  // não usa esse mecanismo - é uma prévia derivada de uma chamada
+  // externa, não dado digitado, então minimizar teria pouco valor.
+  const { minimizar: minimizarRascunhoNF } = useRascunhoDeTela('faturamento-lancar-nota', {
+    titulo: linhaSelecionada ? `Lançar nota fiscal - ${linhaSelecionada.numero}` : 'Lançar nota fiscal',
+    obterEstado: () => ({
+      linhaSelecionada,
+      form,
+      parcelado,
+      parcelas,
+      numParcelasAuto,
+      primeiroVencimentoAuto,
+      intervaloDiasAuto,
+    }),
+    aoRestaurar: (e) => {
+      setLinhaSelecionada((e.linhaSelecionada as LinhaFaturamento | null) ?? null);
+      setForm((e.form as typeof formVazio) ?? formVazio);
+      setParcelado((e.parcelado as boolean) ?? false);
+      setParcelas((e.parcelas as ParcelaForm[]) ?? []);
+      setNumParcelasAuto((e.numParcelasAuto as string) ?? '2');
+      setPrimeiroVencimentoAuto((e.primeiroVencimentoAuto as string) ?? '');
+      setIntervaloDiasAuto((e.intervaloDiasAuto as string) ?? '30');
+      setErro(null);
+    },
+  });
+  function minimizarLancamentoNota() {
+    minimizarRascunhoNF();
+    setLinhaSelecionada(null);
+  }
   const [salvando, setSalvando] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
   const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
@@ -1604,6 +1638,7 @@ export function Faturamento() {
         <ModalJanela
           titulo={`Lançar nota fiscal - ${linhaSelecionada.numero}`}
           aoFechar={() => setLinhaSelecionada(null)}
+          aoMinimizar={minimizarLancamentoNota}
         >
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
               {nomeCliente(linhaSelecionada.clienteId)} - R$ {Number(linhaSelecionada.valor).toFixed(2)}
