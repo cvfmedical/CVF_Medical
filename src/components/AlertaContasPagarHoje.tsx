@@ -11,7 +11,7 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // estão em aberto - lembrete pra não esquecer de pagar/baixar no dia.
 // Renderizado dentro da pilha AlertasFlutuantes, igual os demais alertas.
 export function AlertaContasPagarHoje() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('financeiro');
   const { oculto, fechar } = useAlertaDismissivel();
@@ -32,7 +32,7 @@ export function AlertaContasPagarHoje() {
     },
   });
 
-  const ativo = !!podeVer && !!query.data && query.data > 0 && !oculto;
+  const ativo = !!podeVer && !!query.data && query.data > 0 && !oculto && alertaVisivel('contas-pagar-hoje');
   useRegistrarAlertaAtivo('contas-pagar-hoje', ativo);
   if (!ativo) return null;
 

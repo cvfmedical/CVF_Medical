@@ -10,14 +10,14 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // tela "Orçamentos aprovados" (useOrcamentosAprovados). Renderizado
 // dentro da pilha AlertasFlutuantes (canto inferior direito).
 export function AlertaOrcamentosAprovados() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('laboratorio_qualidade');
   const { oculto, fechar } = useAlertaDismissivel();
 
   const query = useOrcamentosAprovados(podeVer);
 
-  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto && alertaVisivel('orcamentos-aprovados');
   useRegistrarAlertaAtivo('orcamentos-aprovados', ativo);
   if (!ativo) return null;
 

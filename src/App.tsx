@@ -64,6 +64,7 @@ import { ComoOrcamentosForamAprovados } from './pages/comercial/ComoOrcamentosFo
 import { ConfiguracoesUsuarios } from './pages/sistema/ConfiguracoesUsuarios';
 import { AcessoPortalCliente } from './pages/sistema/AcessoPortalCliente';
 import { ChatInterno } from './pages/ChatInterno';
+import { PreferenciasAlertas } from './pages/PreferenciasAlertas';
 
 // Telas já migradas - path -> componente. O que não estiver aqui cai no
 // placeholder EmConstrucao (ainda não implementado).
@@ -94,6 +95,7 @@ const TELAS_IMPLEMENTADAS: Record<string, React.ComponentType> = {
   '/tipos-equipamento-laudo': TiposEquipamentoLaudo,
   '/modalidades-manutencao': ModalidadesManutencao,
   '/checklist-laudo-itens': ChecklistLaudoItens,
+  '/preferencias-alertas': PreferenciasAlertas,
   '/entrada-equipamento': EntradaEquipamento,
   '/registro-entrada': RegistroEntrada,
   '/rastreio/:codigo': RastreioEquipamento,

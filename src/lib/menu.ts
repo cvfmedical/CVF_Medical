@@ -70,6 +70,10 @@ export const MENU: CategoriaMenu[] = [
       { label: 'Tipos de equipamento (laudo)', path: '/tipos-equipamento-laudo', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Modalidades de manutenção', path: '/modalidades-manutencao', categoria: 'cadastros_gerais', implementado: false },
       { label: 'Checklist de laudo (itens)', path: '/checklist-laudo-itens', categoria: 'cadastros_gerais', implementado: false },
+      // Igual ao Chat interno: categoria 'cadastros_gerais' só pelo efeito
+      // colateral de incluir os 4 níveis de acesso não-administrador - é
+      // uma preferência pessoal, não faz sentido restringir por cargo.
+      { label: 'Preferências de alertas', path: '/preferencias-alertas', categoria: 'cadastros_gerais', implementado: false },
     ],
   },
   {

@@ -8,14 +8,14 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // Contagem de OS aguardando montagem de orçamento (técnico). Renderizado
 // dentro da pilha AlertasFlutuantes (canto inferior direito).
 export function AlertaOSAguardandoOrcamento() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('laboratorio_qualidade');
   const { oculto, fechar } = useAlertaDismissivel();
 
   const query = useOSAguardandoOrcamento(podeVer);
 
-  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto && alertaVisivel('os-aguardando-orcamento');
   useRegistrarAlertaAtivo('os-aguardando-orcamento', ativo);
   if (!ativo) return null;
 

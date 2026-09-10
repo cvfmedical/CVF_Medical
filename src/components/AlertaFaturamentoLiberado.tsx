@@ -10,14 +10,14 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // (useContasLiberadasParaFaturar). Renderizado dentro da pilha
 // AlertasFlutuantes (canto inferior direito).
 export function AlertaFaturamentoLiberado() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('financeiro');
   const { oculto, fechar } = useAlertaDismissivel();
 
   const query = useContasLiberadasParaFaturar(podeVer);
 
-  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto && alertaVisivel('faturamento-liberado');
   useRegistrarAlertaAtivo('faturamento-liberado', ativo);
   if (!ativo) return null;
 

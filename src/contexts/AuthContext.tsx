@@ -20,6 +20,12 @@ interface AuthContextValue {
   signIn: (email: string, senha: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   temPermissao: (categoria: Categoria) => boolean;
+  // Preferência pessoal de quais alertas flutuantes (AlertasFlutuantes.tsx)
+  // o funcionário quer ver - default visível (true) até carregar, pra não
+  // "piscar escondido e depois mostrar" no primeiro render.
+  alertaVisivel: (chave: string) => boolean;
+  alertasOcultosCarregado: boolean;
+  definirVisibilidadeAlerta: (chave: string, visivel: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -39,11 +45,22 @@ async function buscarFuncionario(authUserId: string): Promise<Funcionario | null
   return data as Funcionario;
 }
 
+async function buscarAlertasOcultos(funcionarioId: number): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('funcionario_alertas_ocultos')
+    .select('chave_alerta')
+    .eq('funcionario_id', funcionarioId);
+  if (error || !data) return new Set();
+  return new Set(data.map((r) => r.chave_alerta as string));
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [funcionario, setFuncionario] = useState<Funcionario | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // null = ainda não carregou (distinto de "carregou e está vazio").
+  const [alertasOcultos, setAlertasOcultos] = useState<Set<string> | null>(null);
 
   useEffect(() => {
     let ativo = true;
@@ -54,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         const f = await buscarFuncionario(session.user.id);
         if (ativo) setFuncionario(f);
+        if (ativo && f) setAlertasOcultos(await buscarAlertasOcultos(f.id));
       }
       if (ativo) setLoading(false);
     });
@@ -64,8 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         const f = await buscarFuncionario(session.user.id);
         if (ativo) setFuncionario(f);
+        if (ativo && f) setAlertasOcultos(await buscarAlertasOcultos(f.id));
       } else {
         setFuncionario(null);
+        setAlertasOcultos(null);
       }
     });
 
@@ -74,6 +94,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  async function definirVisibilidadeAlerta(chave: string, visivel: boolean) {
+    if (!funcionario) return;
+    if (visivel) {
+      await supabase
+        .from('funcionario_alertas_ocultos')
+        .delete()
+        .eq('funcionario_id', funcionario.id)
+        .eq('chave_alerta', chave);
+    } else {
+      await supabase
+        .from('funcionario_alertas_ocultos')
+        .upsert({ funcionario_id: funcionario.id, chave_alerta: chave }, { onConflict: 'funcionario_id,chave_alerta' });
+    }
+    setAlertasOcultos((prev) => {
+      const novo = new Set(prev ?? []);
+      if (visivel) novo.delete(chave);
+      else novo.add(chave);
+      return novo;
+    });
+  }
 
   async function signIn(email: string, senha: string) {
     setErro(null);
@@ -104,6 +145,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signIn,
     signOut,
     temPermissao: (categoria: Categoria) => temPermissao(funcionario?.nivel_acesso, categoria),
+    alertaVisivel: (chave: string) => (alertasOcultos === null ? true : !alertasOcultos.has(chave)),
+    alertasOcultosCarregado: alertasOcultos !== null,
+    definirVisibilidadeAlerta,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

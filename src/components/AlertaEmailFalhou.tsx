@@ -11,14 +11,14 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // via webhook (ver supabase/functions/resend-webhook). Renderizado dentro
 // da pilha AlertasFlutuantes.
 export function AlertaEmailFalhou() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('financeiro');
   const { oculto, fechar } = useAlertaDismissivel();
 
   const query = useEmailsComFalha(podeVer);
 
-  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto;
+  const ativo = !!podeVer && !!query.data && query.data.length > 0 && !oculto && alertaVisivel('email-falhou');
   useRegistrarAlertaAtivo('email-falhou', ativo);
   if (!ativo) return null;
 

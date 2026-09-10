@@ -12,7 +12,7 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // Poll mais espaçado que o do Chat interno em si (essa aqui roda em toda
 // tela do sistema, não só na do chat).
 export function AlertaChatNovaMensagem() {
-  const { funcionario } = useAuth();
+  const { funcionario, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const { oculto, fechar } = useAlertaDismissivel();
   const meuId = funcionario?.id ?? null;
@@ -32,7 +32,7 @@ export function AlertaChatNovaMensagem() {
     },
   });
 
-  const ativo = !!query.data && query.data > 0 && !oculto;
+  const ativo = !!query.data && query.data > 0 && !oculto && alertaVisivel('chat-nova-mensagem');
   useRegistrarAlertaAtivo('chat-nova-mensagem', ativo);
   if (!ativo) return null;
 

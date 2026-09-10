@@ -10,7 +10,7 @@ import { useRegistrarAlertaAtivo } from '../lib/useRegistrarAlertaAtivo';
 // para quem tem permissão financeira, some quando a fila está vazia.
 // Renderizado dentro da pilha AlertasFlutuantes (canto inferior direito).
 export function AlertaOrcamentosPendentes() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, alertaVisivel } = useAuth();
   const navigate = useNavigate();
   const podeVer = temPermissao('financeiro');
   const { oculto, fechar } = useAlertaDismissivel();
@@ -29,7 +29,7 @@ export function AlertaOrcamentosPendentes() {
     },
   });
 
-  const ativo = !!podeVer && !!query.data && !oculto;
+  const ativo = !!podeVer && !!query.data && !oculto && alertaVisivel('orcamentos-pendentes');
   useRegistrarAlertaAtivo('orcamentos-pendentes', ativo);
   if (!ativo) return null;
 
