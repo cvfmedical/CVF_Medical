@@ -21,6 +21,7 @@ import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
 import { abrirPreviaDanfse } from '../../lib/previaDanfse';
 import { IconTrash } from '@tabler/icons-react';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
+import { urlAssinadaDocumentoFinanceiro } from '../../lib/storage';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -40,6 +41,9 @@ interface ContaReceber {
   boleto_numero: string | null;
   boleto_linha_digitavel: string | null;
   boleto_vencimento: string | null;
+  boleto_emitido_via: string | null;
+  boleto_situacao: string | null;
+  boleto_pdf_path: string | null;
   nfse_status: string | null;
   nfse_erro_detalhe: string | null;
   nfse_pdf_path: string | null;
@@ -90,6 +94,9 @@ interface LinhaFaturamento {
   boleto_numero: string | null;
   boleto_linha_digitavel: string | null;
   boleto_vencimento: string | null;
+  boletoEmitidoVia: string | null;
+  boletoSituacao: string | null;
+  boletoPdfPath: string | null;
   nfseStatus: string | null;
   nfseErroDetalhe: string | null;
   nfsePdfPath: string | null;
@@ -271,6 +278,7 @@ export function Faturamento() {
     setLinhaSelecionada(null);
   }
   const [salvando, setSalvando] = useState(false);
+  const [emitindoBoletoSicoob, setEmitindoBoletoSicoob] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
   const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
   const [cancelandoNfseId, setCancelandoNfseId] = useState<string | null>(null);
@@ -340,7 +348,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('contas_receber')
         .select(
-          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, nfse_status, nfse_erro_detalhe, nfse_pdf_path, nfse_ref, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, boleto_emitido_via, boleto_situacao, boleto_pdf_path, nfse_status, nfse_erro_detalhe, nfse_pdf_path, nfse_ref, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
         )
         .neq('status', 'Cancelado')
         .order('id', { ascending: false });
@@ -400,6 +408,9 @@ export function Faturamento() {
       boleto_numero: c.boleto_numero,
       boleto_linha_digitavel: c.boleto_linha_digitavel,
       boleto_vencimento: c.boleto_vencimento,
+      boletoEmitidoVia: c.boleto_emitido_via,
+      boletoSituacao: c.boleto_situacao,
+      boletoPdfPath: c.boleto_pdf_path,
       nfseStatus: c.nfse_status,
       nfseErroDetalhe: c.nfse_erro_detalhe,
       nfsePdfPath: c.nfse_pdf_path,
@@ -432,6 +443,9 @@ export function Faturamento() {
           boleto_numero: null,
           boleto_linha_digitavel: null,
           boleto_vencimento: null,
+          boletoEmitidoVia: null,
+          boletoSituacao: null,
+          boletoPdfPath: null,
           nfseStatus: null,
           nfseErroDetalhe: null,
           nfsePdfPath: null,
@@ -514,6 +528,49 @@ export function Faturamento() {
     setPrimeiroVencimentoAuto('');
     setIntervaloDiasAuto('30');
     setErro(null);
+  }
+
+  // Emite o boleto de verdade via API da Sicoob (edge function
+  // emitir-boleto, ação 'incluir') - só disponível quando a conta a
+  // receber já existe (precisa de um contaId pra Sicoob associar o
+  // boleto). Preenche os campos de boleto sozinho a partir do retorno,
+  // sem precisar digitar linha digitável à mão.
+  async function emitirBoletoSicoob() {
+    if (!linhaSelecionada?.contaId) {
+      setErro('Salve a nota fiscal primeiro (isso cria a conta a receber) antes de emitir o boleto pela Sicoob.');
+      return;
+    }
+    setEmitindoBoletoSicoob(true);
+    setErro(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-boleto', {
+        body: { acao: 'incluir', contaId: linhaSelecionada.contaId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setForm((f) => ({
+        ...f,
+        boleto_numero: String(data.boletoNumero ?? ''),
+        boleto_linha_digitavel: data.linhaDigitavel ?? '',
+      }));
+      // Atualiza a linha selecionada na hora, sem esperar reabrir o modal -
+      // é o que decide se mostra "Emitido via Sicoob" ou o botão de novo.
+      setLinhaSelecionada((l) =>
+        l
+          ? {
+              ...l,
+              boletoEmitidoVia: 'sicoob',
+              boletoSituacao: 'Em Aberto',
+              boletoPdfPath: data.pdfPath ?? null,
+            }
+          : l,
+      );
+      qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+    } catch (e) {
+      setErro(await mensagemErroFuncao(e));
+    } finally {
+      setEmitindoBoletoSicoob(false);
+    }
   }
 
   // Marca a OS como entregue (sem passar pelas telas de teste/entrega) e
@@ -1810,11 +1867,46 @@ export function Faturamento() {
             ) : (
               <>
                 <h2 style={{ fontSize: 13, marginTop: 16 }}>Boleto</h2>
+                {linhaSelecionada.boletoEmitidoVia === 'sicoob' ? (
+                  <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                    Emitido via Sicoob{linhaSelecionada.boletoSituacao ? ` - ${linhaSelecionada.boletoSituacao}` : ''}.
+                    {linhaSelecionada.boletoPdfPath && (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-500, #2563eb)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}
+                          onClick={async () => {
+                            const url = await urlAssinadaDocumentoFinanceiro(linhaSelecionada.boletoPdfPath!);
+                            if (url) window.open(url, '_blank');
+                            else setErro('Não foi possível abrir o PDF do boleto.');
+                          }}
+                        >
+                          Ver PDF do boleto
+                        </button>
+                      </>
+                    )}
+                  </p>
+                ) : (
+                  linhaSelecionada.contaId && (
+                    <button
+                      type="button"
+                      className="botao-secundario botao-pequeno"
+                      onClick={emitirBoletoSicoob}
+                      disabled={emitindoBoletoSicoob}
+                      title="Usa o vencimento já definido na conta a receber (o campo abaixo, se preenchido, ou o vencimento padrão da conta)"
+                      style={{ marginBottom: 8 }}
+                    >
+                      {emitindoBoletoSicoob ? 'Emitindo...' : 'Emitir boleto via Sicoob'}
+                    </button>
+                  )
+                )}
                 <div className="campo-form">
                   <label>Número do boleto</label>
                   <input
                     type="text"
                     value={form.boleto_numero}
+                    readOnly={linhaSelecionada.boletoEmitidoVia === 'sicoob'}
                     onChange={(e) => setForm((f) => ({ ...f, boleto_numero: e.target.value }))}
                   />
                 </div>
@@ -1823,6 +1915,7 @@ export function Faturamento() {
                   <input
                     type="text"
                     value={form.boleto_linha_digitavel}
+                    readOnly={linhaSelecionada.boletoEmitidoVia === 'sicoob'}
                     onChange={(e) => setForm((f) => ({ ...f, boleto_linha_digitavel: e.target.value }))}
                   />
                 </div>
@@ -1831,6 +1924,7 @@ export function Faturamento() {
                   <input
                     type="date"
                     value={form.boleto_vencimento}
+                    readOnly={linhaSelecionada.boletoEmitidoVia === 'sicoob'}
                     onChange={(e) => setForm((f) => ({ ...f, boleto_vencimento: e.target.value }))}
                   />
                 </div>
