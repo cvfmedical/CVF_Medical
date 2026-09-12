@@ -17,6 +17,8 @@ import { ComboboxBusca } from '../../components/ComboboxBusca';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
 import { formatarMoeda } from '../../lib/formato';
+import { urlAssinadaDocumentoFinanceiro } from '../../lib/storage';
+import { mensagemErroFuncao } from '../../lib/erros';
 
 interface ContaReceber {
   id: number;
@@ -35,6 +37,11 @@ interface ContaReceber {
   nf_serie: string | null;
   nf_chave_acesso: string | null;
   nf_data_emissao: string | null;
+  boleto_numero: string | null;
+  boleto_linha_digitavel: string | null;
+  boleto_emitido_via: string | null;
+  boleto_situacao: string | null;
+  boleto_pdf_path: string | null;
   orcamentos: {
     numero_orcamento: string;
     ordem_servico_id: number;
@@ -72,6 +79,7 @@ const COLUNAS_FILTRAVEIS = [
   'data_vencimento',
   'status',
   'nota_fiscal',
+  'boleto_situacao',
 ];
 
 export function ContasReceber() {
@@ -100,6 +108,7 @@ export function ContasReceber() {
   const [baixandoLote, setBaixandoLote] = useState(false);
   const [periodoDe, setPeriodoDe] = useState('');
   const [periodoAte, setPeriodoAte] = useState('');
+  const [consultandoBoletoId, setConsultandoBoletoId] = useState<number | null>(null);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -378,6 +387,31 @@ export function ContasReceber() {
     }
   }
 
+  // Consulta a situação atual do boleto direto na Sicoob (edge function
+  // emitir-boleto, ação 'consultar') e atualiza boleto_situacao/status -
+  // uso manual, enquanto não existe o webhook de baixa automática.
+  async function consultarSituacaoBoleto(c: ContaReceber) {
+    setConsultandoBoletoId(c.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-boleto', {
+        body: { acao: 'consultar', contaId: c.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      qc.invalidateQueries({ queryKey: ['contas-receber'] });
+    } catch (e) {
+      alert(await mensagemErroFuncao(e));
+    } finally {
+      setConsultandoBoletoId(null);
+    }
+  }
+
+  async function abrirPdfBoleto(caminho: string) {
+    const url = await urlAssinadaDocumentoFinanceiro(caminho);
+    if (url) window.open(url, '_blank');
+    else alert('Não foi possível abrir o PDF do boleto.');
+  }
+
   // Fica ANTES do "if isLoading" porque useLinhasOrdenadas é um hook - não
   // pode ser chamado condicionalmente.
   function valorColuna(c: ContaReceber, chave: string): unknown {
@@ -388,6 +422,7 @@ export function ContasReceber() {
     if (chave === 'data_vencimento') return c.data_vencimento;
     if (chave === 'status') return statusExibicao(c).texto;
     if (chave === 'nota_fiscal') return c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '';
+    if (chave === 'boleto_situacao') return c.boleto_emitido_via === 'sicoob' ? (c.boleto_situacao ?? 'Em Aberto') : c.boleto_numero ? 'Manual' : '';
     return (c as unknown as Record<string, unknown>)[chave];
   }
 
@@ -522,6 +557,7 @@ export function ContasReceber() {
               ['data_vencimento', 'Vencimento'],
               ['status', 'Status'],
               ['nota_fiscal', 'Nota fiscal'],
+              ['boleto_situacao', 'Boleto'],
             ].map(([chave, label]) => (
               <ThOrdenavel key={chave} chave={chave} colunaAtiva={coluna} direcao={direcao} onClick={ordenarPor}>
                 {label}
@@ -634,6 +670,44 @@ export function ContasReceber() {
                   <Badge tono={st.tono}>{st.texto}</Badge>
                 </td>
                 <td>{c.nf_numero ? `${c.nf_tipo ?? ''} ${c.nf_numero}${c.nf_serie ? '/' + c.nf_serie : ''}`.trim() : '-'}</td>
+                <td>
+                  {c.boleto_emitido_via === 'sicoob' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                      <Badge
+                        tono={
+                          c.boleto_situacao === 'Liquidado' ? 'teal' : c.boleto_situacao === 'Baixado' ? 'neutro' : 'copper'
+                        }
+                      >
+                        {c.boleto_situacao ?? 'Em Aberto'}
+                      </Badge>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          type="button"
+                          className="botao-icone"
+                          title="Consultar situação atual na Sicoob"
+                          onClick={() => consultarSituacaoBoleto(c)}
+                          disabled={consultandoBoletoId === c.id}
+                        >
+                          {consultandoBoletoId === c.id ? '...' : '↻'}
+                        </button>
+                        {c.boleto_pdf_path && (
+                          <button
+                            type="button"
+                            className="botao-icone"
+                            title="Ver PDF do boleto"
+                            onClick={() => abrirPdfBoleto(c.boleto_pdf_path!)}
+                          >
+                            <IconFileTypePdf size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : c.boleto_numero ? (
+                    <span title={c.boleto_linha_digitavel ?? undefined}>Manual</span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
                 <td className="acoes-tabela">
                   {c.status === 'Recebido' && (
                     <button className="botao-icone" title="Alterar data de recebimento" onClick={() => abrirEdicaoData(c)}>
@@ -652,7 +726,7 @@ export function ContasReceber() {
           })}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={12}>Nenhuma conta encontrada.</td>
+              <td colSpan={13}>Nenhuma conta encontrada.</td>
             </tr>
           )}
         </tbody>
