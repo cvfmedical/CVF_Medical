@@ -30,7 +30,16 @@ export async function mensagemErroFuncao(error: unknown): Promise<string> {
     try {
       const corpo = await (contexto as Response).clone().json();
       if (corpo?.error) {
-        return typeof corpo.error === 'string' ? corpo.error : JSON.stringify(corpo.error);
+        const base = typeof corpo.error === 'string' ? corpo.error : JSON.stringify(corpo.error);
+        // Algumas functions (ex.: emitir-boleto) devolvem o corpo de erro cru
+        // do provedor externo em "resultado", com o motivo específico da
+        // recusa - sem isso, uma rejeição da Sicoob/Focus aparecia só como
+        // um texto genérico ("Sicoob recusou o boleto."), escondendo o
+        // porquê real.
+        if (corpo?.resultado) {
+          return `${base} ${JSON.stringify(corpo.resultado)}`;
+        }
+        return base;
       }
     } catch {
       // corpo não era JSON (ou já tinha sido consumido) - cai no fallback abaixo.
