@@ -22,6 +22,9 @@ import { abrirPreviaDanfse } from '../../lib/previaDanfse';
 import { IconTrash } from '@tabler/icons-react';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { urlAssinadaDocumentoFinanceiro } from '../../lib/storage';
+import { gerarAnexoOrcamentoSozinho, blobParaBase64, type DadosOrcamentoPdf, type AnexoBase64 } from '../../lib/pdfsOrcamento';
+import { GARANTIA_CVF, CLAUSULAS_GERAIS, EMPRESA, formatarMoeda } from '../../lib/formato';
+import { PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 
 const STATUS_ENTREGUE = '11. ENTREGUE AO CLIENTE';
 
@@ -284,6 +287,7 @@ export function Faturamento() {
   // cobre o caso de já ter uma NF registrada (uma conta só) e só agora
   // decidir dividir a cobrança em N boletos.
   const [parcelarBoleto, setParcelarBoleto] = useState(false);
+  const [enviandoEmailCompleto, setEnviandoEmailCompleto] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
   const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
   const [cancelandoNfseId, setCancelandoNfseId] = useState<string | null>(null);
@@ -653,6 +657,173 @@ export function Faturamento() {
       );
     } finally {
       setEmitindoBoletoSicoob(false);
+    }
+  }
+
+  // Monta e envia (via Resend, function enviar-orcamento) um e-mail com o
+  // PDF do Orçamento (já com preço final, direto do banco - não depende de
+  // nenhum estado de edição em tela) + o(s) PDF(s) de boleto de TODAS as
+  // contas que compartilham a mesma NF/orçamento (cobre o caso de boleto
+  // parcelado, que gerou N contas). NÃO reanexa Registro de
+  // Entrada/Ordem de Serviço - esses já foram enviados antes, na aprovação
+  // do orçamento (ver OrcamentoFinanceiro.tsx) - reenviar de novo aqui
+  // seria redundante.
+  async function enviarEmailCompleto() {
+    if (!linhaSelecionada?.orcamentoId) {
+      setErro('Essa conta não está ligada a um orçamento - não dá pra montar o PDF do orçamento pra anexar.');
+      return;
+    }
+    setEnviandoEmailCompleto(true);
+    setErro(null);
+    try {
+      const { data: orc, error: erroOrc } = await supabase
+        .from('orcamentos')
+        .select(
+          'numero_orcamento, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
+        )
+        .eq('id', linhaSelecionada.orcamentoId)
+        .single();
+      if (erroOrc || !orc) throw erroOrc ?? new Error('Orçamento não encontrado.');
+      // deno-lint-ignore no-explicit-any
+      const os = orc.ordens_servico as unknown as {
+        numero_os: string;
+        cliente_id: number;
+        cliente_nome: string;
+        optica_desc: string | null;
+        optica_sn: string | null;
+        eh_otica: boolean | null;
+        cliente_final_id: number | null;
+      } | null;
+
+      const { data: itensOrc, error: erroItens } = await supabase
+        .from('orcamento_itens')
+        .select('preco_unitario, quantidade, observacao, descricao_servico, produtos_servicos(nome)')
+        .eq('orcamento_id', linhaSelecionada.orcamentoId);
+      if (erroItens) throw erroItens;
+
+      const { data: cliente, error: erroCliente } = await supabase
+        .from('clientes')
+        .select('razao_social, nome_fantasia, cnpj, telefone, email, emails_adicionais, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
+        .eq('id', linhaSelecionada.clienteId!)
+        .single();
+      if (erroCliente || !cliente) throw erroCliente ?? new Error('Cliente não encontrado.');
+
+      let clienteFinalNome: string | null = null;
+      if (os?.cliente_final_id) {
+        const { data: cf } = await supabase.from('clientes').select('razao_social').eq('id', os.cliente_final_id).maybeSingle();
+        clienteFinalNome = cf?.razao_social ?? null;
+      }
+
+      const { data: entrada } = await supabase
+        .from('entradas_equipamento')
+        .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
+        .eq('ordem_servico_id', orc.ordem_servico_id)
+        .maybeSingle();
+
+      const enderecoCliente = [[cliente.logradouro, cliente.numero_endereco].filter(Boolean).join(', '), cliente.complemento, cliente.bairro, cliente.cep ? `CEP ${cliente.cep}` : null]
+        .filter(Boolean)
+        .join(' - ') || null;
+
+      const subtotalItens = (itensOrc ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
+      const subtotal = orc.valor_fixo_contrato ?? subtotalItens;
+      const totalFinal = linhaSelecionada.valor;
+
+      const dadosOrc: DadosOrcamentoPdf = {
+        cnpj: cliente.cnpj,
+        nomeFantasia: cliente.nome_fantasia,
+        endereco: enderecoCliente,
+        cidade: cliente.cidade,
+        uf: cliente.uf,
+        telefone: cliente.telefone,
+        email: cliente.email,
+        numeroOrcamento: orc.numero_orcamento,
+        numeroOS: os?.numero_os ?? '-',
+        clienteNome: os?.cliente_nome ?? cliente.razao_social,
+        clienteFinalNome,
+        equipamento: os?.optica_desc ?? '-',
+        numeroSerie: os?.optica_sn ?? '',
+        nfRemessaNumero: entrada?.nf_remessa_numero ?? null,
+        nfRemessaSerie: entrada?.nf_remessa_serie ?? null,
+        numeroControleCliente: entrada?.numero_controle_cliente ?? null,
+        itens: (itensOrc ?? []).map((it) => ({
+          nome: (it.produtos_servicos as unknown as { nome: string } | null)?.nome ?? it.descricao_servico ?? '-',
+          quantidade: it.quantidade,
+          precoUnit: it.preco_unitario ?? 0,
+          observacao: it.observacao,
+        })),
+        subtotal,
+        desconto: orc.desconto ?? 0,
+        bonificacao: orc.bonificacao ?? false,
+        total: totalFinal,
+        validade: orc.validade_proposta ?? '',
+        pagamento: orc.condicoes_pagamento ?? '',
+        observacoes: orc.observacoes_financeiro ?? '',
+        ehOtica: os?.eh_otica ?? false,
+        garantiaResumo: GARANTIA_CVF.resumo,
+        garantiaIntro: GARANTIA_CVF.intro,
+        garantiaItens: GARANTIA_CVF.itens,
+        clausulas: CLAUSULAS_GERAIS,
+      };
+      const anexos: AnexoBase64[] = [await gerarAnexoOrcamentoSozinho(dadosOrc)];
+
+      // Todas as contas que compartilham a mesma NF+orçamento (cobre o
+      // caso de boleto parcelado em N contas) - anexa o PDF de cada boleto
+      // já emitido via Sicoob.
+      const { data: contasIrmas } = await supabase
+        .from('contas_receber')
+        .select('numero_conta, boleto_pdf_path, boleto_numero')
+        .eq('orcamento_id', linhaSelecionada.orcamentoId)
+        .eq('nf_numero', form.nf_numero);
+      for (const c of contasIrmas ?? []) {
+        if (!c.boleto_pdf_path) continue;
+        const url = await urlAssinadaDocumentoFinanceiro(c.boleto_pdf_path);
+        if (!url) continue;
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        anexos.push({ filename: `Boleto-${c.boleto_numero ?? c.numero_conta}.pdf`, content: await blobParaBase64(blob) });
+      }
+
+      const nfTexto = form.nf_numero
+        ? `${form.nf_tipo ?? 'NF'} ${form.nf_numero}${form.nf_serie ? '/' + form.nf_serie : ''}`
+        : 'a nota fiscal referente a este orçamento';
+      const qtdBoletos = anexos.length - 1;
+      const html = `<p>Prezado(a) cliente,</p>
+        <p>Segue em anexo a documentação referente ao orçamento <strong>${orc.numero_orcamento}</strong> (OS ${os?.numero_os ?? '-'}), já faturado:</p>
+        <ul>
+          <li>Orçamento (com o valor final cobrado)</li>
+          <li>Nota fiscal: ${nfTexto}</li>
+          ${qtdBoletos > 0 ? `<li>${qtdBoletos > 1 ? `${qtdBoletos} boletos para pagamento` : 'Boleto para pagamento'}</li>` : ''}
+        </ul>
+        <p>Acompanhe tudo também pelo portal do cliente: <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
+        <p>Atenciosamente,<br/><strong>${EMPRESA.razaoSocial}</strong></p>`;
+
+      const extras = (cliente.emails_adicionais ?? '')
+        .split(',')
+        .map((e: string) => e.trim())
+        .filter(Boolean);
+      const destinatarios = [cliente.email, ...extras].filter((e): e is string => !!e);
+      if (destinatarios.length === 0) {
+        setErro('Este cliente não tem e-mail cadastrado.');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: {
+          to: destinatarios,
+          subject: `Q-CVF Medical - Orçamento ${orc.numero_orcamento} faturado (${formatarMoeda(totalFinal)})`,
+          html,
+          anexos,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+
+      alert(`E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexo(s).`);
+    } catch (e) {
+      setErro(await mensagemErroFuncao(e));
+    } finally {
+      setEnviandoEmailCompleto(false);
     }
   }
 
@@ -1970,7 +2141,20 @@ export function Faturamento() {
                       </>
                     )}
                   </p>
-                ) : (
+                ) : null}
+                {linhaSelecionada.contaId && linhaSelecionada.orcamentoId && (
+                  <button
+                    type="button"
+                    className="botao-secundario botao-pequeno"
+                    onClick={enviarEmailCompleto}
+                    disabled={enviandoEmailCompleto}
+                    title="Envia por e-mail o PDF do orçamento + boleto(s) já emitido(s) - a NF é só mencionada no texto"
+                    style={{ marginBottom: 8 }}
+                  >
+                    {enviandoEmailCompleto ? 'Enviando...' : 'Enviar e-mail (Orçamento + NF + Boleto)'}
+                  </button>
+                )}
+                {linhaSelecionada.boletoEmitidoVia !== 'sicoob' && (
                   linhaSelecionada.contaId && (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

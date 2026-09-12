@@ -779,7 +779,7 @@ export function DocManualPortal() {
   );
 }
 
-async function blobParaBase64(blob: Blob): Promise<string> {
+export async function blobParaBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
   const chunk = 8192;
@@ -792,6 +792,14 @@ async function blobParaBase64(blob: Blob): Promise<string> {
 export interface AnexoBase64 {
   filename: string;
   content: string;
+}
+
+// Gera só o PDF do Orçamento (sem Entrada/OS) - usado no e-mail de
+// cobrança do Faturamento, onde Entrada/OS já foram enviados antes (na
+// aprovação do orçamento) e reenviar tudo de novo seria redundante.
+export async function gerarAnexoOrcamentoSozinho(orcamento: DadosOrcamentoPdf): Promise<AnexoBase64> {
+  const blob = await pdf(<DocOrcamento d={orcamento} />).toBlob();
+  return { filename: `Orcamento-${orcamento.numeroOrcamento}.pdf`, content: await blobParaBase64(blob) };
 }
 
 // Gera os 3 PDFs e devolve prontos para anexar (filename + base64).
