@@ -140,7 +140,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!chamador) return json({ error: 'Só funcionários podem emitir/consultar boleto.' }, 403);
 
-  let corpo: { acao?: string; contaId?: number; parametros?: Record<string, string> } = {};
+  let corpo: { acao?: string; contaId?: number; contaIds?: number[]; parametros?: Record<string, string> } = {};
   try {
     corpo = await req.json();
   } catch {
@@ -162,44 +162,73 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, mensagem: 'Autenticação mTLS + token OK.' });
     }
 
-    // === Emitir um boleto novo, de verdade, pra uma conta a receber ===
+    // === Emitir um boleto novo, de verdade, pra uma conta a receber (ou
+    // pra VÁRIAS de uma vez, num boleto único somando o valor - ver
+    // contaIds) ===
     if (acao === 'incluir') {
-      const contaId = corpo.contaId;
-      if (!contaId) return json({ error: 'contaId é obrigatório.' }, 400);
+      // contaIds (novo, 2026-09-14): junta várias contas do MESMO cliente
+      // num boleto SÓ, sem mexer em NF nenhuma - cada conta mantém sua
+      // própria NF (se tiver) intacta, só o boleto (boleto_numero/
+      // linha_digitavel/etc) é gravado igual em todas. Pedido real: duas
+      // contas de "hora técnica" já com NFS-e emitida cada uma (Grupo
+      // Cortical, ORC-5584 e ORC-5586), cobradas num boleto único em vez
+      // de dois boletos separados.
+      const contaIdsBody = Array.isArray(corpo.contaIds) && corpo.contaIds.length > 0 ? corpo.contaIds : null;
+      const contaIdUnico = corpo.contaId ?? null;
+      if (!contaIdUnico && !contaIdsBody) return json({ error: 'contaId ou contaIds é obrigatório.' }, 400);
+      const idsAlvo = contaIdsBody ?? [contaIdUnico!];
 
-      const { data: conta, error: contaErro } = await supabaseAdmin
+      const { data: contasRows, error: contaErro } = await supabaseAdmin
         .from('contas_receber')
         .select('id, numero_conta, valor, data_vencimento, boleto_vencimento, boleto_numero, cliente_id, nf_numero')
-        .eq('id', contaId)
-        .maybeSingle();
-      if (contaErro || !conta) return json({ error: 'Conta a receber não encontrada.' }, 404);
-      if (conta.boleto_numero) {
+        .in('id', idsAlvo);
+      if (contaErro || !contasRows || contasRows.length !== idsAlvo.length) {
+        return json({ error: 'Conta a receber não encontrada.' }, 404);
+      }
+      if (contasRows.some((c) => c.boleto_numero)) {
         return json(
-          { error: 'Esta conta já tem um boleto lançado. Limpe os campos de boleto antes de emitir um novo.' },
+          { error: 'Uma ou mais contas selecionadas já têm um boleto lançado. Limpe os campos de boleto antes de emitir um novo.' },
           400,
         );
       }
+      const clientesDistintos = new Set(contasRows.map((c) => c.cliente_id));
+      if (clientesDistintos.size !== 1) {
+        return json({ error: 'Todas as contas precisam ser do mesmo cliente pra emitir um boleto único.' }, 400);
+      }
+      const clienteIdAlvo = contasRows[0].cliente_id;
+      const valorTotal = contasRows.reduce((s, c) => s + Number(c.valor), 0);
 
       const { data: cliente, error: clienteErro } = await supabaseAdmin
         .from('clientes')
         .select('razao_social, cnpj, logradouro, numero_endereco, bairro, cidade, uf, cep, email')
-        .eq('id', conta.cliente_id)
+        .eq('id', clienteIdAlvo)
         .maybeSingle();
       if (clienteErro || !cliente) return json({ error: 'Cliente da conta não encontrado.' }, 404);
 
-      const vencimento: string = conta.boleto_vencimento ?? conta.data_vencimento;
-      if (!vencimento) return json({ error: 'Conta sem data de vencimento definida.' }, 400);
+      // Vencimento único do boleto - a mais próxima entre as contas
+      // selecionadas (nunca atrasa uma cobrança só pra "esperar" a outra).
+      const vencimento = contasRows
+        .map((c) => c.boleto_vencimento ?? c.data_vencimento)
+        .filter((v): v is string => !!v)
+        .sort()[0];
+      if (!vencimento) return json({ error: 'Nenhuma das contas selecionadas tem data de vencimento definida.' }, 400);
       const dataEncargos = somarDias(vencimento, 1);
       const endereco = `${cliente.logradouro ?? ''}${cliente.numero_endereco ? ', ' + cliente.numero_endereco : ''}`
         .trim()
         .slice(0, 40);
+      const numerosNf = contasRows.map((c) => c.nf_numero).filter((v): v is string => !!v);
+      // Máx. 18 chars (limite do campo) - com mais de uma conta, usa a
+      // primeira + quantas outras entraram junto (ex.: "CR-5599+1").
+      const seuNumero = (
+        contasRows.length > 1 ? `${contasRows[0].numero_conta}+${contasRows.length - 1}` : String(contasRows[0].numero_conta ?? contasRows[0].id)
+      ).slice(0, 18);
 
       const payload: Record<string, unknown> = {
         numeroCliente: Number(numeroCliente),
         codigoModalidade: CODIGO_MODALIDADE,
         numeroContaCorrente: Number(numeroContaCorrente),
         codigoEspecieDocumento: ESPECIE_DOCUMENTO,
-        seuNumero: String(conta.numero_conta ?? conta.id).slice(0, 18),
+        seuNumero,
         // Documentado como opcional pela Sicoob ("se não informado, usa a
         // data de registro"), mas testado na prática e recusado sem isso
         // ("O campo Data de Emissão deve ter uma data válida.", código
@@ -211,7 +240,7 @@ Deno.serve(async (req: Request) => {
         dataEmissao: new Date().toISOString().slice(0, 10),
         identificacaoEmissaoBoleto: 2, // Cliente emite - confirmado no boleto real
         identificacaoDistribuicaoBoleto: 2, // Cliente distribui - confirmado no boleto real
-        valor: Number(conta.valor),
+        valor: valorTotal,
         dataVencimento: vencimento,
         tipoDesconto: 0,
         tipoMulta: 2, // Percentual - confirmado no boleto real
@@ -231,7 +260,7 @@ Deno.serve(async (req: Request) => {
         mensagensInstrucao: [
           `A partir ${dataBR(dataEncargos)} Juros 0,03%/dia.`,
           `A partir ${dataBR(dataEncargos)} Multa de 2%.`,
-          ...(conta.nf_numero ? [`Referente NF ${conta.nf_numero}`] : []),
+          ...(numerosNf.length > 0 ? [`Referente NF ${numerosNf.join(', ')}`] : []),
         ],
         pagador: {
           numeroCpfCnpj: apenasDigitos(cliente.cnpj),
@@ -259,12 +288,13 @@ Deno.serve(async (req: Request) => {
       // deno-lint-ignore no-explicit-any
       const resultado = (dados as any).resultado ?? dados;
 
-      // Sobe o PDF (base64) pro bucket de documentos financeiros, se veio.
+      // Sobe o PDF (base64) pro bucket de documentos financeiros, se veio -
+      // mesmo PDF (um boleto só) referenciado em todas as contas envolvidas.
       let pdfPath: string | null = null;
       if (resultado.pdfBoleto) {
         try {
           const bytes = Uint8Array.from(atob(resultado.pdfBoleto), (c) => c.charCodeAt(0));
-          pdfPath = `boletos/conta_${conta.id}_${Date.now()}.pdf`;
+          pdfPath = `boletos/conta_${idsAlvo.join('-')}_${Date.now()}.pdf`;
           const { error: uploadErro } = await supabaseAdmin.storage
             .from('documentos-financeiro')
             .upload(pdfPath, bytes, { contentType: 'application/pdf' });
@@ -286,11 +316,12 @@ Deno.serve(async (req: Request) => {
           boleto_pdf_path: pdfPath,
           boleto_registrado_em: new Date().toISOString(),
         })
-        .eq('id', contaId);
+        .in('id', idsAlvo);
       if (updateErro) return json({ error: `Boleto emitido na Sicoob, mas falhou salvar no sistema: ${updateErro.message}` }, 500);
 
       return json({
         ok: true,
+        contaIds: idsAlvo,
         boletoNumero: resultado.nossoNumero,
         linhaDigitavel: resultado.linhaDigitavel,
         codigoBarras: resultado.codigoBarras,
@@ -327,13 +358,17 @@ Deno.serve(async (req: Request) => {
       const resultado = (dados as any).resultado ?? dados;
       const situacao = resultado.situacaoBoleto ?? null;
       if (situacao) {
+        // Por boleto_numero, não só pelo id consultado - um boleto pode
+        // cobrir várias contas juntas (ver ação 'incluir' com contaIds);
+        // consultar qualquer uma delas atualiza todas as que compartilham
+        // esse mesmo boleto.
         await supabaseAdmin
           .from('contas_receber')
           .update({
             boleto_situacao: situacao,
             ...(situacao === 'Liquidado' ? { status: 'Recebido', data_recebimento: new Date().toISOString().slice(0, 10) } : {}),
           })
-          .eq('id', contaId);
+          .eq('boleto_numero', conta.boleto_numero);
       }
       return json({ ok: true, situacaoBoleto: situacao, resultado });
     }

@@ -313,10 +313,9 @@ export function Faturamento() {
   } | null>(null);
   // Seleção múltipla pra consolidar vários orçamentos "liberados" (sem NF
   // ainda, sem conta ainda) do MESMO cliente numa nota só - OU, quando as
-  // linhas marcadas JÁ têm conta (ex.: as contas "(peças)" de faturamento
-  // diferido do Grupo Cortical, sem NF e sem boleto ainda), pra juntar o
-  // valor de todas numa conta só, pronta pra emitir um único boleto (ver
-  // consolidarContasSemNf).
+  // linhas marcadas JÁ têm conta (com ou sem NF, mas sem boleto ainda),
+  // pra emitir um boleto ÚNICO cobrindo todas juntas, sem mexer nas NFs
+  // de cada uma (ver emitirBoletoConsolidado).
   const [selecionadasFaturar, setSelecionadasFaturar] = useState<Set<string>>(new Set());
   const [consolidandoContas, setConsolidandoContas] = useState(false);
   const [parceladoConsolidado, setParceladoConsolidado] = useState(false);
@@ -1166,61 +1165,47 @@ export function Faturamento() {
     return clienteIds.size === 1 ? [...clienteIds][0] : null;
   }
 
-  // Junta 2+ contas a receber JÁ EXISTENTES, sem NF e sem boleto ainda, do
-  // mesmo cliente, numa conta só (soma o valor, combina a descrição) -
-  // pedido pontual do Grupo Cortical (orçamentos com faturamento diferido
-  // de peças, ex.: ORC-5584 + ORC-5586): as peças de cada orçamento viram
-  // uma conta "(peças)" separada na hora do faturamento, mas o boleto pra
-  // cobrar o cliente pode ser um só, juntando vários orçamentos do mês.
-  // Diferente de "Lançar NF consolidada" (abrirPreviaNfse) - aqui as
-  // contas JÁ EXISTEM (não são orçamentos ainda sem conta) e não emite
-  // NFS-e nenhuma, só prepara uma conta única pronta pra "Emitir boleto
-  // via Sicoob" (ou lançar boleto manual) pelo valor somado.
-  async function consolidarContasSemNf(linhas: LinhaFaturamento[]) {
+  // Emite UM boleto via Sicoob cobrindo 2+ contas a receber JÁ EXISTENTES
+  // do mesmo cliente, sem boleto ainda - pedido pontual do Grupo Cortical
+  // (ex.: ORC-5584 + ORC-5586, cada uma já com sua própria NFS-e de mão
+  // de obra emitida em separado): em vez de dois boletos de R$ 330 cada,
+  // um boleto único de R$ 660 cobrando as duas contas juntas.
+  // IMPORTANTE: isso NUNCA mexe em NF - cada conta mantém sua própria NF
+  // (ou nenhuma, no caso de conta "(peças)") intacta; só os campos de
+  // boleto (número/linha digitável/situação/PDF) são gravados IGUAIS em
+  // todas as contas envolvidas (ver emitir-boleto, ação 'incluir' com
+  // contaIds) - diferente da 1ª versão desta função, que chegou a fundir
+  // as contas numa só (descartado: isso apagaria o vínculo de uma delas
+  // com sua própria NF).
+  async function emitirBoletoConsolidado(linhas: LinhaFaturamento[]) {
     const contaIds = linhas.map((l) => l.contaId).filter((id): id is number => id != null);
     if (contaIds.length < 2) return;
     const clienteId = clienteComumDasLinhas(linhas);
     if (!clienteId) {
-      setErro('Só é possível juntar contas do mesmo cliente.');
+      setErro('Só é possível emitir um boleto único pra contas do mesmo cliente.');
       return;
     }
-    if (!confirm(`Juntar ${contaIds.length} contas num total de R$ ${linhas.reduce((s, l) => s + l.valor, 0).toFixed(2)}?`)) {
+    const valorTotal = linhas.reduce((s, l) => s + l.valor, 0);
+    if (
+      !confirm(
+        `Emitir 1 boleto via Sicoob cobrindo ${contaIds.length} contas, total R$ ${valorTotal.toFixed(2)}? As NFs de cada conta continuam separadas, só o boleto é único.`,
+      )
+    ) {
       return;
     }
     setConsolidandoContas(true);
     setErro(null);
     try {
-      // A conta de menor id "sobrevive" (recebe o valor somado e a
-      // descrição combinada) - as demais são removidas.
-      const ordenadas = [...linhas].sort((a, b) => (a.contaId ?? 0) - (b.contaId ?? 0));
-      const sobrevivente = ordenadas[0];
-      const restantes = ordenadas.slice(1);
-      const valorTotal = ordenadas.reduce((s, l) => s + l.valor, 0);
-      const orcamentosIds = ordenadas.map((l) => l.orcamentoId).filter((id): id is number => id != null);
-      const descricaoCombinada = ordenadas.map((l) => l.numeroOrcamento ?? l.descricao).join(' + ');
-      const { error: erroUpdate } = await supabase
-        .from('contas_receber')
-        .update({
-          valor: valorTotal,
-          // Mantém o sufixo "(peças)" - é como FluxoCaixaMensal.tsx
-          // identifica essas contas pro card "Peças Cortical" (ilike
-          // '%(peças)%'); sem isso o valor pendente some silenciosamente
-          // de lá depois de juntar as contas.
-          descricao: `Peças ${descricaoCombinada} (peças)`,
-          ...(orcamentosIds.length > 1 ? { orcamentos_ids: orcamentosIds } : {}),
-        })
-        .eq('id', sobrevivente.contaId!);
-      if (erroUpdate) throw erroUpdate;
-      const { error: erroDelete } = await supabase
-        .from('contas_receber')
-        .delete()
-        .in('id', restantes.map((l) => l.contaId!));
-      if (erroDelete) throw erroDelete;
+      const { data, error } = await supabase.functions.invoke('emitir-boleto', {
+        body: { acao: 'incluir', contaIds },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       setSelecionadasFaturar(new Set());
       qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
       qc.invalidateQueries({ queryKey: ['contas-receber'] });
     } catch (e) {
-      setErro(mensagemErro(e));
+      setErro(await mensagemErroFuncao(e));
     } finally {
       setConsolidandoContas(false);
     }
@@ -1765,10 +1750,10 @@ export function Faturamento() {
                 <button
                   className="botao-primario botao-pequeno"
                   disabled={mistura || comConta.length < 2 || clienteConsolidado == null || consolidandoContas}
-                  onClick={() => consolidarContasSemNf(comConta)}
-                  title="Soma o valor de todas numa conta só (sem NF), pronta pra emitir um único boleto"
+                  onClick={() => emitirBoletoConsolidado(comConta)}
+                  title="Emite um único boleto via Sicoob cobrindo todas as contas marcadas, sem mexer nas NFs de cada uma"
                 >
-                  {consolidandoContas ? 'Juntando...' : `Juntar em 1 conta (${comConta.length})`}
+                  {consolidandoContas ? 'Emitindo...' : `Emitir 1 boleto (${comConta.length})`}
                 </button>
               ) : (
                 <button
@@ -1875,20 +1860,19 @@ export function Faturamento() {
           {linhasOrdenadasFiltradas.map((l) => (
             <tr key={l.chave}>
               <td>
-                {((l.contaId == null && l.orcamentoId != null) ||
-                  (l.contaId != null && !l.boleto_numero)) &&
-                  !l.nf_numero && (
-                    <input
-                      type="checkbox"
-                      title={
-                        l.contaId == null
-                          ? 'Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente'
-                          : 'Marcar pra juntar com outra(s) conta(s) do mesmo cliente numa conta só (ex.: peças de vários orçamentos num boleto único)'
-                      }
-                      checked={selecionadasFaturar.has(l.chave)}
-                      onChange={() => alternarSelecaoFaturar(l.chave)}
-                    />
-                  )}
+                {((l.contaId == null && l.orcamentoId != null && !l.nf_numero) ||
+                  (l.contaId != null && !l.boleto_numero)) && (
+                  <input
+                    type="checkbox"
+                    title={
+                      l.contaId == null
+                        ? 'Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente'
+                        : 'Marcar pra emitir um boleto único com outra(s) conta(s) do mesmo cliente (cada uma mantém sua própria NF, se tiver)'
+                    }
+                    checked={selecionadasFaturar.has(l.chave)}
+                    onChange={() => alternarSelecaoFaturar(l.chave)}
+                  />
+                )}
               </td>
               <td>
                 {l.ordemServicoId ? (
