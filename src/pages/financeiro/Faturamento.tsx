@@ -301,6 +301,10 @@ export function Faturamento() {
     resumoSomenteLeitura: {
       ambiente: 'homologacao' | 'producao';
       valorServico: number;
+      // > 0 só pra clientes com faturamento diferido de peças (Grupo
+      // Cortical) - valor que fica de fora dessa NFS-e e vira uma 2ª conta
+      // sem NF, criada automaticamente ao confirmar (ver emitir-nfse).
+      valorPecas: number;
       aliquotaIss: number | null;
       percentualTotalTributosFederais: number | null;
       percentualTotalTributosMunicipais: number | null;
@@ -1187,6 +1191,7 @@ export function Faturamento() {
         resumoSomenteLeitura: {
           ambiente: r.ambiente,
           valorServico: r.valorServico,
+          valorPecas: r.valorPecas ?? 0,
           aliquotaIss: r.aliquotaIss,
           percentualTotalTributosFederais: r.percentualTotalTributosFederais,
           percentualTotalTributosMunicipais: r.percentualTotalTributosMunicipais,
@@ -2471,6 +2476,13 @@ export function Faturamento() {
           <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -4 }}>
             Pra mudar o valor, edite a conta em "Lançar NF"/orçamento antes de emitir a NFS-e.
           </p>
+          {previaNfse.resumoSomenteLeitura.valorPecas > 0.01 && (
+            <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -4 }}>
+              Cliente com faturamento diferido de peças: R${' '}
+              {previaNfse.resumoSomenteLeitura.valorPecas.toFixed(2)} de peças ficam de fora dessa NFS-e e viram uma
+              conta separada (sem NF), vencendo no 5º dia útil do mês seguinte.
+            </p>
+          )}
 
           <h2 style={{ fontSize: 13, marginTop: 16 }}>Tributação</h2>
           <div style={{ display: 'flex', gap: 8 }}>

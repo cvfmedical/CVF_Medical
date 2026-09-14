@@ -164,6 +164,58 @@ async function proximoNumeroConta(
   return `CR-${maior + 1}`;
 }
 
+// Faturamento diferido de peças (Grupo Cortical e outros clientes com
+// clientes.faturamento_pecas_diferido=true, ver Clientes.tsx): a NFS-e
+// cobre só a mão de obra - peças usadas ficam de fora do valor da nota e
+// são cobradas à parte (conta sem NF, vencendo no 5º dia útil do mês
+// seguinte). Duplicado aqui porque a edge function é standalone, mesmo
+// critério "produtos_servicos.tipo" já usado em Faturamento.tsx
+// (salvarNota). Sem isso, "Emitir NFS-e" direto do orçamento (sem passar
+// pelo modal "Lançar NF" manual) cobrava peça e mão de obra juntas nesses
+// clientes.
+function ehDiaUtil(data: Date): boolean {
+  const diaSemana = data.getDay();
+  return diaSemana !== 0 && diaSemana !== 6;
+}
+function nEsimoDiaUtil(ano: number, mes: number, n: number): Date {
+  const data = new Date(ano, mes - 1, 1);
+  let contados = 0;
+  while (contados < n) {
+    if (ehDiaUtil(data)) contados++;
+    if (contados < n) data.setDate(data.getDate() + 1);
+  }
+  return data;
+}
+function quintoDiaUtilMesSeguinte(dataBase: Date): Date {
+  const ano = dataBase.getMonth() === 11 ? dataBase.getFullYear() + 1 : dataBase.getFullYear();
+  const mes = dataBase.getMonth() === 11 ? 1 : dataBase.getMonth() + 2;
+  return nEsimoDiaUtil(ano, mes, 5);
+}
+
+type ItemComTipo = { preco_unitario: number | null; quantidade: number; produtos_servicos: { tipo: string | null } | null };
+
+function splitServicoPecas(
+  itens: ItemComTipo[],
+  valorFixoContrato: number | null,
+  pecasDiferido: boolean,
+): { valorServico: number; valorPecas: number } {
+  if (!pecasDiferido) {
+    const subtotal =
+      valorFixoContrato != null
+        ? Number(valorFixoContrato)
+        : itens.reduce((s, i) => s + (Number(i.preco_unitario) || 0) * Number(i.quantidade), 0);
+    return { valorServico: subtotal, valorPecas: 0 };
+  }
+  let valorServico = valorFixoContrato != null ? Number(valorFixoContrato) : 0;
+  let valorPecas = 0;
+  for (const it of itens) {
+    const totalItem = (Number(it.preco_unitario) || 0) * Number(it.quantidade);
+    if (it.produtos_servicos?.tipo === 'Peça' || it.produtos_servicos?.tipo === 'Produto') valorPecas += totalItem;
+    else valorServico += totalItem;
+  }
+  return { valorServico, valorPecas };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
@@ -441,6 +493,11 @@ Deno.serve(async (req: Request) => {
     // mesmo código mais abaixo (descrição do serviço, busca do
     // equipamento etc.).
     orcamentosRefs: { numero_orcamento: string; ordem_servico_id: number | null }[];
+    // > 0 só quando a conta ainda vai ser criada agora (sem contaId) pra um
+    // cliente com faturamento_pecas_diferido=true - valor das peças que
+    // fica de fora do "valor" acima (da NFS-e) e vira uma 2ª conta sem NF,
+    // criada mais abaixo junto com a conta de serviço (ver splitServicoPecas).
+    valorPecas: number;
   };
   let conta: ContaLike;
   // Quando a conta (ou as N parcelas) precisarem ser criadas agora (veio
@@ -472,6 +529,9 @@ Deno.serve(async (req: Request) => {
     conta = {
       ...contaExistenteTyped,
       orcamentosRefs: contaExistenteTyped.orcamentos ? [contaExistenteTyped.orcamentos] : [],
+      // Conta já existente - se era de cliente com faturamento diferido, a
+      // separação já foi feita na hora em que ela foi criada (2 contas).
+      valorPecas: 0,
     };
   } else if (orcamentoIdsBody) {
     // NOVO (2026-09-09): consolida vários orçamentos do MESMO cliente
@@ -482,7 +542,7 @@ Deno.serve(async (req: Request) => {
     const { data: orcRows, error: erroOrcs } = await supabaseAdmin
       .from('orcamentos')
       .select(
-        'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade), ordens_servico(numero_os, cliente_id)',
+        'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade, produtos_servicos(tipo)), ordens_servico(numero_os, cliente_id)',
       )
       .in('id', orcamentoIdsBody);
     type OrcConsolidado = {
@@ -492,7 +552,7 @@ Deno.serve(async (req: Request) => {
       valor_fixo_contrato: number | null;
       desconto: number | null;
       bonificacao: boolean | null;
-      orcamento_itens: { preco_unitario: number | null; quantidade: number }[];
+      orcamento_itens: ItemComTipo[];
       ordens_servico: { numero_os: string; cliente_id: number } | null;
     };
     const orcsTyped = (orcRows ?? []) as unknown as OrcConsolidado[];
@@ -504,14 +564,29 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Todos os orçamentos selecionados precisam ser do mesmo cliente.' }, 400);
     }
     const clienteIdConsolidado = [...clientesDistintos][0];
-    const totalOrc = (o: OrcConsolidado): number => {
-      const subtotal =
-        o.valor_fixo_contrato != null
-          ? Number(o.valor_fixo_contrato)
-          : (o.orcamento_itens ?? []).reduce((s, i) => s + (Number(i.preco_unitario) || 0) * Number(i.quantidade), 0);
-      return o.bonificacao ? 0 : Math.max(subtotal - (Number(o.desconto) || 0), 0);
+    const { data: clienteConsolidadoRow } = await supabaseAdmin
+      .from('clientes')
+      .select('faturamento_pecas_diferido')
+      .eq('id', clienteIdConsolidado)
+      .maybeSingle();
+    const pecasDiferidoConsolidado = clienteConsolidadoRow?.faturamento_pecas_diferido ?? false;
+    const splitOrc = (o: OrcConsolidado): { valorServico: number; valorPecas: number } => {
+      if (o.bonificacao) return { valorServico: 0, valorPecas: 0 };
+      const { valorServico, valorPecas } = splitServicoPecas(
+        o.orcamento_itens ?? [],
+        o.valor_fixo_contrato,
+        pecasDiferidoConsolidado,
+      );
+      // Desconto só se aplica no fluxo normal (sem faturamento diferido) -
+      // pra clientes com peças diferidas o desconto não é aplicado aqui,
+      // mesmo critério do fluxo de 1 orçamento só (abaixo) e do modal
+      // "Lançar NF" manual em Faturamento.tsx, que também não desconta
+      // nesse caso.
+      if (pecasDiferidoConsolidado) return { valorServico, valorPecas };
+      return { valorServico: Math.max(valorServico - (Number(o.desconto) || 0), 0), valorPecas };
     };
-    const valorTotal = orcsTyped.reduce((soma, o) => soma + totalOrc(o), 0);
+    const valorTotal = orcsTyped.reduce((soma, o) => soma + splitOrc(o).valorServico, 0);
+    const valorPecasTotal = orcsTyped.reduce((soma, o) => soma + splitOrc(o).valorPecas, 0);
     conta = {
       id: null,
       valor: valorTotal,
@@ -521,6 +596,7 @@ Deno.serve(async (req: Request) => {
         .map((o) => `Orçamento ${o.numero_orcamento} - OS ${o.ordens_servico?.numero_os ?? ''}`)
         .join('; '),
       orcamentosRefs: orcsTyped.map((o) => ({ numero_orcamento: o.numero_orcamento, ordem_servico_id: o.ordem_servico_id })),
+      valorPecas: valorPecasTotal,
     };
     orcamentosIdsParaCriarContas = orcamentoIdsBody;
     // Sem `parcelas` no corpo, trata como uma parcela única (o total
@@ -548,7 +624,7 @@ Deno.serve(async (req: Request) => {
     const { data: orcRow, error: erroOrc } = await supabaseAdmin
       .from('orcamentos')
       .select(
-        'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade), ordens_servico(numero_os, cliente_id)',
+        'id, numero_orcamento, ordem_servico_id, valor_fixo_contrato, desconto, bonificacao, orcamento_itens(preco_unitario, quantidade, produtos_servicos(tipo)), ordens_servico(numero_os, cliente_id)',
       )
       .eq('id', orcamentoIdBody)
       .single();
@@ -560,19 +636,33 @@ Deno.serve(async (req: Request) => {
       valor_fixo_contrato: number | null;
       desconto: number | null;
       bonificacao: boolean | null;
-      orcamento_itens: { preco_unitario: number | null; quantidade: number }[];
+      orcamento_itens: ItemComTipo[];
       ordens_servico: { numero_os: string; cliente_id: number } | null;
     };
     const clienteIdOrc = orcTyped.ordens_servico?.cliente_id;
     if (!clienteIdOrc) return json({ error: 'Não foi possível identificar o cliente desse orçamento.' }, 400);
-    const subtotal =
-      orcTyped.valor_fixo_contrato != null
-        ? Number(orcTyped.valor_fixo_contrato)
-        : (orcTyped.orcamento_itens ?? []).reduce(
-            (s, i) => s + (Number(i.preco_unitario) || 0) * Number(i.quantidade),
-            0,
-          );
-    const valorCalc = orcTyped.bonificacao ? 0 : Math.max(subtotal - (Number(orcTyped.desconto) || 0), 0);
+    const { data: clienteOrcRow } = await supabaseAdmin
+      .from('clientes')
+      .select('faturamento_pecas_diferido')
+      .eq('id', clienteIdOrc)
+      .maybeSingle();
+    const pecasDiferidoOrc = clienteOrcRow?.faturamento_pecas_diferido ?? false;
+    let valorCalc: number;
+    let valorPecasCalc = 0;
+    if (orcTyped.bonificacao) {
+      valorCalc = 0;
+    } else {
+      const { valorServico, valorPecas } = splitServicoPecas(
+        orcTyped.orcamento_itens ?? [],
+        orcTyped.valor_fixo_contrato,
+        pecasDiferidoOrc,
+      );
+      // Desconto só é aplicado no fluxo normal - clientes com faturamento
+      // diferido de peças não descontam aqui, mesmo critério do modal
+      // "Lançar NF" manual em Faturamento.tsx (clientePecasDiferido).
+      valorCalc = pecasDiferidoOrc ? valorServico : Math.max(valorServico - (Number(orcTyped.desconto) || 0), 0);
+      valorPecasCalc = valorPecas;
+    }
     const numeroOS = orcTyped.ordens_servico?.numero_os ?? '';
     conta = {
       id: null,
@@ -581,6 +671,7 @@ Deno.serve(async (req: Request) => {
       cliente_id: clienteIdOrc,
       descricao: `Orçamento ${orcTyped.numero_orcamento} - OS ${numeroOS}`,
       orcamentosRefs: [{ numero_orcamento: orcTyped.numero_orcamento, ordem_servico_id: orcTyped.ordem_servico_id }],
+      valorPecas: valorPecasCalc,
     };
     orcamentoIdParaCriarConta = orcTyped.id;
   }
@@ -783,6 +874,7 @@ Deno.serve(async (req: Request) => {
         emailTomador: emailTomador ?? '',
         descricaoServico,
         valorServico: conta.valor,
+        valorPecas: conta.valorPecas,
         aliquotaIss,
         percentualTotalTributosFederais,
         percentualTotalTributosMunicipais,
@@ -867,6 +959,31 @@ Deno.serve(async (req: Request) => {
       idsContasParaAtualizarNf = [conta.id];
       payload.numero_dps = conta.id;
       ref = `qcvf-cr-${conta.id}`;
+    }
+
+    // Cliente com faturamento diferido de peças (Grupo Cortical e outros,
+    // ver splitServicoPecas acima): a NFS-e recém-criada cobre só a mão de
+    // obra - as peças usadas viram uma 2ª conta, SEM NF, vencendo no 5º dia
+    // útil do mês seguinte (mesmo padrão de Faturamento.tsx/salvarNota).
+    if (conta.valorPecas > 0.01) {
+      const numeroContaPecas = await proximoNumeroConta(supabaseAdmin);
+      const vencimentoPecas = quintoDiaUtilMesSeguinte(new Date());
+      const { error: erroContaPecas } = await supabaseAdmin.from('contas_receber').insert({
+        numero_conta: numeroContaPecas,
+        orcamento_id: orcamentoIdParaCriarConta ?? orcamentosIdsParaCriarContas?.[0] ?? null,
+        ...(orcamentosIdsParaCriarContas ? { orcamentos_ids: orcamentosIdsParaCriarContas } : {}),
+        cliente_id: conta.cliente_id,
+        descricao: `${conta.descricao} (peças)`,
+        valor: conta.valorPecas,
+        data_vencimento: vencimentoPecas.toISOString().slice(0, 10),
+        status: 'Em aberto',
+      });
+      if (erroContaPecas) {
+        return json(
+          { error: `NFS-e de mão de obra criada, mas falhou ao lançar a conta de peças: ${erroContaPecas.message}` },
+          500,
+        );
+      }
     }
   }
 
