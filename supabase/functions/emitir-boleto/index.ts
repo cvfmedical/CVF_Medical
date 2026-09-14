@@ -35,6 +35,13 @@ function apenasDigitos(v: string | null | undefined): string {
   return (v ?? '').replace(/\D/g, '');
 }
 
+// yyyy-mm-dd -> dd/mm/yyyy, pro texto de instruções (mesmo formato usado
+// nos boletos que o pessoal já lança na mão pelo site do banco).
+function dataBR(dataIso: string): string {
+  const [ano, mes, dia] = dataIso.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
 // Soma dias a uma data no formato yyyy-mm-dd, devolvendo no mesmo formato.
 function somarDias(dataIso: string, dias: number): string {
   const d = new Date(dataIso + 'T00:00:00Z');
@@ -162,7 +169,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: conta, error: contaErro } = await supabaseAdmin
         .from('contas_receber')
-        .select('id, numero_conta, valor, data_vencimento, boleto_vencimento, boleto_numero, cliente_id')
+        .select('id, numero_conta, valor, data_vencimento, boleto_vencimento, boleto_numero, cliente_id, nf_numero')
         .eq('id', contaId)
         .maybeSingle();
       if (contaErro || !conta) return json({ error: 'Conta a receber não encontrada.' }, 404);
@@ -193,6 +200,15 @@ Deno.serve(async (req: Request) => {
         numeroContaCorrente: Number(numeroContaCorrente),
         codigoEspecieDocumento: ESPECIE_DOCUMENTO,
         seuNumero: String(conta.numero_conta ?? conta.id).slice(0, 18),
+        // Documentado como opcional pela Sicoob ("se não informado, usa a
+        // data de registro"), mas testado na prática e recusado sem isso
+        // ("O campo Data de Emissão deve ter uma data válida.", código
+        // 5002). A doc também documenta o formato como
+        // "yyyy-mm-ddT00:00:00-03:00", mas isso foi recusado na prática
+        // ("O formato da data é inválido.", código 0004) - o formato que
+        // funciona é o mesmo yyyy-mm-dd simples usado em dataVencimento/
+        // dataMulta/dataJurosMora, sem hora.
+        dataEmissao: new Date().toISOString().slice(0, 10),
         identificacaoEmissaoBoleto: 2, // Cliente emite - confirmado no boleto real
         identificacaoDistribuicaoBoleto: 2, // Cliente distribui - confirmado no boleto real
         valor: Number(conta.valor),
@@ -207,6 +223,16 @@ Deno.serve(async (req: Request) => {
         numeroParcela: 1,
         aceite: false,
         gerarPdf: true,
+        // Texto livre do campo "Instruções" do boleto - replica exatamente o
+        // padrão já usado nos boletos lançados na mão pelo site do banco
+        // (confirmado comparando um boleto real: "A partir DD/MM Juros
+        // 0,03%/dia.", "A partir DD/MM Multa de 2%.", "Referente NF XXXX").
+        // Sem isso, essa caixa fica em branco no boleto gerado pela API.
+        mensagensInstrucao: [
+          `A partir ${dataBR(dataEncargos)} Juros 0,03%/dia.`,
+          `A partir ${dataBR(dataEncargos)} Multa de 2%.`,
+          ...(conta.nf_numero ? [`Referente NF ${conta.nf_numero}`] : []),
+        ],
         pagador: {
           numeroCpfCnpj: apenasDigitos(cliente.cnpj),
           nome: (cliente.razao_social ?? '').slice(0, 50),
@@ -310,6 +336,27 @@ Deno.serve(async (req: Request) => {
           .eq('id', contaId);
       }
       return json({ ok: true, situacaoBoleto: situacao, resultado });
+    }
+
+    // === Cadastra o webhook de baixa automática (rodar uma vez só) ===
+    if (acao === 'cadastrar_webhook') {
+      // URL pública e fixa desta mesma instância Supabase - não é
+      // sensível (não precisa de secret), é só a identidade do projeto.
+      const url = 'https://wrpylwtamxmaclyqdqmg.supabase.co/functions/v1/sicoob-webhook';
+      const { status, ok, dados } = await chamarSicoob(client, token, '/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // codigoTipoMovimento 7 = "Pagamento (Baixa operacional)";
+        // codigoPeriodoMovimento 1 = "Movimento atual (D0)".
+        body: JSON.stringify({ url, codigoTipoMovimento: 7, codigoPeriodoMovimento: 1 }),
+      });
+      return json({ ok, status, resultado: dados });
+    }
+
+    // === Lista os webhooks já cadastrados (confirmar situação/validação) ===
+    if (acao === 'listar_webhooks') {
+      const { status, ok, dados } = await chamarSicoob(client, token, '/webhooks');
+      return json({ ok, status, resultado: dados });
     }
 
     return json({ error: `Ação desconhecida: ${acao}` }, 400);
