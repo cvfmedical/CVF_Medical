@@ -935,16 +935,25 @@ export function Faturamento() {
   async function salvarNota() {
     if (!linhaSelecionada) return;
     setErro(null);
-    if (!form.nf_numero) {
-      setErro('Informe o número da nota.');
-      return;
-    }
-    if (!form.nf_data_emissao) {
-      // Sem isso, o "Relatório de peças utilizadas" (Comercial) não
-      // encontra essa NF na hora de filtrar por mês - a data de emissão é
-      // o campo usado pra saber em que mês a nota entra no relatório.
-      setErro('Informe a data de emissão da nota - sem ela a NF não aparece no Relatório de peças utilizadas.');
-      return;
+    // Contas "(peças)" do faturamento diferido (Grupo Cortical e outros -
+    // ver clientePecasDiferido mais abaixo) NUNCA devem ter NF - só a conta
+    // de mão de obra tem NF/NFS-e. Pula a exigência de NF pra essas e força
+    // os campos de nota a null mais abaixo (ver camposNota), mesmo que
+    // algo tenha ficado digitado nos campos (que já ficam escondidos no
+    // modal pra esse tipo de conta - ver JSX).
+    const ehContaPecas = linhaSelecionada.descricao.includes('(peças)');
+    if (!ehContaPecas) {
+      if (!form.nf_numero) {
+        setErro('Informe o número da nota.');
+        return;
+      }
+      if (!form.nf_data_emissao) {
+        // Sem isso, o "Relatório de peças utilizadas" (Comercial) não
+        // encontra essa NF na hora de filtrar por mês - a data de emissão é
+        // o campo usado pra saber em que mês a nota entra no relatório.
+        setErro('Informe a data de emissão da nota - sem ela a NF não aparece no Relatório de peças utilizadas.');
+        return;
+      }
     }
     if (parcelado) {
       if (parcelas.length === 0) {
@@ -967,14 +976,16 @@ export function Faturamento() {
 
     setSalvando(true);
     try {
-      const camposNota = {
-        nf_tipo: form.nf_tipo,
-        nf_numero: form.nf_numero,
-        nf_serie: form.nf_serie || null,
-        // 44 dígitos - remove espaços/pontos coladas como formatação de leitura.
-        nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
-        nf_data_emissao: form.nf_data_emissao || null,
-      };
+      const camposNota = ehContaPecas
+        ? { nf_tipo: null, nf_numero: null, nf_serie: null, nf_chave_acesso: null, nf_data_emissao: null }
+        : {
+            nf_tipo: form.nf_tipo,
+            nf_numero: form.nf_numero,
+            nf_serie: form.nf_serie || null,
+            // 44 dígitos - remove espaços/pontos coladas como formatação de leitura.
+            nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
+            nf_data_emissao: form.nf_data_emissao || null,
+          };
       if (parcelado) {
         // Uma NF só, paga em N parcelas - cada parcela vira sua própria
         // conta a receber (mesma NF, mesmo orçamento), com vencimento e
@@ -1191,7 +1202,11 @@ export function Faturamento() {
         .from('contas_receber')
         .update({
           valor: valorTotal,
-          descricao: `Peças ${descricaoCombinada}`,
+          // Mantém o sufixo "(peças)" - é como FluxoCaixaMensal.tsx
+          // identifica essas contas pro card "Peças Cortical" (ilike
+          // '%(peças)%'); sem isso o valor pendente some silenciosamente
+          // de lá depois de juntar as contas.
+          descricao: `Peças ${descricaoCombinada} (peças)`,
           ...(orcamentosIds.length > 1 ? { orcamentos_ids: orcamentosIds } : {}),
         })
         .eq('id', sobrevivente.contaId!);
@@ -2051,41 +2066,59 @@ export function Faturamento() {
               {nomeCliente(linhaSelecionada.clienteId)} - R$ {Number(linhaSelecionada.valor).toFixed(2)}
             </p>
 
-            <h2 style={{ fontSize: 13, marginTop: 12 }}>Nota fiscal</h2>
-            <div className="campo-form">
-              <label>Tipo</label>
-              <select value={form.nf_tipo} onChange={(e) => setForm((f) => ({ ...f, nf_tipo: e.target.value }))}>
-                <option value="NFS-e">NFS-e (serviço)</option>
-                <option value="NF-e">NF-e (produto)</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div className="campo-form" style={{ flex: 1 }}>
-                <label>Número *</label>
-                <input type="text" value={form.nf_numero} onChange={(e) => setForm((f) => ({ ...f, nf_numero: e.target.value }))} />
-              </div>
-              <div className="campo-form" style={{ flex: 1 }}>
-                <label>Série</label>
-                <input type="text" value={form.nf_serie} onChange={(e) => setForm((f) => ({ ...f, nf_serie: e.target.value }))} />
-              </div>
-            </div>
-            <div className="campo-form">
-              <label>Chave de acesso</label>
-              <input
-                type="text"
-                maxLength={44}
-                value={form.nf_chave_acesso}
-                onChange={(e) => setForm((f) => ({ ...f, nf_chave_acesso: e.target.value }))}
-              />
-            </div>
-            <div className="campo-form">
-              <label>Data de emissão *</label>
-              <input
-                type="date"
-                value={form.nf_data_emissao}
-                onChange={(e) => setForm((f) => ({ ...f, nf_data_emissao: e.target.value }))}
-              />
-            </div>
+            {linhaSelecionada.descricao.includes('(peças)') ? (
+              <p
+                style={{
+                  fontSize: 12,
+                  background: 'var(--paper-50)',
+                  border: '1px solid var(--copper-500)',
+                  borderRadius: 6,
+                  padding: '8px 10px',
+                }}
+              >
+                Conta de peças com faturamento diferido (Grupo Cortical) - <strong>sem NF</strong>, só boleto. Os
+                campos de NF ficam ocultos de propósito pra essa conta nunca receber uma nota por engano; a mão de
+                obra já teve sua própria NFS-e emitida à parte.
+              </p>
+            ) : (
+              <>
+                <h2 style={{ fontSize: 13, marginTop: 12 }}>Nota fiscal</h2>
+                <div className="campo-form">
+                  <label>Tipo</label>
+                  <select value={form.nf_tipo} onChange={(e) => setForm((f) => ({ ...f, nf_tipo: e.target.value }))}>
+                    <option value="NFS-e">NFS-e (serviço)</option>
+                    <option value="NF-e">NF-e (produto)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Número *</label>
+                    <input type="text" value={form.nf_numero} onChange={(e) => setForm((f) => ({ ...f, nf_numero: e.target.value }))} />
+                  </div>
+                  <div className="campo-form" style={{ flex: 1 }}>
+                    <label>Série</label>
+                    <input type="text" value={form.nf_serie} onChange={(e) => setForm((f) => ({ ...f, nf_serie: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="campo-form">
+                  <label>Chave de acesso</label>
+                  <input
+                    type="text"
+                    maxLength={44}
+                    value={form.nf_chave_acesso}
+                    onChange={(e) => setForm((f) => ({ ...f, nf_chave_acesso: e.target.value }))}
+                  />
+                </div>
+                <div className="campo-form">
+                  <label>Data de emissão *</label>
+                  <input
+                    type="date"
+                    value={form.nf_data_emissao}
+                    onChange={(e) => setForm((f) => ({ ...f, nf_data_emissao: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
 
             {!linhaSelecionada.nf_numero && (
               <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
