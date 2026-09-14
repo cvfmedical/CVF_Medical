@@ -312,8 +312,13 @@ export function Faturamento() {
     };
   } | null>(null);
   // Seleção múltipla pra consolidar vários orçamentos "liberados" (sem NF
-  // ainda, sem conta ainda) do MESMO cliente numa nota só.
+  // ainda, sem conta ainda) do MESMO cliente numa nota só - OU, quando as
+  // linhas marcadas JÁ têm conta (ex.: as contas "(peças)" de faturamento
+  // diferido do Grupo Cortical, sem NF e sem boleto ainda), pra juntar o
+  // valor de todas numa conta só, pronta pra emitir um único boleto (ver
+  // consolidarContasSemNf).
   const [selecionadasFaturar, setSelecionadasFaturar] = useState<Set<string>>(new Set());
+  const [consolidandoContas, setConsolidandoContas] = useState(false);
   const [parceladoConsolidado, setParceladoConsolidado] = useState(false);
   const [parcelasConsolidado, setParcelasConsolidado] = useState<
     { valor: string; vencimento: string; boletoNumero: string; boletoLinhaDigitavel: string }[]
@@ -1150,6 +1155,62 @@ export function Faturamento() {
     return clienteIds.size === 1 ? [...clienteIds][0] : null;
   }
 
+  // Junta 2+ contas a receber JÁ EXISTENTES, sem NF e sem boleto ainda, do
+  // mesmo cliente, numa conta só (soma o valor, combina a descrição) -
+  // pedido pontual do Grupo Cortical (orçamentos com faturamento diferido
+  // de peças, ex.: ORC-5584 + ORC-5586): as peças de cada orçamento viram
+  // uma conta "(peças)" separada na hora do faturamento, mas o boleto pra
+  // cobrar o cliente pode ser um só, juntando vários orçamentos do mês.
+  // Diferente de "Lançar NF consolidada" (abrirPreviaNfse) - aqui as
+  // contas JÁ EXISTEM (não são orçamentos ainda sem conta) e não emite
+  // NFS-e nenhuma, só prepara uma conta única pronta pra "Emitir boleto
+  // via Sicoob" (ou lançar boleto manual) pelo valor somado.
+  async function consolidarContasSemNf(linhas: LinhaFaturamento[]) {
+    const contaIds = linhas.map((l) => l.contaId).filter((id): id is number => id != null);
+    if (contaIds.length < 2) return;
+    const clienteId = clienteComumDasLinhas(linhas);
+    if (!clienteId) {
+      setErro('Só é possível juntar contas do mesmo cliente.');
+      return;
+    }
+    if (!confirm(`Juntar ${contaIds.length} contas num total de R$ ${linhas.reduce((s, l) => s + l.valor, 0).toFixed(2)}?`)) {
+      return;
+    }
+    setConsolidandoContas(true);
+    setErro(null);
+    try {
+      // A conta de menor id "sobrevive" (recebe o valor somado e a
+      // descrição combinada) - as demais são removidas.
+      const ordenadas = [...linhas].sort((a, b) => (a.contaId ?? 0) - (b.contaId ?? 0));
+      const sobrevivente = ordenadas[0];
+      const restantes = ordenadas.slice(1);
+      const valorTotal = ordenadas.reduce((s, l) => s + l.valor, 0);
+      const orcamentosIds = ordenadas.map((l) => l.orcamentoId).filter((id): id is number => id != null);
+      const descricaoCombinada = ordenadas.map((l) => l.numeroOrcamento ?? l.descricao).join(' + ');
+      const { error: erroUpdate } = await supabase
+        .from('contas_receber')
+        .update({
+          valor: valorTotal,
+          descricao: `Peças ${descricaoCombinada}`,
+          ...(orcamentosIds.length > 1 ? { orcamentos_ids: orcamentosIds } : {}),
+        })
+        .eq('id', sobrevivente.contaId!);
+      if (erroUpdate) throw erroUpdate;
+      const { error: erroDelete } = await supabase
+        .from('contas_receber')
+        .delete()
+        .in('id', restantes.map((l) => l.contaId!));
+      if (erroDelete) throw erroDelete;
+      setSelecionadasFaturar(new Set());
+      qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+      qc.invalidateQueries({ queryKey: ['contas-receber'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setConsolidandoContas(false);
+    }
+  }
+
   function alternarSelecaoFaturar(chave: string) {
     setSelecionadasFaturar((s) => {
       const nova = new Set(s);
@@ -1649,6 +1710,11 @@ export function Faturamento() {
         (() => {
           const linhasSelecionadas = linhasParaFaturar.filter((l) => selecionadasFaturar.has(l.chave));
           const clienteConsolidado = clienteComumDasLinhas(linhasSelecionadas);
+          // Duas seleções mutuamente exclusivas, diferenciadas por já ter
+          // conta a receber lançada ou não - ver checkbox na tabela abaixo.
+          const semConta = linhasSelecionadas.filter((l) => l.contaId == null);
+          const comConta = linhasSelecionadas.filter((l) => l.contaId != null);
+          const mistura = semConta.length > 0 && comConta.length > 0;
           return (
             <div
               style={{
@@ -1663,22 +1729,41 @@ export function Faturamento() {
                 fontSize: 13,
               }}
             >
-              <span>{linhasSelecionadas.length} orçamento(s) selecionado(s) pra consolidar numa NF só.</span>
-              {clienteConsolidado == null && (
+              <span>
+                {linhasSelecionadas.length} conta(s)/orçamento(s) selecionado(s)
+                {comConta.length > 0 ? ` (total R$ ${linhasSelecionadas.reduce((s, l) => s + l.valor, 0).toFixed(2)})` : ''}.
+              </span>
+              {mistura && (
                 <span className="erro-login" style={{ margin: 0 }}>
-                  Os orçamentos marcados são de clientes diferentes - selecione só orçamentos do mesmo cliente.
+                  Não dá pra misturar orçamentos ainda sem conta com contas já lançadas - marque só um tipo por vez.
+                </span>
+              )}
+              {!mistura && clienteConsolidado == null && (
+                <span className="erro-login" style={{ margin: 0 }}>
+                  As linhas marcadas são de clientes diferentes - selecione só linhas do mesmo cliente.
                 </span>
               )}
               <button className="botao-secundario botao-pequeno" onClick={() => setSelecionadasFaturar(new Set())}>
                 Limpar seleção
               </button>
-              <button
-                className="botao-primario botao-pequeno"
-                disabled={linhasSelecionadas.length < 2 || clienteConsolidado == null}
-                onClick={() => abrirPreviaNfse(linhasSelecionadas)}
-              >
-                Lançar NF consolidada ({linhasSelecionadas.length})
-              </button>
+              {comConta.length > 0 ? (
+                <button
+                  className="botao-primario botao-pequeno"
+                  disabled={mistura || comConta.length < 2 || clienteConsolidado == null || consolidandoContas}
+                  onClick={() => consolidarContasSemNf(comConta)}
+                  title="Soma o valor de todas numa conta só (sem NF), pronta pra emitir um único boleto"
+                >
+                  {consolidandoContas ? 'Juntando...' : `Juntar em 1 conta (${comConta.length})`}
+                </button>
+              ) : (
+                <button
+                  className="botao-primario botao-pequeno"
+                  disabled={mistura || semConta.length < 2 || clienteConsolidado == null}
+                  onClick={() => abrirPreviaNfse(semConta)}
+                >
+                  Lançar NF consolidada ({semConta.length})
+                </button>
+              )}
             </div>
           );
         })()}
@@ -1775,14 +1860,20 @@ export function Faturamento() {
           {linhasOrdenadasFiltradas.map((l) => (
             <tr key={l.chave}>
               <td>
-                {l.contaId == null && l.orcamentoId != null && !l.nf_numero && (
-                  <input
-                    type="checkbox"
-                    title="Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente"
-                    checked={selecionadasFaturar.has(l.chave)}
-                    onChange={() => alternarSelecaoFaturar(l.chave)}
-                  />
-                )}
+                {((l.contaId == null && l.orcamentoId != null) ||
+                  (l.contaId != null && !l.boleto_numero)) &&
+                  !l.nf_numero && (
+                    <input
+                      type="checkbox"
+                      title={
+                        l.contaId == null
+                          ? 'Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente'
+                          : 'Marcar pra juntar com outra(s) conta(s) do mesmo cliente numa conta só (ex.: peças de vários orçamentos num boleto único)'
+                      }
+                      checked={selecionadasFaturar.has(l.chave)}
+                      onChange={() => alternarSelecaoFaturar(l.chave)}
+                    />
+                  )}
               </td>
               <td>
                 {l.ordemServicoId ? (
