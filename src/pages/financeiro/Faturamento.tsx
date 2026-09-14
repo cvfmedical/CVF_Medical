@@ -827,7 +827,34 @@ export function Faturamento() {
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
 
-      alert(`E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexo(s).`);
+      // O PDF oficial da NFS-e (gerado pela Focus NFe/prefeitura) fica
+      // hospedado num bucket deles, fora do nosso domínio - anexar esses
+      // bytes aqui exigiria buscar essa URL externa direto do navegador,
+      // sujeito a bloqueio de CORS do lado da Focus (fora do nosso
+      // controle). Em vez de arriscar isso, pede pra própria Focus reenviar
+      // a NFS-e oficial (mesmo mecanismo do botão "Reenviar NF oficial por
+      // e-mail") pros mesmos destinatários - chega numa 2ª mensagem, mas
+      // com o PDF de verdade, sem depender de anexar nada manualmente.
+      let nfReenviada = false;
+      if (form.nf_numero) {
+        try {
+          const { data: dataNf, error: erroNf } = await supabase.functions.invoke('emitir-nfse', {
+            body: { contaId: linhaSelecionada.contaId, acao: 'reenviar_email', emails: destinatarios },
+          });
+          nfReenviada = !erroNf && !dataNf?.error;
+        } catch {
+          nfReenviada = false;
+        }
+      }
+
+      alert(
+        `E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexo(s) (orçamento + boleto).` +
+          (form.nf_numero
+            ? nfReenviada
+              ? ' A NFS-e oficial foi pedida à Focus NFe e chega numa 2ª mensagem separada, com o PDF de verdade.'
+              : ' Atenção: não foi possível pedir o reenvio da NFS-e oficial - envie manualmente pelo botão "Reenviar NF oficial por e-mail".'
+            : ''),
+      );
     } catch (e) {
       setErro(await mensagemErroFuncao(e));
     } finally {
@@ -2261,7 +2288,7 @@ export function Faturamento() {
                     className="botao-secundario botao-pequeno"
                     onClick={enviarEmailCompleto}
                     disabled={enviandoEmailCompleto}
-                    title="Envia por e-mail o PDF do orçamento + boleto(s) já emitido(s) - a NF é só mencionada no texto"
+                    title="Envia por e-mail o PDF do orçamento + boleto(s) já emitido(s), e pede à Focus NFe pra reenviar a NFS-e oficial pro mesmo destinatário (chega numa 2ª mensagem separada, com o PDF de verdade)"
                     style={{ marginBottom: 8 }}
                   >
                     {enviandoEmailCompleto ? 'Enviando...' : 'Enviar e-mail (Orçamento + NF + Boleto)'}
