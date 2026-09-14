@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE } from '../../lib/statusOS';
+import { STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO } from '../../lib/statusOS';
 import { AlertaGarantia } from '../../components/AlertaGarantia';
 import { normalizarBusca } from '../../lib/normalizarBusca';
 import { normalizarTagContagem } from '../../lib/normalizarTagContagem';
@@ -305,6 +305,15 @@ export function OrcamentoFinanceiro() {
   const podeAprovarManualmente =
     orcamentoSelecionado?.status === 'Enviado ao Cliente' ||
     orcamentoSelecionado?.status === 'Aguardando Envio ao Cliente';
+  // Equipamento sem condição de conserto - pode ser descoberto em qualquer
+  // etapa (inclusive depois de aprovado, já em manutenção). Libera sempre
+  // que ainda não foi devolvido/entregue, pra não reabrir um caso já
+  // encerrado.
+  const podeMarcarSemConserto =
+    !!orcamentoSelecionado &&
+    orcamentoSelecionado.status !== 'Recusado' &&
+    orcamentoSelecionado.ordens_servico?.status_os !== STATUS_ENTREGUE &&
+    orcamentoSelecionado.ordens_servico?.status_os !== STATUS_DEVOLUCAO_SEM_REPARO;
   // Só libera o atalho pra Faturamento quando o equipamento já está
   // pronto/entregue (mesma porteira usada lá) - antes disso não tem o que
   // faturar ainda, mesmo com o orçamento já aprovado.
@@ -1496,6 +1505,52 @@ export function OrcamentoFinanceiro() {
     }
   }
 
+  // Equipamento sem condição de conserto - reaproveita o mesmo mecanismo
+  // já usado quando o CLIENTE recusa o orçamento (trigger
+  // sync_status_os_por_orcamento no banco: orcamentos.status='Recusado'
+  // -> ordens_servico.status_os='Devolução sem reparo (orçamento
+  // recusado)'), que já é exatamente o fluxo certo aqui - sai da
+  // manutenção, não gera NF, e fica disponível em Entrega.tsx pra
+  // devolver ao cliente sem reparo. O motivo real (sem condição técnica,
+  // não recusa de preço) fica registrado nas observações do financeiro
+  // pra não se perder no meio dos "Recusado" por preço.
+  async function marcarSemCondicaoDeConserto() {
+    if (!selecionadoId || !orcamentoSelecionado) return;
+    const motivo = prompt(
+      'Motivo (equipamento sem condição de conserto) - fica salvo nas observações do orçamento:',
+    );
+    if (motivo === null) return; // usuário cancelou
+    if (!motivo.trim()) {
+      alert('Informe o motivo.');
+      return;
+    }
+    if (
+      !confirm(
+        'Confirma marcar como SEM CONDIÇÃO DE CONSERTO? O orçamento sai do fluxo de reparo e a OS vai direto pra fila de devolução sem reparo, em Entrega - não gera NF nem cobrança.',
+      )
+    ) {
+      return;
+    }
+    setErro(null);
+    try {
+      const observacoesAtualizadas = [
+        `[Sem condição de conserto] ${motivo.trim()}`,
+        orcamentoSelecionado.observacoes_financeiro,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+      const { error } = await supabase
+        .from('orcamentos')
+        .update({ status: 'Recusado', observacoes_financeiro: observacoesAtualizadas })
+        .eq('id', selecionadoId);
+      if (error) throw error;
+      setSelecionadoId(null);
+      qc.invalidateQueries({ queryKey: ['orcamentos-todos'] });
+    } catch (e) {
+      setErro(mensagemErro(e));
+    }
+  }
+
   async function excluirItem(itemId: number) {
     if (!confirm('Remover este item do orçamento?')) return;
     const { error } = await supabase.from('orcamento_itens').delete().eq('id', itemId);
@@ -2244,6 +2299,15 @@ export function OrcamentoFinanceiro() {
                 {podeAprovarManualmente && (
                   <button className="botao-secundario" onClick={aprovarManualmente}>
                     Aprovar manualmente
+                  </button>
+                )}
+                {podeMarcarSemConserto && (
+                  <button
+                    className="botao-secundario perigo"
+                    onClick={marcarSemCondicaoDeConserto}
+                    title="Equipamento não tem conserto (mesmo já aprovado/em manutenção) - tira do fluxo de reparo e manda pra devolução sem reparo em Entrega, sem gerar NF"
+                  >
+                    Sem condição de conserto
                   </button>
                 )}
                 {podeLancarNF && (
