@@ -168,6 +168,29 @@ export function BancadaVisao() {
 
   const osSelecionada = osQuery.data?.find((o) => String(o.id) === osId) ?? null;
   const naoOtica = osSelecionada?.eh_otica === false;
+  // BUG REAL corrigido (2026-09-15): "eh_otica" fica null quando a Entrada
+  // não define explicitamente (confirmado: 13 OS's ativas assim, ex.:
+  // "CHAVE PARAFUSO HEX", "OSTEOTOMO" - claramente não-óticas). Como
+  // `naoOtica` só é true quando eh_otica === false, um valor null caía
+  // silenciosamente no fluxo de ÓTICA (câmera/ISO 8600), errado pra um
+  // instrumento genérico. Agora exige classificar aqui antes de liberar
+  // qualquer um dos dois fluxos, e grava a resposta na OS pra não perguntar
+  // de novo.
+  const classificacaoPendente = osSelecionada != null && osSelecionada.eh_otica == null;
+  const [classificando, setClassificando] = useState(false);
+  async function classificarEhOtica(valor: boolean) {
+    if (!osSelecionada) return;
+    setClassificando(true);
+    try {
+      const { error } = await supabase.from('ordens_servico').update({ eh_otica: valor }).eq('id', osSelecionada.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['os-bancada-visao'] });
+    } catch (e) {
+      alert(mensagemErro(e));
+    } finally {
+      setClassificando(false);
+    }
+  }
   const ehAdministrador = funcionario?.nivel_acesso === 'Administrador';
   const { pedirConfirmacao, ModalConfirmacao } = useConfirmarSenha();
 
@@ -755,7 +778,25 @@ export function BancadaVisao() {
           )}
         </div>
 
-        {naoOtica ? (
+        {classificacaoPendente ? (
+          <div className="campo-form" style={{ maxWidth: 420, border: '1px solid var(--copper-500)', borderRadius: 8, padding: 10 }}>
+            <p style={{ fontSize: 13 }}>
+              <strong>
+                {[osSelecionada?.optica_desc, osSelecionada?.optica_fab].filter(Boolean).join(' - ') || 'Este item'}
+              </strong>{' '}
+              ainda não foi classificado - antes de continuar, é uma ótica (vai pro ensaio ISO 8600 com câmera) ou
+              outro tipo de produto/serviço (vai pro Teste de Qualidade/Funcionamento)?
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="botao-secundario botao-pequeno" onClick={() => classificarEhOtica(true)} disabled={classificando}>
+                É ótica
+              </button>
+              <button className="botao-secundario botao-pequeno" onClick={() => classificarEhOtica(false)} disabled={classificando}>
+                Não é ótica
+              </button>
+            </div>
+          </div>
+        ) : naoOtica ? (
           <div className="campo-form" style={{ maxWidth: 420 }}>
             <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
               Equipamento não-ótico
@@ -897,55 +938,56 @@ export function BancadaVisao() {
         {cvErro && <p className="erro-login">{cvErro}</p>}
         {erro && <p className="erro-login">{erro}</p>}
 
-        {naoOtica ? (
-          ehAdministrador ? (
-            <button
-              className="botao-primario botao-pequeno"
-              onClick={() =>
-                pedirConfirmacao(() => gerarLaudo(), {
-                  titulo: 'Finalizar equipamento não-ótico',
-                  mensagem: `Confirma ${resultadoManual === 'Aprovado' ? 'aprovar' : 'reprovar'} e finalizar o orçamento? Esse equipamento não passa pelos testes de laboratório${resultadoManual === 'Aprovado' ? ' - vai direto para "Pronto para entrega"' : ''}.`,
-                })
-              }
-              disabled={gerando || !osId}
-            >
-              {gerando ? 'Finalizando...' : 'Finalizar orçamento'}
-            </button>
-          ) : (
-            <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 420 }}>
-              Só administradores podem finalizar equipamentos não-óticos.
-            </p>
-          )
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 460 }}>
-              <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
-                Iniciar inspeção (medição automática ISO 8600)
-              </button>
-              <button className="botao-secundario botao-pequeno" onClick={() => gerarLaudo()} disabled={gerando || !osId}>
-                {gerando ? 'Gerando...' : 'Registrar sem câmera (manual)'}
-              </button>
-            </div>
-            <label
-              className="botao-secundario botao-pequeno"
-              style={{ display: 'inline-block', cursor: osId && !gerando ? 'pointer' : 'not-allowed', maxWidth: 460, marginTop: 8, opacity: osId && !gerando ? 1 : 0.6 }}
-            >
-              {gerando ? 'Analisando imagem...' : 'Analisar imagem ISO 8600 (arquivo, sem câmera)'}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={analisarImagemArquivo}
+        {!classificacaoPendente &&
+          (naoOtica ? (
+            ehAdministrador ? (
+              <button
+                className="botao-primario botao-pequeno"
+                onClick={() =>
+                  pedirConfirmacao(() => gerarLaudo(), {
+                    titulo: 'Finalizar equipamento não-ótico',
+                    mensagem: `Confirma ${resultadoManual === 'Aprovado' ? 'aprovar' : 'reprovar'} e finalizar o orçamento? Esse equipamento não passa pelos testes de laboratório${resultadoManual === 'Aprovado' ? ' - vai direto para "Pronto para entrega"' : ''}.`,
+                  })
+                }
                 disabled={gerando || !osId}
-                style={{ display: 'none' }}
-              />
-            </label>
-            <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 460, marginTop: 4 }}>
-              "Iniciar inspeção" abre a câmera e faz a medição automática ISO 8600 em segundo plano (não trava a tela).
-              "Analisar imagem" roda a mesma medição sobre uma foto (útil para testar ou sem câmera).
-              "Registrar sem câmera" gera um laudo só com o resultado que você marcar, sem câmera nem medição.
-            </p>
-          </>
-        )}
+              >
+                {gerando ? 'Finalizando...' : 'Finalizar orçamento'}
+              </button>
+            ) : (
+              <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 420 }}>
+                Só administradores podem finalizar equipamentos não-óticos.
+              </p>
+            )
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', maxWidth: 460 }}>
+                <button className="botao-primario botao-pequeno" onClick={iniciarInspecao} disabled={!osId}>
+                  Iniciar inspeção (medição automática ISO 8600)
+                </button>
+                <button className="botao-secundario botao-pequeno" onClick={() => gerarLaudo()} disabled={gerando || !osId}>
+                  {gerando ? 'Gerando...' : 'Registrar sem câmera (manual)'}
+                </button>
+              </div>
+              <label
+                className="botao-secundario botao-pequeno"
+                style={{ display: 'inline-block', cursor: osId && !gerando ? 'pointer' : 'not-allowed', maxWidth: 460, marginTop: 8, opacity: osId && !gerando ? 1 : 0.6 }}
+              >
+                {gerando ? 'Analisando imagem...' : 'Analisar imagem ISO 8600 (arquivo, sem câmera)'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={analisarImagemArquivo}
+                  disabled={gerando || !osId}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              <p style={{ fontSize: 12, color: 'var(--ink-400)', maxWidth: 460, marginTop: 4 }}>
+                "Iniciar inspeção" abre a câmera e faz a medição automática ISO 8600 em segundo plano (não trava a
+                tela). "Analisar imagem" roda a mesma medição sobre uma foto (útil para testar ou sem câmera).
+                "Registrar sem câmera" gera um laudo só com o resultado que você marcar, sem câmera nem medição.
+              </p>
+            </>
+          ))}
         {ModalConfirmacao}
       </div>
     );
