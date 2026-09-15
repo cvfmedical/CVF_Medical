@@ -2131,7 +2131,7 @@ export function Faturamento() {
               </>
             )}
 
-            {!linhaSelecionada.nf_numero && (
+            {!linhaSelecionada.boleto_numero && (
               <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
                 <input
                   type="checkbox"
@@ -2144,6 +2144,13 @@ export function Faturamento() {
                   Pagamento parcelado?
                 </label>
               </div>
+            )}
+            {linhaSelecionada.nf_numero && !linhaSelecionada.boleto_numero && (
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
+                Essa conta já tem NF lançada ({linhaSelecionada.nf_tipo} {linhaSelecionada.nf_numero}) - marcar
+                "Pagamento parcelado?" divide o valor em N contas separadas, todas com a MESMA NF, cada uma com seu
+                próprio boleto (digitado manualmente aqui, ou emitido via Sicoob individualmente depois).
+              </p>
             )}
 
             {parcelado ? (
