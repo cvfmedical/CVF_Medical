@@ -16,11 +16,25 @@ interface Anexo {
   content: string; // PDF em base64 (sem o prefixo data:)
 }
 
+interface AnexoUrl {
+  filename: string;
+  url: string;
+}
+
 interface Corpo {
   to: string | string[];
   subject: string;
   html: string;
   anexos?: Anexo[];
+  // Anexos buscados do lado do SERVIDOR (pedido do usuário, 2026-09-15) -
+  // usado pro PDF oficial da NFS-e, hospedado num bucket da Focus NFe fora
+  // do nosso domínio. Buscar essa URL direto do navegador esbarraria em
+  // CORS do lado da Focus (fora do nosso controle); buscar aqui na edge
+  // function não tem esse problema, porque CORS só existe pra requisições
+  // feitas por um navegador, não servidor-a-servidor - permite mandar tudo
+  // (orçamento + NF oficial + boleto) num e-mail só, em vez de precisar de
+  // uma 2ª mensagem separada pedindo pra Focus reenviar.
+  anexosUrls?: AnexoUrl[];
 }
 
 function json(body: unknown, status = 200) {
@@ -28,6 +42,18 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Evita "Maximum call stack size exceeded" (String.fromCharCode com
+// spread de um array grande) em PDFs maiores, convertendo em pedaços.
+function bufferParaBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binario = '';
+  const tamanhoBloco = 0x8000;
+  for (let i = 0; i < bytes.length; i += tamanhoBloco) {
+    binario += String.fromCharCode(...bytes.subarray(i, i + tamanhoBloco));
+  }
+  return btoa(binario);
 }
 
 Deno.serve(async (req: Request) => {
@@ -77,6 +103,22 @@ Deno.serve(async (req: Request) => {
   // Sobrepõe via env se um dia precisar trocar/desativar.
   const copiaFinanceiro = Deno.env.get('RESEND_BCC_ORCAMENTO') ?? 'financeiro@cvfmedical.com.br';
 
+  // Busca cada anexo-por-URL do lado do servidor (ver comentário no tipo
+  // AnexoUrl acima). Se uma URL falhar (nota antiga sem PDF salvo, link
+  // expirado etc.), só pula ela - não trava o envio dos outros anexos.
+  const anexosDeUrl: Anexo[] = [];
+  for (const a of corpo.anexosUrls ?? []) {
+    if (!a?.url || !a?.filename) continue;
+    try {
+      const respAnexo = await fetch(a.url);
+      if (!respAnexo.ok) continue;
+      const buffer = await respAnexo.arrayBuffer();
+      anexosDeUrl.push({ filename: a.filename, content: bufferParaBase64(buffer) });
+    } catch {
+      // Segue sem esse anexo específico.
+    }
+  }
+
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -89,7 +131,7 @@ Deno.serve(async (req: Request) => {
       bcc: copiaFinanceiro || undefined,
       subject: corpo.subject,
       html: corpo.html,
-      attachments: (corpo.anexos ?? []).map((a) => ({ filename: a.filename, content: a.content })),
+      attachments: [...(corpo.anexos ?? []), ...anexosDeUrl].map((a) => ({ filename: a.filename, content: a.content })),
     }),
   });
 

@@ -285,11 +285,14 @@ export function Faturamento() {
   }
   const [salvando, setSalvando] = useState(false);
   const [emitindoBoletoSicoob, setEmitindoBoletoSicoob] = useState(false);
-  // Parcelamento decidido na hora de EMITIR O BOLETO, separado do
-  // "Pagamento parcelado?" de quando a NF é lançada pela primeira vez -
-  // cobre o caso de já ter uma NF registrada (uma conta só) e só agora
-  // decidir dividir a cobrança em N boletos.
-  const [parcelarBoleto, setParcelarBoleto] = useState(false);
+  // Forma de pagamento do boleto, decidida na hora de EMITIR (separado do
+  // "Pagamento parcelado?" de quando a NF é lançada pela primeira vez) -
+  // pedido do usuário (2026-09-15) pra simplificar essa escolha: 30/28 dias
+  // direto, parcelado (usa numParcelasAuto/primeiroVencimentoAuto/
+  // intervaloDiasAuto abaixo) ou lançamento manual (sem Sicoob, esconde o
+  // "Pagamento parcelado?"/campos de boleto por trás dessa opção pra não
+  // poluir a tela principal).
+  const [formaPagamentoBoleto, setFormaPagamentoBoleto] = useState<'30' | '28' | 'parcelado' | 'manual'>('30');
   const [enviandoEmailCompleto, setEnviandoEmailCompleto] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
   const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
@@ -592,7 +595,7 @@ export function Faturamento() {
     });
     setParcelado(false);
     setParcelas([]);
-    setParcelarBoleto(false);
+    setFormaPagamentoBoleto('30');
     setNumParcelasAuto('2');
     setPrimeiroVencimentoAuto('');
     setIntervaloDiasAuto('30');
@@ -604,14 +607,28 @@ export function Faturamento() {
   // receber já existe (precisa de um contaId pra Sicoob associar o
   // boleto). Preenche os campos de boleto sozinho a partir do retorno,
   // sem precisar digitar linha digitável à mão.
-  async function emitirBoletoSicoob() {
+  //
+  // Recebe o prazo (28 ou 30 dias, a partir de HOJE) escolhido na tela de
+  // "Forma de pagamento" (pedido do usuário, 2026-09-15, pra simplificar
+  // essa escolha) - grava esse vencimento na conta ANTES de chamar a
+  // Sicoob, já que a função 'incluir' usa o vencimento já salvo na conta
+  // (boleto_vencimento ou data_vencimento), não recebe a data como parâmetro.
+  async function emitirBoletoSicoobComPrazo(dias: number) {
     if (!linhaSelecionada?.contaId) {
       setErro('Salve a nota fiscal primeiro (isso cria a conta a receber) antes de emitir o boleto pela Sicoob.');
       return;
     }
+    const vencimento = new Date();
+    vencimento.setDate(vencimento.getDate() + dias);
+    const dataVencimentoIso = vencimento.toISOString().slice(0, 10);
     setEmitindoBoletoSicoob(true);
     setErro(null);
     try {
+      const { error: erroVencimento } = await supabase
+        .from('contas_receber')
+        .update({ boleto_vencimento: dataVencimentoIso })
+        .eq('id', linhaSelecionada.contaId);
+      if (erroVencimento) throw erroVencimento;
       const { data, error } = await supabase.functions.invoke('emitir-boleto', {
         body: { acao: 'incluir', contaId: linhaSelecionada.contaId },
       });
@@ -621,6 +638,7 @@ export function Faturamento() {
         ...f,
         boleto_numero: String(data.boletoNumero ?? ''),
         boleto_linha_digitavel: data.linhaDigitavel ?? '',
+        boleto_vencimento: dataVencimentoIso,
       }));
       // Atualiza a linha selecionada na hora, sem esperar reabrir o modal -
       // é o que decide se mostra "Emitido via Sicoob" ou o botão de novo.
@@ -642,13 +660,31 @@ export function Faturamento() {
     }
   }
 
+  // Remove um sufixo "- Parcela N/M" já existente no fim da descrição -
+  // BUG REAL corrigido em 2026-09-15 (ORC-5661/5662, OSTEO SOLUTION):
+  // dividir uma conta que JÁ era "Parcela 3/3" de uma NF consolidada colava
+  // "- Parcela 1/3" em cima, sem limpar, resultando em descrições tipo
+  // "...- Parcela 3/3 - Parcela 1/3" - confuso e sem sentido pro cliente.
+  const REGEX_SUFIXO_PARCELA = / - Parcela \d+\/\d+$/;
+  function descricaoSemParcela(descricao: string): string {
+    return descricao.replace(REGEX_SUFIXO_PARCELA, '');
+  }
+
   // Divide a conta atual (NF já lançada, 1 boleto) em N contas/boletos -
   // decisão tomada agora, na hora de emitir, não lá atrás no lançamento da
   // NF. Segue o mesmo padrão já usado em salvarNota() pro parcelamento no
   // lançamento (apaga a conta única, cria N no lugar, cada uma com sua
   // própria data_vencimento) - só que aqui cada parcela nova já emite seu
   // boleto na Sicoob em seguida, sequencialmente.
-  async function emitirBoletosParcelados() {
+  //
+  // Exige confirmação por senha (2026-09-15) - incidente real: essa ação é
+  // irreversível por aqui (a conta original é APAGADA e N boletos REAIS já
+  // saem registrados na Sicoob) e um clique num botão sem confirmação
+  // nenhuma já causou uma divisão indevida de uma parcela que não devia
+  // (ORC-5661/5662) - os 3 boletos errados só puderam ser desfeitos
+  // cancelando manualmente no internet banking da Sicoob, já que não existe
+  // endpoint de cancelamento confirmado na API v3 pra automatizar isso.
+  function emitirBoletosParcelados() {
     if (!linhaSelecionada?.contaId) return;
     const n = Number(numParcelasAuto);
     if (!n || n < 2) {
@@ -659,64 +695,93 @@ export function Faturamento() {
       setErro('Informe o vencimento da 1ª parcela.');
       return;
     }
-    const intervalo = Number(intervaloDiasAuto) || 30;
-    const totalCentavos = Math.round(linhaSelecionada.valor * 100);
-    const baseCentavos = Math.floor(totalCentavos / n);
-    const restoCentavos = totalCentavos - baseCentavos * n;
+    const contaId = linhaSelecionada.contaId;
+    const valorTotal = linhaSelecionada.valor;
+    pedirConfirmacao(
+      async () => {
+        const intervalo = Number(intervaloDiasAuto) || 30;
+        const totalCentavos = Math.round(valorTotal * 100);
+        const baseCentavos = Math.floor(totalCentavos / n);
+        const restoCentavos = totalCentavos - baseCentavos * n;
 
-    setEmitindoBoletoSicoob(true);
-    setErro(null);
-    try {
-      const { error: erroRemover } = await supabase.from('contas_receber').delete().eq('id', linhaSelecionada.contaId);
-      if (erroRemover) throw erroRemover;
+        setEmitindoBoletoSicoob(true);
+        setErro(null);
+        try {
+          // Busca os dados da conta ANTES de apagar - precisa preservar o
+          // vínculo com a NF (orcamentos_ids/nfse_ref/status/PDF) nas
+          // parcelas novas. BUG REAL corrigido em 2026-09-15: antes essa
+          // function apagava a conta e criava N novas sem copiar isso, e
+          // as novas ficavam "órfãs" (sem "Ver DANFSe"/"Cancelar NF" -
+          // mesmo já tendo NF autorizada de verdade por trás).
+          const { data: contaOriginal, error: erroOriginal } = await supabase
+            .from('contas_receber')
+            .select('descricao, orcamento_id, orcamentos_ids, nfse_ref, nfse_status, nfse_pdf_path')
+            .eq('id', contaId)
+            .single();
+          if (erroOriginal || !contaOriginal) throw erroOriginal ?? new Error('Conta não encontrada.');
+          const descricaoBase = descricaoSemParcela(contaOriginal.descricao ?? linhaSelecionada.descricao);
 
-      const contaIdsNovos: number[] = [];
-      for (let i = 0; i < n; i++) {
-        const valorCentavos = baseCentavos + (i === n - 1 ? restoCentavos : 0);
-        const vencimento = new Date(`${primeiroVencimentoAuto}T00:00:00`);
-        vencimento.setDate(vencimento.getDate() + intervalo * i);
-        const numeroConta = await gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
-        const { data: novaConta, error } = await supabase
-          .from('contas_receber')
-          .insert({
-            numero_conta: numeroConta,
-            orcamento_id: linhaSelecionada.orcamentoId,
-            cliente_id: linhaSelecionada.clienteId,
-            descricao: `${linhaSelecionada.descricao} - Parcela ${i + 1}/${n}`,
-            valor: valorCentavos / 100,
-            data_vencimento: vencimento.toISOString().slice(0, 10),
-            status: 'Em aberto',
-            nf_tipo: form.nf_tipo,
-            nf_numero: form.nf_numero,
-            nf_serie: form.nf_serie || null,
-            nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
-            nf_data_emissao: form.nf_data_emissao || null,
-          })
-          .select('id')
-          .single();
-        if (error) throw error;
-        contaIdsNovos.push(novaConta.id);
-      }
+          const { error: erroRemover } = await supabase.from('contas_receber').delete().eq('id', contaId);
+          if (erroRemover) throw erroRemover;
 
-      // Emite o boleto de cada parcela na Sicoob, uma de cada vez (chamadas
-      // em paralelo arriscariam número de conta/numeroParcela colidindo).
-      for (const id of contaIdsNovos) {
-        const { data, error } = await supabase.functions.invoke('emitir-boleto', {
-          body: { acao: 'incluir', contaId: id },
-        });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-      }
+          const contaIdsNovos: number[] = [];
+          for (let i = 0; i < n; i++) {
+            const valorCentavos = baseCentavos + (i === n - 1 ? restoCentavos : 0);
+            const vencimento = new Date(`${primeiroVencimentoAuto}T00:00:00`);
+            vencimento.setDate(vencimento.getDate() + intervalo * i);
+            const numeroConta = await gerarNumeroSequencial('CR', 'contas_receber', 'numero_conta');
+            const { data: novaConta, error } = await supabase
+              .from('contas_receber')
+              .insert({
+                numero_conta: numeroConta,
+                orcamento_id: contaOriginal.orcamento_id,
+                orcamentos_ids: contaOriginal.orcamentos_ids,
+                cliente_id: linhaSelecionada.clienteId,
+                descricao: `${descricaoBase} - Parcela ${i + 1}/${n}`,
+                valor: valorCentavos / 100,
+                data_vencimento: vencimento.toISOString().slice(0, 10),
+                status: 'Em aberto',
+                nf_tipo: form.nf_tipo,
+                nf_numero: form.nf_numero,
+                nf_serie: form.nf_serie || null,
+                nf_chave_acesso: form.nf_chave_acesso ? form.nf_chave_acesso.replace(/\D/g, '') : null,
+                nf_data_emissao: form.nf_data_emissao || null,
+                nfse_ref: contaOriginal.nfse_ref,
+                nfse_status: contaOriginal.nfse_status,
+                nfse_pdf_path: contaOriginal.nfse_pdf_path,
+              })
+              .select('id')
+              .single();
+            if (error) throw error;
+            contaIdsNovos.push(novaConta.id);
+          }
 
-      setLinhaSelecionada(null);
-      qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
-    } catch (e) {
-      setErro(
-        `${await mensagemErroFuncao(e)} (confira em Contas a Receber quais parcelas já ficaram com boleto emitido antes de tentar de novo)`,
-      );
-    } finally {
-      setEmitindoBoletoSicoob(false);
-    }
+          // Emite o boleto de cada parcela na Sicoob, uma de cada vez
+          // (chamadas em paralelo arriscariam número de conta/numeroParcela
+          // colidindo).
+          for (const id of contaIdsNovos) {
+            const { data, error } = await supabase.functions.invoke('emitir-boleto', {
+              body: { acao: 'incluir', contaId: id },
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+          }
+
+          setLinhaSelecionada(null);
+          qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+        } catch (e) {
+          setErro(
+            `${await mensagemErroFuncao(e)} (confira em Contas a Receber quais parcelas já ficaram com boleto emitido antes de tentar de novo)`,
+          );
+        } finally {
+          setEmitindoBoletoSicoob(false);
+        }
+      },
+      {
+        titulo: 'Dividir boleto em parcelas via Sicoob',
+        mensagem: `Confirma dividir esta conta (R$ ${valorTotal.toFixed(2)}) em ${n} parcelas? A conta atual será apagada e substituída por ${n} novas, cada uma já com um boleto REAL emitido agora na Sicoob - não dá pra desfazer automaticamente depois (só cancelando os boletos manualmente no banco).`,
+      },
+    );
   }
 
   // Monta e envia (via Resend, function enviar-orcamento) um e-mail com o
@@ -842,6 +907,20 @@ export function Faturamento() {
         anexos.push({ filename: `Boleto-${c.boleto_numero ?? c.numero_conta}.pdf`, content: await blobParaBase64(blob) });
       }
 
+      // O PDF oficial da NFS-e (gerado pela Focus NFe/prefeitura) fica
+      // hospedado num bucket deles, fora do nosso domínio. Pedido do
+      // usuário (2026-09-15): buscar esses bytes direto do NAVEGADOR
+      // esbarraria em CORS do lado da Focus (fora do nosso controle) - mas
+      // buscar do lado do SERVIDOR (edge function) não tem esse problema,
+      // já que CORS só existe pra requisições de navegador. Manda a URL
+      // pra "enviar-orcamento" buscar e anexar ela mesma, tudo num e-mail
+      // só. Quando não tem o link salvo (ex.: NF lançada manualmente, sem
+      // nunca ter sido consultada pela Focus), cai no fallback antigo:
+      // pede à própria Focus reenviar a NFS-e oficial numa 2ª mensagem.
+      const anexosUrls = linhaSelecionada.nfsePdfPath
+        ? [{ filename: `NFSe-${form.nf_numero}.pdf`, url: linhaSelecionada.nfsePdfPath }]
+        : [];
+
       const nfTexto = form.nf_numero
         ? `${form.nf_tipo ?? 'NF'} ${form.nf_numero}${form.nf_serie ? '/' + form.nf_serie : ''}`
         : 'a nota fiscal referente a este orçamento';
@@ -873,21 +952,17 @@ export function Faturamento() {
           subject: `Q-CVF Medical - Orçamento ${orc.numero_orcamento} faturado (${formatarMoeda(totalFinal)})`,
           html,
           anexos,
+          anexosUrls,
         },
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
 
-      // O PDF oficial da NFS-e (gerado pela Focus NFe/prefeitura) fica
-      // hospedado num bucket deles, fora do nosso domínio - anexar esses
-      // bytes aqui exigiria buscar essa URL externa direto do navegador,
-      // sujeito a bloqueio de CORS do lado da Focus (fora do nosso
-      // controle). Em vez de arriscar isso, pede pra própria Focus reenviar
-      // a NFS-e oficial (mesmo mecanismo do botão "Reenviar NF oficial por
-      // e-mail") pros mesmos destinatários - chega numa 2ª mensagem, mas
-      // com o PDF de verdade, sem depender de anexar nada manualmente.
+      // Fallback: só quando não tinha o link do PDF oficial salvo (NF
+      // lançada manualmente, nunca confirmada via Focus) - pede à Focus
+      // reenviar a NFS-e oficial numa 2ª mensagem separada.
       let nfReenviada = false;
-      if (form.nf_numero) {
+      if (form.nf_numero && anexosUrls.length === 0) {
         try {
           const { data: dataNf, error: erroNf } = await supabase.functions.invoke('emitir-nfse', {
             body: { contaId: linhaSelecionada.contaId, acao: 'reenviar_email', emails: destinatarios },
@@ -898,13 +973,16 @@ export function Faturamento() {
         }
       }
 
+      const totalAnexos = anexos.length + anexosUrls.length;
       alert(
-        `E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexo(s) (orçamento + boleto).` +
-          (form.nf_numero
-            ? nfReenviada
-              ? ' A NFS-e oficial foi pedida à Focus NFe e chega numa 2ª mensagem separada, com o PDF de verdade.'
-              : ' Atenção: não foi possível pedir o reenvio da NFS-e oficial - envie manualmente pelo botão "Reenviar NF oficial por e-mail".'
-            : ''),
+        anexosUrls.length > 0
+          ? `E-mail enviado para ${destinatarios.join(', ')} com ${totalAnexos} anexo(s) (orçamento + NF oficial + boleto), tudo numa mensagem só.`
+          : `E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexo(s) (orçamento + boleto).` +
+              (form.nf_numero
+                ? nfReenviada
+                  ? ' A NFS-e oficial foi pedida à Focus NFe e chega numa 2ª mensagem separada, com o PDF de verdade.'
+                  : ' Atenção: não foi possível pedir o reenvio da NFS-e oficial - envie manualmente pelo botão "Reenviar NF oficial por e-mail".'
+                : ''),
       );
     } catch (e) {
       setErro(await mensagemErroFuncao(e));
@@ -2201,288 +2279,280 @@ export function Faturamento() {
             )}
 
             {!linhaSelecionada.boleto_numero && (
-              <div className="campo-form" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
-                <input
-                  type="checkbox"
-                  id="parcelado"
-                  checked={parcelado}
-                  onChange={(e) => setParcelado(e.target.checked)}
-                  style={{ width: 'auto' }}
-                />
-                <label htmlFor="parcelado" style={{ marginBottom: 0 }}>
-                  Pagamento parcelado?
-                </label>
-              </div>
-            )}
-            {linhaSelecionada.nf_numero && !linhaSelecionada.boleto_numero && (
-              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -8, marginBottom: 8 }}>
-                Essa conta já tem NF lançada ({linhaSelecionada.nf_tipo} {linhaSelecionada.nf_numero}) - marcar
-                "Pagamento parcelado?" divide o valor em N contas separadas, todas com a MESMA NF, cada uma com seu
-                próprio boleto (digitado manualmente aqui, ou emitido via Sicoob individualmente depois).
-              </p>
-            )}
-
-            {parcelado ? (
               <>
-                <h2 style={{ fontSize: 13, marginTop: 16 }}>Gerar parcelas automaticamente</h2>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div className="campo-form" style={{ flex: 1 }}>
-                    <label>Nº de parcelas</label>
+                <h2 style={{ fontSize: 13, marginTop: 16 }}>Forma de pagamento</h2>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                     <input
-                      type="number"
-                      min="1"
-                      value={numParcelasAuto}
-                      onChange={(e) => setNumParcelasAuto(e.target.value)}
+                      type="radio"
+                      name="formaPagamentoBoleto"
+                      checked={formaPagamentoBoleto === '30'}
+                      onChange={() => setFormaPagamentoBoleto('30')}
                     />
-                  </div>
-                  <div className="campo-form" style={{ flex: 1 }}>
-                    <label>Vencimento da 1ª parcela</label>
+                    30 dias
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                     <input
-                      type="date"
-                      value={primeiroVencimentoAuto}
-                      onChange={(e) => setPrimeiroVencimentoAuto(e.target.value)}
+                      type="radio"
+                      name="formaPagamentoBoleto"
+                      checked={formaPagamentoBoleto === '28'}
+                      onChange={() => setFormaPagamentoBoleto('28')}
                     />
-                  </div>
-                  <div className="campo-form" style={{ flex: 1 }}>
-                    <label>Intervalo entre parcelas</label>
-                    <select value={intervaloDiasAuto} onChange={(e) => setIntervaloDiasAuto(e.target.value)}>
-                      <option value="30">30 em 30 dias</option>
-                      <option value="28">28 em 28 dias</option>
-                      <option value="15">15 em 15 dias</option>
-                      <option value="7">7 em 7 dias</option>
-                    </select>
-                  </div>
+                    28 dias
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="formaPagamentoBoleto"
+                      checked={formaPagamentoBoleto === 'parcelado'}
+                      onChange={() => setFormaPagamentoBoleto('parcelado')}
+                    />
+                    Parcelado
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="formaPagamentoBoleto"
+                      checked={formaPagamentoBoleto === 'manual'}
+                      onChange={() => setFormaPagamentoBoleto('manual')}
+                    />
+                    Lançar manualmente (sem Sicoob)
+                  </label>
                 </div>
-                <button type="button" className="botao-primario botao-pequeno" onClick={gerarParcelasAutomatico}>
-                  Gerar {numParcelasAuto || ''} parcelas
-                </button>
-                <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 6 }}>
-                  Divide o valor total em partes iguais (a última parcela absorve o centavo de arredondamento, se
-                  houver) e calcula o vencimento de cada uma. Depois de gerar, dá pra ajustar valor/vencimento/boleto
-                  de cada parcela abaixo, se precisar.
-                </p>
 
-                <h2 style={{ fontSize: 13, marginTop: 16 }}>Parcelas / boletos</h2>
-                {parcelas.map((p, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      padding: 10,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 12 }}>Parcela {i + 1}</strong>
-                      <button
-                        type="button"
-                        className="botao-icone perigo"
-                        title="Remover parcela"
-                        onClick={() => removerParcela(i)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <div className="campo-form" style={{ flex: 1 }}>
-                        <label>Valor (R$) *</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={p.valor}
-                          onChange={(e) => atualizarParcela(i, 'valor', e.target.value)}
-                        />
-                      </div>
-                      <div className="campo-form" style={{ flex: 1 }}>
-                        <label>Vencimento *</label>
-                        <input
-                          type="date"
-                          value={p.boleto_vencimento}
-                          onChange={(e) => atualizarParcela(i, 'boleto_vencimento', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="campo-form">
-                      <label>Número do boleto</label>
-                      <input
-                        type="text"
-                        value={p.boleto_numero}
-                        onChange={(e) => atualizarParcela(i, 'boleto_numero', e.target.value)}
-                      />
-                    </div>
-                    <div className="campo-form">
-                      <label>Linha digitável</label>
-                      <input
-                        type="text"
-                        value={p.boleto_linha_digitavel}
-                        onChange={(e) => atualizarParcela(i, 'boleto_linha_digitavel', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                ))}
-                <button type="button" className="botao-secundario botao-pequeno" onClick={adicionarParcela}>
-                  + Adicionar parcela
-                </button>
-                <p
-                  style={{
-                    fontSize: 12,
-                    marginTop: 8,
-                    color: Math.abs(somaParcelas - linhaSelecionada.valor) > 0.01 ? 'var(--danger-500)' : 'var(--ink-400)',
-                  }}
-                >
-                  Soma das parcelas: R$ {somaParcelas.toFixed(2)} de R$ {linhaSelecionada.valor.toFixed(2)}
-                </p>
-              </>
-            ) : (
-              <>
-                <h2 style={{ fontSize: 13, marginTop: 16 }}>Boleto</h2>
-                {linhaSelecionada.boletoEmitidoVia === 'sicoob' ? (
+                {!linhaSelecionada.contaId && formaPagamentoBoleto !== 'manual' && (
                   <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
-                    Emitido via Sicoob{linhaSelecionada.boletoSituacao ? ` - ${linhaSelecionada.boletoSituacao}` : ''}.
-                    {linhaSelecionada.boletoPdfPath && (
-                      <>
-                        {' '}
-                        <button
-                          type="button"
-                          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-500, #2563eb)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}
-                          onClick={async () => {
-                            const url = await urlAssinadaDocumentoFinanceiro(linhaSelecionada.boletoPdfPath!);
-                            if (url) window.open(url, '_blank');
-                            else setErro('Não foi possível abrir o PDF do boleto.');
-                          }}
-                        >
-                          Ver PDF do boleto
-                        </button>
-                      </>
-                    )}
+                    Salve a nota fiscal primeiro (isso cria a conta a receber) antes de gerar o boleto pela Sicoob.
                   </p>
-                ) : null}
-                {linhaSelecionada.contaId && linhaSelecionada.orcamentoId && (
-                  <button
-                    type="button"
-                    className="botao-secundario botao-pequeno"
-                    onClick={enviarEmailCompleto}
-                    disabled={enviandoEmailCompleto}
-                    title="Envia por e-mail o PDF do orçamento + boleto(s) já emitido(s), e pede à Focus NFe pra reenviar a NFS-e oficial pro mesmo destinatário (chega numa 2ª mensagem separada, com o PDF de verdade)"
-                    style={{ marginBottom: 8 }}
-                  >
-                    {enviandoEmailCompleto ? 'Enviando...' : 'Enviar e-mail (Orçamento + NF + Boleto)'}
-                  </button>
                 )}
-                {linhaSelecionada.boletoEmitidoVia !== 'sicoob' && (
-                  linhaSelecionada.contaId && (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <input
-                          type="checkbox"
-                          id="parcelarBoleto"
-                          checked={parcelarBoleto}
-                          onChange={(e) => setParcelarBoleto(e.target.checked)}
-                          style={{ width: 'auto' }}
-                        />
-                        <label htmlFor="parcelarBoleto" style={{ marginBottom: 0 }}>
-                          Dividir este boleto em parcelas via Sicoob?
-                        </label>
-                      </div>
-                      {parcelarBoleto && (
-                        <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -4, marginBottom: 8 }}>
-                          Só pra boleto real emitido pela Sicoob - o botão "Emitir N boletos via Sicoob" abaixo faz a
-                          divisão de verdade. O botão "Salvar" no fim do formulário não tem efeito aqui. Pra digitar
-                          boletos manualmente (não pela Sicoob), desmarque isto e marque "Pagamento parcelado?"
-                          mais acima.
-                        </p>
-                      )}
-                      {parcelarBoleto ? (
-                        <>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <div className="campo-form" style={{ flex: 1 }}>
-                              <label>Nº de parcelas</label>
-                              <input
-                                type="number"
-                                min={2}
-                                value={numParcelasAuto}
-                                onChange={(e) => setNumParcelasAuto(e.target.value)}
-                              />
-                            </div>
-                            <div className="campo-form" style={{ flex: 1 }}>
-                              <label>Vencimento da 1ª</label>
-                              <input
-                                type="date"
-                                value={primeiroVencimentoAuto}
-                                onChange={(e) => setPrimeiroVencimentoAuto(e.target.value)}
-                              />
-                            </div>
-                            <div className="campo-form" style={{ flex: 1 }}>
-                              <label>Intervalo entre parcelas (dias)</label>
-                              <input
-                                type="number"
-                                value={intervaloDiasAuto}
-                                onChange={(e) => setIntervaloDiasAuto(e.target.value)}
-                              />
-                            </div>
-                          </div>
-                          <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -4 }}>
-                            Ex.: 2 parcelas com intervalo 28 = vencimentos "28 / 56 dias". A conta atual (1 boleto)
-                            será substituída por {numParcelasAuto || 'N'} contas/boletos, cada uma já emitida na Sicoob.
-                          </p>
-                          <button
-                            type="button"
-                            className="botao-primario botao-pequeno"
-                            onClick={emitirBoletosParcelados}
-                            disabled={emitindoBoletoSicoob}
-                            style={{ marginBottom: 8 }}
-                          >
-                            {emitindoBoletoSicoob ? 'Emitindo...' : `Emitir ${numParcelasAuto || 'N'} boletos via Sicoob`}
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="botao-secundario botao-pequeno"
-                          onClick={emitirBoletoSicoob}
-                          disabled={emitindoBoletoSicoob}
-                          title="Usa o vencimento já definido na conta a receber (o campo abaixo, se preenchido, ou o vencimento padrão da conta)"
-                          style={{ marginBottom: 8 }}
-                        >
-                          {emitindoBoletoSicoob ? 'Emitindo...' : 'Emitir boleto via Sicoob'}
-                        </button>
-                      )}
-                    </>
-                  )
-                )}
-                {!parcelarBoleto && (
+
+                {(formaPagamentoBoleto === '30' || formaPagamentoBoleto === '28') && linhaSelecionada.contaId && (
                   <>
-                    <div className="campo-form">
-                      <label>Número do boleto</label>
-                      <input
-                        type="text"
-                        value={form.boleto_numero}
-                        readOnly={linhaSelecionada.boletoEmitidoVia === 'sicoob'}
-                        onChange={(e) => setForm((f) => ({ ...f, boleto_numero: e.target.value }))}
-                      />
-                    </div>
-                    <div className="campo-form">
-                      <label>Linha digitável</label>
-                      <input
-                        type="text"
-                        value={form.boleto_linha_digitavel}
-                        readOnly={linhaSelecionada.boletoEmitidoVia === 'sicoob'}
-                        onChange={(e) => setForm((f) => ({ ...f, boleto_linha_digitavel: e.target.value }))}
-                      />
-                    </div>
-                    <div className="campo-form">
-                      <label>Vencimento do boleto</label>
-                      <input
-                        type="date"
-                        value={form.boleto_vencimento}
-                        readOnly={linhaSelecionada.boletoEmitidoVia === 'sicoob'}
-                        onChange={(e) => setForm((f) => ({ ...f, boleto_vencimento: e.target.value }))}
-                      />
-                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                      Vencimento: {(() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + Number(formaPagamentoBoleto));
+                        return d.toLocaleDateString('pt-BR');
+                      })()}
+                    </p>
+                    <button
+                      type="button"
+                      className="botao-primario botao-pequeno"
+                      onClick={() => emitirBoletoSicoobComPrazo(Number(formaPagamentoBoleto))}
+                      disabled={emitindoBoletoSicoob}
+                      style={{ marginBottom: 8 }}
+                    >
+                      {emitindoBoletoSicoob ? 'Emitindo...' : 'Gerar boleto via Sicoob'}
+                    </button>
                   </>
                 )}
+
+                {formaPagamentoBoleto === 'parcelado' && linhaSelecionada.contaId && (
+                  <>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <div className="campo-form" style={{ flex: 1 }}>
+                        <label>Nº de parcelas</label>
+                        <input
+                          type="number"
+                          min={2}
+                          value={numParcelasAuto}
+                          onChange={(e) => setNumParcelasAuto(e.target.value)}
+                        />
+                      </div>
+                      <div className="campo-form" style={{ flex: 1 }}>
+                        <label>Vencimento da 1ª</label>
+                        <input
+                          type="date"
+                          value={primeiroVencimentoAuto}
+                          onChange={(e) => setPrimeiroVencimentoAuto(e.target.value)}
+                        />
+                      </div>
+                      <div className="campo-form" style={{ flex: 1 }}>
+                        <label>Intervalo entre parcelas (dias)</label>
+                        <input
+                          type="number"
+                          value={intervaloDiasAuto}
+                          onChange={(e) => setIntervaloDiasAuto(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -4 }}>
+                      Ex.: 2 parcelas com intervalo 28 = vencimentos "28 / 56 dias". Cada parcela já sai com boleto
+                      REAL emitido na Sicoob.
+                    </p>
+                    <button
+                      type="button"
+                      className="botao-primario botao-pequeno"
+                      onClick={emitirBoletosParcelados}
+                      disabled={emitindoBoletoSicoob}
+                      style={{ marginBottom: 8 }}
+                    >
+                      {emitindoBoletoSicoob ? 'Emitindo...' : `Gerar ${numParcelasAuto || 'N'} boletos via Sicoob`}
+                    </button>
+                  </>
+                )}
+
+                {formaPagamentoBoleto === 'manual' && (
+                  <div style={{ border: '1px dashed var(--border)', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={parcelado}
+                        onChange={(e) => setParcelado(e.target.checked)}
+                        style={{ width: 'auto' }}
+                      />
+                      Dividir em várias parcelas manuais?
+                    </label>
+                    {parcelado ? (
+                      <>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <div className="campo-form" style={{ flex: 1 }}>
+                            <label>Nº de parcelas</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={numParcelasAuto}
+                              onChange={(e) => setNumParcelasAuto(e.target.value)}
+                            />
+                          </div>
+                          <div className="campo-form" style={{ flex: 1 }}>
+                            <label>Vencimento da 1ª parcela</label>
+                            <input
+                              type="date"
+                              value={primeiroVencimentoAuto}
+                              onChange={(e) => setPrimeiroVencimentoAuto(e.target.value)}
+                            />
+                          </div>
+                          <div className="campo-form" style={{ flex: 1 }}>
+                            <label>Intervalo entre parcelas</label>
+                            <select value={intervaloDiasAuto} onChange={(e) => setIntervaloDiasAuto(e.target.value)}>
+                              <option value="30">30 em 30 dias</option>
+                              <option value="28">28 em 28 dias</option>
+                              <option value="15">15 em 15 dias</option>
+                              <option value="7">7 em 7 dias</option>
+                            </select>
+                          </div>
+                        </div>
+                        <button type="button" className="botao-secundario botao-pequeno" onClick={gerarParcelasAutomatico}>
+                          Gerar {numParcelasAuto || ''} parcelas
+                        </button>
+                        <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 6 }}>
+                          Divide o valor total em partes iguais e calcula o vencimento de cada uma - ajuste
+                          valor/vencimento/boleto de cada parcela abaixo, se precisar. Salvo ao clicar em "Salvar",
+                          no fim do formulário.
+                        </p>
+
+                        {parcelas.map((p, i) => (
+                          <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong style={{ fontSize: 12 }}>Parcela {i + 1}</strong>
+                              <button type="button" className="botao-icone perigo" title="Remover parcela" onClick={() => removerParcela(i)}>
+                                ×
+                              </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <div className="campo-form" style={{ flex: 1 }}>
+                                <label>Valor (R$) *</label>
+                                <input type="number" step="0.01" value={p.valor} onChange={(e) => atualizarParcela(i, 'valor', e.target.value)} />
+                              </div>
+                              <div className="campo-form" style={{ flex: 1 }}>
+                                <label>Vencimento *</label>
+                                <input type="date" value={p.boleto_vencimento} onChange={(e) => atualizarParcela(i, 'boleto_vencimento', e.target.value)} />
+                              </div>
+                            </div>
+                            <div className="campo-form">
+                              <label>Número do boleto</label>
+                              <input type="text" value={p.boleto_numero} onChange={(e) => atualizarParcela(i, 'boleto_numero', e.target.value)} />
+                            </div>
+                            <div className="campo-form">
+                              <label>Linha digitável</label>
+                              <input type="text" value={p.boleto_linha_digitavel} onChange={(e) => atualizarParcela(i, 'boleto_linha_digitavel', e.target.value)} />
+                            </div>
+                          </div>
+                        ))}
+                        <button type="button" className="botao-secundario botao-pequeno" onClick={adicionarParcela}>
+                          + Adicionar parcela
+                        </button>
+                        <p
+                          style={{
+                            fontSize: 12,
+                            marginTop: 8,
+                            color: Math.abs(somaParcelas - linhaSelecionada.valor) > 0.01 ? 'var(--danger-500)' : 'var(--ink-400)',
+                          }}
+                        >
+                          Soma das parcelas: R$ {somaParcelas.toFixed(2)} de R$ {linhaSelecionada.valor.toFixed(2)}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="campo-form">
+                          <label>Número do boleto</label>
+                          <input type="text" value={form.boleto_numero} onChange={(e) => setForm((f) => ({ ...f, boleto_numero: e.target.value }))} />
+                        </div>
+                        <div className="campo-form">
+                          <label>Linha digitável</label>
+                          <input type="text" value={form.boleto_linha_digitavel} onChange={(e) => setForm((f) => ({ ...f, boleto_linha_digitavel: e.target.value }))} />
+                        </div>
+                        <div className="campo-form">
+                          <label>Vencimento do boleto</label>
+                          <input type="date" value={form.boleto_vencimento} onChange={(e) => setForm((f) => ({ ...f, boleto_vencimento: e.target.value }))} />
+                        </div>
+                        <p style={{ fontSize: 11, color: 'var(--ink-400)' }}>Salvo ao clicar em "Salvar", no fim do formulário.</p>
+                      </>
+                    )}
+                  </div>
+                )}
               </>
+            )}
+
+            {linhaSelecionada.boletoEmitidoVia === 'sicoob' && (
+              <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                Boleto emitido via Sicoob{linhaSelecionada.boletoSituacao ? ` - ${linhaSelecionada.boletoSituacao}` : ''}.
+                {linhaSelecionada.boletoPdfPath && (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-500, #2563eb)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}
+                      onClick={async () => {
+                        const url = await urlAssinadaDocumentoFinanceiro(linhaSelecionada.boletoPdfPath!);
+                        if (url) window.open(url, '_blank');
+                        else setErro('Não foi possível abrir o PDF do boleto.');
+                      }}
+                    >
+                      Ver PDF do boleto
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
+            {linhaSelecionada.boleto_numero && linhaSelecionada.boletoEmitidoVia !== 'sicoob' && (
+              <>
+                <div className="campo-form">
+                  <label>Número do boleto</label>
+                  <input type="text" value={form.boleto_numero} onChange={(e) => setForm((f) => ({ ...f, boleto_numero: e.target.value }))} />
+                </div>
+                <div className="campo-form">
+                  <label>Linha digitável</label>
+                  <input type="text" value={form.boleto_linha_digitavel} onChange={(e) => setForm((f) => ({ ...f, boleto_linha_digitavel: e.target.value }))} />
+                </div>
+                <div className="campo-form">
+                  <label>Vencimento do boleto</label>
+                  <input type="date" value={form.boleto_vencimento} onChange={(e) => setForm((f) => ({ ...f, boleto_vencimento: e.target.value }))} />
+                </div>
+              </>
+            )}
+            {linhaSelecionada.contaId && linhaSelecionada.orcamentoId && (
+              <button
+                type="button"
+                className="botao-secundario botao-pequeno"
+                onClick={enviarEmailCompleto}
+                disabled={enviandoEmailCompleto}
+                title="Envia por e-mail o PDF do orçamento + a NF oficial (buscada do servidor) + boleto(s) já emitido(s), tudo numa mensagem só"
+                style={{ marginTop: 8 }}
+              >
+                {enviandoEmailCompleto ? 'Enviando...' : 'Enviar e-mail (Orçamento + NF + Boleto)'}
+              </button>
             )}
 
             {erro && <p className="erro-login">{erro}</p>}
