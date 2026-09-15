@@ -417,6 +417,16 @@ Deno.serve(async (req: Request) => {
   }
 
   const descricaoItem = [os.optica_desc, os.optica_fab].filter(Boolean).join(' - ') || `Equipamento OS ${os.numero_os}`;
+  // Descrição que vai DE FATO no item da NF-e (payload.items[0].descricao) -
+  // pedido do usuário (2026-09-15): o nº de série conferido na Entrada
+  // (equipamento_sn, copiado pra ordens_servico.optica_sn na abertura da OS)
+  // precisa constar na nota de devolução, não só na tela de conferência (que
+  // já mostra "Nº série" separado, ver resumo.numeroSerie abaixo). Anexado
+  // aqui, na descrição do item - não em informacoes_complementares (campo
+  // cujo nome correto na Focus segue não confirmado, ver comentário mais
+  // abaixo) - porque a descrição do item é testada e sabidamente aparece no
+  // DANFE.
+  const descricaoItemNota = os.optica_sn ? `${descricaoItem} - Nº SÉRIE: ${os.optica_sn}` : descricaoItem;
   const numeroRemessa = entradaEquip?.nf_remessa_numero ?? null;
   const chaveRemessa = entradaEquip?.nf_remessa_chave_acesso ? apenasDigitos(entradaEquip.nf_remessa_chave_acesso) : null;
   // Sugestão de "Valor do bem devolvido" - pedido do usuário (2026-09-15)
@@ -488,7 +498,7 @@ Deno.serve(async (req: Request) => {
       {
         numero_item: 1,
         codigo_produto: `OS-${os.numero_os}`,
-        descricao: descricaoItem,
+        descricao: descricaoItemNota,
         cfop,
         codigo_ncm: ncmItem,
         quantidade_comercial: 1,
