@@ -4,7 +4,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
-import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
+import { STATUS_DEVOLUCAO_SEM_REPARO, STATUS_PRONTO_ENTREGA, STATUS_ENTREGUE } from '../../lib/statusOS';
 import { imprimirOrientacaoEsterilizacao } from '../../lib/orientacaoEsterilizacao';
 import { imprimirEtiquetaDespacho, imprimirEtiquetasDespachoLote, type DadosEtiquetaDespacho } from '../../lib/etiquetaDespacho';
 import { IconPrinter, IconTruckDelivery } from '@tabler/icons-react';
@@ -317,10 +317,19 @@ export function Entrega() {
   };
   const temEntregaRegistrada = (osId: number) =>
     entregasExistentesQuery.data?.some((e) => e.ordem_servico_id === osId) ?? false;
+  // OS que já chegou a "Entregue" mas nunca teve entrega registrada aqui -
+  // caso real: equipamento saiu pelo atalho "Já foi entregue fora do
+  // sistema" (Faturamento.tsx), que só marca a OS como Entregue direto, sem
+  // criar entrega nenhuma - depois disso não tinha como emitir/registrar a
+  // NF-e de devolução, porque a OS não aparecia mais nesta combobox (nem
+  // "Pronto para entrega"/"Devolução sem reparo", nem já tinha entrega).
+  const entregueSemRegistro = (osId: number) => porId(osId)?.status_os === STATUS_ENTREGUE && !temEntregaRegistrada(osId);
   // Combobox do formulário (criar/editar entrega) precisa continuar incluindo
   // OS já com entrega registrada, senão editar uma entrega já salva mostra o
   // campo em branco (ver comentário de entregasExistentesQuery acima).
-  const opcoesEntrega = opcoes.filter((o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)));
+  const opcoesEntrega = opcoes.filter(
+    (o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)) || entregueSemRegistro(Number(o.value)),
+  );
   // Checklist de impressão de etiqueta é outra coisa: só interessa quem
   // ainda não teve etiqueta impressa - assim que imprime (em lote, pela
   // linha da tabela ou pelo formulário), a OS sai daqui e só é encontrável
