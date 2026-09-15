@@ -1112,7 +1112,31 @@ export function EntradaEquipamento() {
       };
 
       if (editando) {
-        const { error } = await supabase.from('entradas_equipamento').update(camposComuns).eq('id', editando.id);
+        // Entrada já convertida em OS: os campos do equipamento (descrição,
+        // fabricante, defeito, avarias, ótica/catálogo etc.) já foram
+        // copiados pra ordens_servico na conversão (ver converterEmOS) -
+        // editar aqui não refletiria lá, então ficam de fora do update pra
+        // não criar uma divergência silenciosa entre Entrada e OS. JÁ os
+        // campos da "Nota fiscal de remessa" NUNCA são copiados pra lugar
+        // nenhum - continuam vivendo só na Entrada, e são lidos direto daqui
+        // na hora de emitir a NF-e de devolução - por isso continuam
+        // editáveis/salváveis normalmente mesmo depois da conversão (bug
+        // real corrigido em 2026-09-15: antes o botão "Salvar" ficava
+        // travado por inteiro nesse caso, sem nenhuma forma de completar
+        // esses dados numa Entrada já convertida).
+        const camposParaSalvar = editando.ordem_servico_id
+          ? {
+              nf_remessa_numero: camposComuns.nf_remessa_numero,
+              nf_remessa_serie: camposComuns.nf_remessa_serie,
+              nf_remessa_chave_acesso: camposComuns.nf_remessa_chave_acesso,
+              nf_remessa_cfop: camposComuns.nf_remessa_cfop,
+              nf_remessa_ncm: camposComuns.nf_remessa_ncm,
+              nf_remessa_data_emissao: camposComuns.nf_remessa_data_emissao,
+              nf_remessa_valor: camposComuns.nf_remessa_valor,
+              numero_controle_cliente: camposComuns.numero_controle_cliente,
+            }
+          : camposComuns;
+        const { error } = await supabase.from('entradas_equipamento').update(camposParaSalvar).eq('id', editando.id);
         if (error) throw error;
 
         for (const foto of fotos) {
@@ -1680,8 +1704,10 @@ export function EntradaEquipamento() {
             />
             {!!editando?.ordem_servico_id && (
               <p style={{ fontSize: 12, color: 'var(--copper-500)', marginTop: -8, marginBottom: 12 }}>
-                Esta entrada já foi convertida em OS - os dados ficam somente-leitura (o checklist de avarias
-                continua editável, na tela Registro de Entrada).
+                Esta entrada já foi convertida em OS - os dados do equipamento (descrição, fabricante, defeito
+                relatado etc.) já foram copiados pra lá e não são mais salvos por aqui (o checklist de avarias
+                continua editável, na tela Registro de Entrada). Só a seção "Nota fiscal de remessa" abaixo
+                continua editável e é salva normalmente.
               </p>
             )}
             <div className="campo-form">
@@ -2032,7 +2058,7 @@ export function EntradaEquipamento() {
               <button className="botao-secundario" onClick={() => setModalAberto(false)} disabled={salvando}>
                 Cancelar
               </button>
-              <button className="botao-primario" onClick={salvar} disabled={salvando || !!editando?.ordem_servico_id}>
+              <button className="botao-primario" onClick={salvar} disabled={salvando}>
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
