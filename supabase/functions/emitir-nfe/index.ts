@@ -160,16 +160,26 @@ Deno.serve(async (req: Request) => {
   let corpo: {
     entregaId?: number;
     chaveAcesso?: string;
-    acao?: 'consultar_remessa' | 'previsualizar_devolucao' | 'emitir_devolucao' | 'consultar_devolucao' | 'cancelar_devolucao';
+    acao?:
+      | 'consultar_remessa'
+      | 'listar_itens_acompanhantes'
+      | 'previsualizar_devolucao'
+      | 'emitir_devolucao'
+      | 'consultar_devolucao'
+      | 'cancelar_devolucao';
     serie?: number;
     justificativa?: string;
     // Itens que vieram na MESMA NF de remessa "acompanhando" o equipamento
-    // (ex.: cabos/acessórios que não têm Entrada/OS/orçamento próprios) -
-    // pedido do usuário (2026-09-15): a devolução desses itens sai como
-    // linhas EXTRAS na mesma NF-e de devolução da ótica, não numa nota à
-    // parte. Descrição/NCM vêm da consulta por chave de acesso (mesmo
-    // endpoint usado pra Entrada); valor é digitado/confirmado na tela.
-    itensExtras?: { descricao: string; ncm: string; valor: number }[];
+    // (ex.: cabos/acessórios que têm Entrada própria, mas nunca viraram
+    // OS/orçamento) - pedido do usuário (2026-09-15): a devolução desses
+    // itens sai como linhas EXTRAS na mesma NF-e de devolução da ótica, não
+    // numa nota à parte. Identificados pelo id da própria Entrada (não por
+    // descrição/NCM digitados) - a function busca os dados reais dela
+    // (descrição, NCM, nº de série) direto do banco, garantindo que bate
+    // com o catálogo de itens ainda disponíveis (ver acao
+    // listar_itens_acompanhantes) e evitando confiar em texto vindo do
+    // cliente. Só o valor é informado pela tela de conferência.
+    itensExtras?: { entradaId: number; valor: number }[];
   };
   try {
     corpo = await req.json();
@@ -233,6 +243,49 @@ Deno.serve(async (req: Request) => {
       ipiAliquota: null,
     }));
     return json({ ok: true, cabecalho, itens, resultado });
+  }
+
+  // === Lista os itens "acompanhantes" ainda disponíveis pra devolver junto
+  // (mesma NF de remessa da ótica desta entrega, mas cada um com sua
+  // própria Entrada - ex.: cabo, trocater, camisa - que nunca virou
+  // OS/orçamento) - pedido do usuário (2026-09-15). Só entram Entradas com
+  // ordem_servico_id NULL (nunca converted, então nunca foram cobradas nem
+  // devolvidas por conta própria) E devolvido_na_entrega_id NULL (ainda não
+  // devolvidas em NENHUMA devolução anterior desta mesma NF) - evita
+  // oferecer de novo um item que outra OS da mesma nota já devolveu.
+  if (acao === 'listar_itens_acompanhantes') {
+    if (!corpo.entregaId) return json({ error: 'entregaId é obrigatório.' }, 400);
+    const { data: entregaRow, error: erroEntregaRow } = await supabaseAdmin
+      .from('entregas')
+      .select('ordem_servico_id, ordens_servico(entradas_equipamento(nf_remessa_chave_acesso))')
+      .eq('id', corpo.entregaId)
+      .single();
+    if (erroEntregaRow || !entregaRow) return json({ error: 'Entrega não encontrada.' }, 404);
+    const osRow = (
+      entregaRow as unknown as { ordens_servico: { entradas_equipamento: { nf_remessa_chave_acesso: string | null }[] | null } | null }
+    ).ordens_servico;
+    const chave = osRow?.entradas_equipamento?.[0]?.nf_remessa_chave_acesso
+      ? apenasDigitos(osRow.entradas_equipamento[0].nf_remessa_chave_acesso)
+      : null;
+    if (!chave) return json({ ok: true, itens: [] });
+
+    const { data: candidatos, error: erroCandidatos } = await supabaseAdmin
+      .from('entradas_equipamento')
+      .select('id, equipamento_desc, equipamento_sn, nf_remessa_ncm, nf_remessa_valor')
+      .eq('nf_remessa_chave_acesso', chave)
+      .is('ordem_servico_id', null)
+      .is('devolvido_na_entrega_id', null)
+      .order('id');
+    if (erroCandidatos) return json({ error: erroCandidatos.message }, 500);
+
+    const itens = (candidatos ?? []).map((c) => ({
+      entradaId: c.id,
+      descricao: c.equipamento_desc,
+      numeroSerie: c.equipamento_sn,
+      ncm: c.nf_remessa_ncm,
+      valorSugerido: c.nf_remessa_valor,
+    }));
+    return json({ ok: true, itens });
   }
 
   // === Ações relacionadas à DEVOLUÇÃO (emitida por nós) ===
@@ -524,35 +577,54 @@ Deno.serve(async (req: Request) => {
     ],
   };
 
-  // Itens que "acompanham" a ótica na mesma NF de remessa, mas não têm
-  // Entrada/OS/orçamento próprios (ex.: cabos/acessórios) - pedido do
-  // usuário (2026-09-15). O frontend consulta a mesma NF por chave de
-  // acesso (acao=consultar_remessa) pra listar os itens disponíveis, e
-  // manda aqui só os que o usuário escolheu devolver junto, com o valor
-  // confirmado na tela - viram linhas extras na MESMA NF-e de devolução
-  // (mesmo CFOP/tratamento fiscal do item principal), não uma nota à parte.
-  const itensExtras = Array.isArray(corpo.itensExtras) ? corpo.itensExtras : [];
-  for (const extra of itensExtras) {
-    if (!extra || typeof extra.valor !== 'number' || extra.valor <= 0) continue;
-    payload.items.push({
-      numero_item: payload.items.length + 1,
-      codigo_produto: `OS-${os.numero_os}-ACOMP-${payload.items.length + 1}`,
-      descricao: extra.descricao || 'Item acompanhante',
-      cfop,
-      codigo_ncm: extra.ncm || ncmItem,
-      quantidade_comercial: 1,
-      quantidade_tributavel: 1,
-      unidade_comercial: 'UN',
-      unidade_tributavel: 'UN',
-      valor_unitario_comercial: extra.valor,
-      valor_unitario_tributavel: extra.valor,
-      valor_bruto: extra.valor,
-      inclui_no_total: 1,
-      icms_origem: ICMS_ORIGEM,
-      icms_situacao_tributaria: CSOSN_DEVOLUCAO,
-      pis_situacao_tributaria: PIS_CST_NAO_TRIBUTADO,
-      cofins_situacao_tributaria: COFINS_CST_NAO_TRIBUTADO,
-    });
+  // Itens que "acompanham" a ótica na mesma NF de remessa - cada um com sua
+  // PRÓPRIA Entrada (ex.: cabo, trocater, camisa), mas que nunca virou
+  // OS/orçamento (ver acao listar_itens_acompanhantes) - pedido do usuário
+  // (2026-09-15). Busca a descrição/NCM/nº de série REAIS da Entrada pelo
+  // id (não confia em texto vindo do cliente) - evita risco de descrição
+  // adulterada e garante que só entram itens que a própria checagem de
+  // "ainda disponível" (ordem_servico_id/devolvido_na_entrega_id nulos)
+  // aprovou. Viram linhas extras na MESMA NF-e de devolução (mesmo
+  // CFOP/tratamento fiscal do item principal), não uma nota à parte.
+  const itensExtrasBody = Array.isArray(corpo.itensExtras) ? corpo.itensExtras : [];
+  const idsExtrasValidos: number[] = [];
+  if (itensExtrasBody.length > 0) {
+    const idsPedidos = itensExtrasBody.map((e) => e.entradaId).filter((id): id is number => typeof id === 'number');
+    const { data: entradasExtras, error: erroEntradasExtras } = await supabaseAdmin
+      .from('entradas_equipamento')
+      .select('id, equipamento_desc, equipamento_sn, nf_remessa_ncm')
+      .in('id', idsPedidos)
+      .is('ordem_servico_id', null)
+      .is('devolvido_na_entrega_id', null);
+    if (erroEntradasExtras) return json({ error: erroEntradasExtras.message }, 500);
+    const mapaExtras = new Map((entradasExtras ?? []).map((e) => [e.id, e]));
+    for (const pedido of itensExtrasBody) {
+      const entradaExtra = mapaExtras.get(pedido.entradaId);
+      if (!entradaExtra || typeof pedido.valor !== 'number' || pedido.valor <= 0) continue;
+      const descricaoExtra = entradaExtra.equipamento_sn
+        ? `${entradaExtra.equipamento_desc ?? 'Item acompanhante'} - Nº SÉRIE: ${entradaExtra.equipamento_sn}`
+        : (entradaExtra.equipamento_desc ?? 'Item acompanhante');
+      payload.items.push({
+        numero_item: payload.items.length + 1,
+        codigo_produto: `OS-${os.numero_os}-ACOMP-${entradaExtra.id}`,
+        descricao: descricaoExtra,
+        cfop,
+        codigo_ncm: entradaExtra.nf_remessa_ncm || ncmItem,
+        quantidade_comercial: 1,
+        quantidade_tributavel: 1,
+        unidade_comercial: 'UN',
+        unidade_tributavel: 'UN',
+        valor_unitario_comercial: pedido.valor,
+        valor_unitario_tributavel: pedido.valor,
+        valor_bruto: pedido.valor,
+        inclui_no_total: 1,
+        icms_origem: ICMS_ORIGEM,
+        icms_situacao_tributaria: CSOSN_DEVOLUCAO,
+        pis_situacao_tributaria: PIS_CST_NAO_TRIBUTADO,
+        cofins_situacao_tributaria: COFINS_CST_NAO_TRIBUTADO,
+      });
+      idsExtrasValidos.push(entradaExtra.id);
+    }
   }
 
   if (acao === 'previsualizar_devolucao') {
@@ -620,6 +692,15 @@ Deno.serve(async (req: Request) => {
     .from('entregas')
     .update({ nfe_devolucao_status: 'processando', nfe_devolucao_ref: ref, nfe_devolucao_erro_detalhe: null })
     .eq('id', corpo.entregaId);
+
+  // Marca os itens acompanhantes incluídos como já devolvidos - impede que
+  // outra devolução (de outra OS da mesma NF) ofereça o MESMO item de novo.
+  if (idsExtrasValidos.length > 0) {
+    await supabaseAdmin
+      .from('entradas_equipamento')
+      .update({ devolvido_na_entrega_id: corpo.entregaId, devolvido_em: new Date().toISOString() })
+      .in('id', idsExtrasValidos);
+  }
 
   return json({ ok: true, ref, resultado });
 });

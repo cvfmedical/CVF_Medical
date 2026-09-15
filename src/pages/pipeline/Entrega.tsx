@@ -55,14 +55,17 @@ interface ResumoDevolucao {
   itensExtras: { descricao: string | null; ncm: string | null; valor: number | null }[];
 }
 
-// Um item da NF de remessa (vindo da consulta por chave de acesso) - usado
-// pra listar itens "acompanhantes" (ex.: cabos/acessórios que vieram junto
-// com a ótica, mas não têm Entrada/OS/orçamento próprios) que o usuário
-// pode escolher devolver junto, como linhas extras na mesma NF-e.
-interface ItemNotaRemessa {
+// Um item "acompanhante" ainda disponível pra devolver (vindo da acao
+// listar_itens_acompanhantes - cada um é a Entrada própria de um item que
+// veio na mesma NF de remessa da ótica, mas nunca virou OS/orçamento, e
+// ainda não foi devolvido em nenhuma devolução anterior) - o usuário
+// escolhe quais devolver junto, como linhas extras na mesma NF-e.
+interface ItemAcompanhante {
+  entradaId: number;
   descricao: string | null;
+  numeroSerie: string | null;
   ncm: string | null;
-  valorTotal: string | number | null;
+  valorSugerido: string | number | null;
 }
 
 export function Entrega() {
@@ -88,14 +91,18 @@ export function Entrega() {
   const [erroDevolucao, setErroDevolucao] = useState<string | null>(null);
   const [consultandoStatusDevolucaoId, setConsultandoStatusDevolucaoId] = useState<number | null>(null);
   const [cancelandoDevolucaoId, setCancelandoDevolucaoId] = useState<number | null>(null);
-  // Itens "acompanhantes" da mesma NF de remessa (pedido do usuário,
-  // 2026-09-15) - buscados sob demanda (não toda vez que abre a prévia,
-  // pra não gastar consulta à Focus à toa) e escolhidos um a um pra virarem
-  // linhas extras na mesma NF-e de devolução, cada um com valor próprio.
-  const [itensNotaRemessa, setItensNotaRemessa] = useState<ItemNotaRemessa[] | null>(null);
+  // Itens "acompanhantes" ainda disponíveis pra devolver junto (pedido do
+  // usuário, 2026-09-15) - buscados sob demanda (não toda vez que abre a
+  // prévia) via listar_itens_acompanhantes, que já filtra pra só trazer
+  // Entradas sem OS/orçamento e ainda não devolvidas em nenhuma devolução
+  // anterior (evita risco de devolver o mesmo item físico duas vezes).
+  // Identificados por entradaId (não por descrição - várias Entradas desta
+  // NF têm a MESMA descrição, ex.: 3x "OTICA 30G" com números de série
+  // diferentes, então descrição sozinha não distingue qual foi marcado).
+  const [itensNotaRemessa, setItensNotaRemessa] = useState<ItemAcompanhante[] | null>(null);
   const [buscandoItensNotaRemessa, setBuscandoItensNotaRemessa] = useState(false);
   const [itensExtrasSelecionados, setItensExtrasSelecionados] = useState<
-    { descricao: string; ncm: string; valor: string }[]
+    { entradaId: number; descricao: string; numeroSerie: string | null; valor: string }[]
   >([]);
 
   // Nº do orçamento de cada OS - pra saber a que orçamento essa entrega se
@@ -509,23 +516,21 @@ export function Entrega() {
     setItensExtrasSelecionados([]);
   }
 
-  // Busca TODOS os itens da mesma NF de remessa (não só o da ótica) - pedido
-  // do usuário (2026-09-15): itens que só "acompanham" a ótica (cabos,
-  // acessórios) não têm Entrada/OS/orçamento próprios, então a única fonte
-  // de dados deles é a própria NF. Sob demanda (botão), não busca sozinho ao
-  // abrir a prévia, pra não gastar uma consulta à Focus sem necessidade.
+  // Busca os itens "acompanhantes" da mesma NF de remessa que ainda estão
+  // disponíveis pra devolver (não têm Entrada/OS/orçamento próprios, e
+  // nenhuma devolução anterior já os incluiu) - pedido do usuário
+  // (2026-09-15). Sob demanda (botão), não busca sozinho ao abrir a prévia.
   async function buscarItensNotaRemessa() {
-    const chave = previaDevolucao?.resumo.chaveRemessa;
-    if (!chave) return;
+    if (!devolucaoAlvo) return;
     setBuscandoItensNotaRemessa(true);
     setErroDevolucao(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfe', {
-        body: { acao: 'consultar_remessa', chaveAcesso: chave },
+        body: { acao: 'listar_itens_acompanhantes', entregaId: devolucaoAlvo.id },
       });
       if (error) throw error;
-      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar a NF de remessa.');
-      setItensNotaRemessa((data.itens as ItemNotaRemessa[]) ?? []);
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar os itens acompanhantes.');
+      setItensNotaRemessa((data.itens as ItemAcompanhante[]) ?? []);
     } catch (e) {
       setErroDevolucao(await mensagemErroFuncao(e));
     } finally {
@@ -533,23 +538,24 @@ export function Entrega() {
     }
   }
 
-  function alternarItemExtra(item: ItemNotaRemessa) {
+  function alternarItemExtra(item: ItemAcompanhante) {
     setItensExtrasSelecionados((lista) => {
-      const jaSelecionado = lista.some((i) => i.descricao === item.descricao);
-      if (jaSelecionado) return lista.filter((i) => i.descricao !== item.descricao);
+      const jaSelecionado = lista.some((i) => i.entradaId === item.entradaId);
+      if (jaSelecionado) return lista.filter((i) => i.entradaId !== item.entradaId);
       return [
         ...lista,
         {
+          entradaId: item.entradaId,
           descricao: item.descricao ?? '',
-          ncm: item.ncm ?? '',
-          valor: item.valorTotal != null ? String(item.valorTotal) : '',
+          numeroSerie: item.numeroSerie,
+          valor: item.valorSugerido != null ? String(item.valorSugerido) : '',
         },
       ];
     });
   }
 
-  function atualizarValorItemExtra(descricao: string, valor: string) {
-    setItensExtrasSelecionados((lista) => lista.map((i) => (i.descricao === descricao ? { ...i, valor } : i)));
+  function atualizarValorItemExtra(entradaId: number, valor: string) {
+    setItensExtrasSelecionados((lista) => lista.map((i) => (i.entradaId === entradaId ? { ...i, valor } : i)));
   }
 
   // Transmite de fato pra SEFAZ - irreversível (só dá pra cancelar até 24h
@@ -567,8 +573,7 @@ export function Entrega() {
       return;
     }
     const itensExtras = itensExtrasSelecionados.map((i) => ({
-      descricao: i.descricao,
-      ncm: i.ncm,
+      entradaId: i.entradaId,
       valor: Number(i.valor.replace(',', '.')),
     }));
     const alvo = devolucaoAlvo;
@@ -1199,38 +1204,37 @@ export function Entrega() {
             <div className="campo-form">
               <label>Itens que acompanham (opcional)</label>
               <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 6 }}>
-                Itens que vieram na mesma NF de remessa junto com a ótica, mas sem Entrada/OS/orçamento próprios
-                (ex.: cabos, acessórios). Marcados aqui, saem como itens extras dentro desta MESMA NF-e de
-                devolução.
+                Itens que vieram na mesma NF de remessa junto com a ótica, cada um com sua própria Entrada, mas sem
+                OS/orçamento próprios (ex.: cabos, acessórios) - só aparecem aqui os que ainda não foram devolvidos
+                em nenhuma outra devolução desta mesma NF. Marcados aqui, saem como itens extras dentro desta MESMA
+                NF-e de devolução.
               </p>
               {itensNotaRemessa == null ? (
                 <button
                   type="button"
                   className="botao-secundario botao-pequeno"
                   onClick={buscarItensNotaRemessa}
-                  disabled={buscandoItensNotaRemessa || !previaDevolucao?.resumo.chaveRemessa}
-                  title={
-                    previaDevolucao?.resumo.chaveRemessa
-                      ? undefined
-                      : 'Essa Entrada não tem chave de acesso da NF de remessa cadastrada.'
-                  }
+                  disabled={buscandoItensNotaRemessa}
                 >
-                  {buscandoItensNotaRemessa ? 'Buscando...' : 'Buscar itens da NF de remessa'}
+                  {buscandoItensNotaRemessa ? 'Buscando...' : 'Buscar itens que acompanham'}
                 </button>
               ) : itensNotaRemessa.length === 0 ? (
-                <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Essa nota não trouxe mais nenhum item.</p>
+                <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                  Nenhum item acompanhante disponível (ou já foram todos devolvidos antes).
+                </p>
               ) : (
-                itensNotaRemessa.map((item, i) => {
-                  const selecionado = itensExtrasSelecionados.find((sel) => sel.descricao === item.descricao);
+                itensNotaRemessa.map((item) => {
+                  const selecionado = itensExtrasSelecionados.find((sel) => sel.entradaId === item.entradaId);
                   return (
-                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                    <div key={item.entradaId} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                       <input
                         type="checkbox"
                         checked={!!selecionado}
                         onChange={() => alternarItemExtra(item)}
                       />
                       <span style={{ fontSize: 13, flex: 1 }}>
-                        {item.descricao ?? '(sem descrição)'} — NCM {item.ncm ?? '-'}
+                        {item.descricao ?? '(sem descrição)'}
+                        {item.numeroSerie && <span className="mono"> — Nº série: {item.numeroSerie}</span>}
                       </span>
                       {selecionado && (
                         <input
@@ -1239,7 +1243,7 @@ export function Entrega() {
                           style={{ width: 110 }}
                           placeholder="Valor (R$)"
                           value={selecionado.valor}
-                          onChange={(e) => atualizarValorItemExtra(item.descricao ?? '', e.target.value)}
+                          onChange={(e) => atualizarValorItemExtra(item.entradaId, e.target.value)}
                         />
                       )}
                     </div>
