@@ -2152,6 +2152,16 @@ export function Faturamento() {
                     {emitindoNfseId === l.chave ? 'Verificando...' : 'Verificar status'}
                   </button>
                 )}
+                {l.contaId != null && l.nf_numero && l.nfseRef && (
+                  <button
+                    className="botao-secundario"
+                    onClick={() => consultarStatusNFSe(l)}
+                    disabled={emitindoNfseId === l.chave}
+                    title="Reconsulta o status real direto na Focus NFe/prefeitura (não só o que está salvo aqui) - útil pra confirmar se um cancelamento realmente foi efetivado"
+                  >
+                    {emitindoNfseId === l.chave ? 'Verificando...' : 'Verificar status'}
+                  </button>
+                )}
                 <button
                   className="botao-secundario"
                   onClick={() => abrirLancarNota(l)}
