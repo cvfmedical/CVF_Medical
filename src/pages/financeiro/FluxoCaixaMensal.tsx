@@ -6,6 +6,7 @@ import { mensagemErro } from '../../lib/erros';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { exportarTabelaPdf } from '../../lib/exportarPdf';
+import { formatarMoeda } from '../../lib/formato';
 
 interface ContaCaixa {
   id: number;
@@ -45,8 +46,39 @@ function mesAtualISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function formatarMoeda(v: number): string {
-  return `R$ ${v.toFixed(2)}`;
+// Agrupa itens do mesmo dia por nome (ex.: 2 parcelas do mesmo fornecedor
+// viravam 2 linhas idênticas "FORNECEDOR X, FORNECEDOR X" na célula) -
+// soma o valor e conta quantas vezes aparece, do maior pro menor valor.
+function agruparPorNome(itens: { nome: string; valor: number }[]): { nome: string; valor: number; qtd: number }[] {
+  const mapa = new Map<string, { valor: number; qtd: number }>();
+  for (const it of itens) {
+    const atual = mapa.get(it.nome) ?? { valor: 0, qtd: 0 };
+    atual.valor += it.valor;
+    atual.qtd += 1;
+    mapa.set(it.nome, atual);
+  }
+  return Array.from(mapa.entries())
+    .map(([nome, v]) => ({ nome, ...v }))
+    .sort((a, b) => b.valor - a.valor);
+}
+
+// Uma linha por nome (em vez da lista antiga, tudo junto separado por
+// vírgula, que ficava ilegível quando o mesmo cliente/fornecedor
+// aparecia várias vezes no mesmo dia por causa de parcelas).
+function ListaItensDia({ itens }: { itens: { nome: string; valor: number; qtd: number }[] }) {
+  return (
+    <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 2 }}>
+      {itens.map((it) => (
+        <div key={it.nome} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span>
+            {it.nome}
+            {it.qtd > 1 ? ` (${it.qtd}x)` : ''}
+          </span>
+          <span className="mono" style={{ whiteSpace: 'nowrap' }}>{formatarMoeda(it.valor)}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // Painel do fluxo de caixa mensal - substitui o controle que era feito à
@@ -233,9 +265,13 @@ export function FluxoCaixaMensal() {
     return {
       data: dataStr,
       pagarTotal: pagarDoDia.reduce((s, c) => s + Number(c.valor), 0),
-      pagarItens: pagarDoDia.map((c) => ({ nome: nomeFornecedor(c.fornecedor_id) ?? c.descricao ?? 'Sem descrição', valor: Number(c.valor) })),
+      pagarItens: agruparPorNome(
+        pagarDoDia.map((c) => ({ nome: nomeFornecedor(c.fornecedor_id) ?? c.descricao ?? 'Sem descrição', valor: Number(c.valor) })),
+      ),
       receberTotal: receberDoDia.reduce((s, c) => s + Number(c.valor), 0),
-      receberItens: receberDoDia.map((c) => ({ nome: nomeCliente(c.cliente_id) ?? c.descricao ?? 'Sem descrição', valor: Number(c.valor) })),
+      receberItens: agruparPorNome(
+        receberDoDia.map((c) => ({ nome: nomeCliente(c.cliente_id) ?? c.descricao ?? 'Sem descrição', valor: Number(c.valor) })),
+      ),
     };
   });
 
@@ -441,19 +477,19 @@ export function FluxoCaixaMensal() {
                 <td className="mono">
                   {new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', weekday: 'short' })}
                 </td>
-                <td>
+                <td style={{ minWidth: 200 }}>
                   {l.pagarTotal > 0 && (
                     <>
-                      {formatarMoeda(l.pagarTotal)}
-                      <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>{l.pagarItens.map((it) => it.nome).join(', ')}</div>
+                      <strong>{formatarMoeda(l.pagarTotal)}</strong>
+                      <ListaItensDia itens={l.pagarItens} />
                     </>
                   )}
                 </td>
-                <td>
+                <td style={{ minWidth: 200 }}>
                   {l.receberTotal > 0 && (
                     <>
-                      {formatarMoeda(l.receberTotal)}
-                      <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>{l.receberItens.map((it) => it.nome).join(', ')}</div>
+                      <strong>{formatarMoeda(l.receberTotal)}</strong>
+                      <ListaItensDia itens={l.receberItens} />
                     </>
                   )}
                 </td>
