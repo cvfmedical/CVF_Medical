@@ -32,6 +32,10 @@ interface ContaReceber {
   id: number;
   numero_conta: string;
   orcamento_id: number | null;
+  // Orçamentos consolidados numa NF só (2+ orçamentos do mesmo cliente,
+  // ver abrirPreviaNfse) - além do orcamento_id "âncora" acima, os demais
+  // ficam só aqui.
+  orcamentos_ids: number[] | null;
   cliente_id: number | null;
   descricao: string | null;
   valor: number;
@@ -365,7 +369,7 @@ export function Faturamento() {
       const { data, error } = await supabase
         .from('contas_receber')
         .select(
-          'id, numero_conta, orcamento_id, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, boleto_emitido_via, boleto_situacao, boleto_pdf_path, nfse_status, nfse_erro_detalhe, nfse_pdf_path, nfse_ref, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+          'id, numero_conta, orcamento_id, orcamentos_ids, cliente_id, descricao, valor, status, nf_tipo, nf_numero, nf_serie, nf_chave_acesso, nf_data_emissao, boleto_numero, boleto_linha_digitavel, boleto_vencimento, boleto_emitido_via, boleto_situacao, boleto_pdf_path, nfse_status, nfse_erro_detalhe, nfse_pdf_path, nfse_ref, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
         )
         .neq('status', 'Cancelado')
         .order('id', { ascending: false });
@@ -400,7 +404,18 @@ export function Faturamento() {
     },
   });
 
-  const orcamentosComConta = new Set((contasQuery.data ?? []).map((c) => c.orcamento_id).filter((id): id is number => id != null));
+  // BUG REAL corrigido (2026-09-15): antes só olhava orcamento_id (o
+  // "âncora" singular de cada conta) - um orçamento que entrou numa NF
+  // CONSOLIDADA (2+ orçamentos juntos, ver abrirPreviaNfse) só aparece
+  // dentro de orcamentos_ids das OUTRAS contas, nunca como orcamento_id
+  // próprio. Sem isso, esses orçamentos continuavam aparecendo como "ainda
+  // sem NF" e podiam ser lançados de novo manualmente - caso real: ORC-5576
+  // e ORC-5649 entraram na NF 2920 (consolidada com ORC-5578), mas
+  // continuaram disponíveis pra lançamento individual e foram faturados
+  // uma 2ª vez (CR-5603/CR-5604).
+  const orcamentosComConta = new Set(
+    (contasQuery.data ?? []).flatMap((c) => [c.orcamento_id, ...(c.orcamentos_ids ?? [])]).filter((id): id is number => id != null),
+  );
 
   const linhas: LinhaFaturamento[] = [
     ...(contasQuery.data ?? []).map((c): LinhaFaturamento => ({
