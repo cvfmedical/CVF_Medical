@@ -420,7 +420,11 @@ Deno.serve(async (req: Request) => {
     inscricao_estadual_emitente: IE_EMITENTE,
     regime_tributario_emitente: CRT_EMITENTE,
     ...(documentoCliente.length === 14 ? { cnpj_destinatario: documentoCliente } : { cpf_destinatario: documentoCliente }),
-    nome_destinatario: cliente.razao_social,
+    // Limite de 60 caracteres confirmado em teste real (2026-09-15, erro
+    // "Nome destinatario é muito longo" na devolução da OS-5693/ALLERE
+    // VALE, razão social com 63 caracteres) - trunca em vez de deixar a
+    // Focus rejeitar a nota inteira.
+    nome_destinatario: (cliente.razao_social ?? '').slice(0, 60),
     indicador_inscricao_estadual_destinatario: 9, // "Não Contribuinte" - mesmo valor visto no XML real pro destinatário
     logradouro_destinatario: cliente.logradouro,
     numero_destinatario: cliente.numero_endereco || 'S/N',
@@ -497,7 +501,16 @@ Deno.serve(async (req: Request) => {
       .from('entregas')
       .update({ nfe_devolucao_status: 'erro', nfe_devolucao_erro_detalhe: detalheCompleto })
       .eq('id', corpo.entregaId);
-    const mensagemFocus = typeof resultado?.mensagem === 'string' ? resultado.mensagem : JSON.stringify(resultado);
+    // A "mensagem" sozinha da Focus é genérica pra erro de schema ("verifique
+    // o detalhamento dos erros") - o motivo de verdade vem no array "erros"
+    // (cada um com seu próprio "mensagem"), do mesmo jeito que já era feito
+    // em emitir-nfse. Sem isso, ficava impossível saber qual campo do
+    // payload estava errado.
+    const mensagensDetalhadas = Array.isArray(resultado?.erros)
+      ? resultado.erros.map((e: { mensagem?: string }) => e.mensagem).filter(Boolean).join('; ')
+      : null;
+    const mensagemFocus =
+      mensagensDetalhadas || (typeof resultado?.mensagem === 'string' ? resultado.mensagem : JSON.stringify(resultado));
     return json({ error: `Falha ao emitir NF-e de devolução (HTTP ${resp.status}): ${mensagemFocus}`, detalhe: resultado }, 502);
   }
 
