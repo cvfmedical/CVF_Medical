@@ -679,6 +679,29 @@ Deno.serve(async (req: Request) => {
       valorPecas: valorPecasCalc,
     };
     orcamentoIdParaCriarConta = orcTyped.id;
+    // Mesma lógica de parcelas do fluxo consolidado (orcamentoIds) - pedido
+    // do usuário (2026-09-15): "Forma de pagamento" (30/28 dias direto ou
+    // parcelado, com quantidade+intervalo calculados sozinhos pelo
+    // frontend) precisa funcionar também pra um orçamento SÓ, não só pra
+    // consolidação de vários. Sem `parcelas` no corpo, trata como uma
+    // parcela única - usa corpo.vencimento (calculado no frontend a partir
+    // da forma de pagamento escolhida) se vier, senão cai no padrão de 30
+    // dias.
+    const vencimentoPadraoUnico = new Date();
+    vencimentoPadraoUnico.setDate(vencimentoPadraoUnico.getDate() + 30);
+    parcelasBody =
+      Array.isArray(corpo.parcelas) && corpo.parcelas.length > 0
+        ? corpo.parcelas
+        : [{ valor: valorCalc, vencimento: corpo.vencimento || vencimentoPadraoUnico.toISOString().slice(0, 10) }];
+    const somaParcelasUnico = parcelasBody.reduce((s, p) => s + Number(p.valor), 0);
+    if (Math.abs(somaParcelasUnico - valorCalc) > 0.01) {
+      return json(
+        {
+          error: `A soma das parcelas (R$ ${somaParcelasUnico.toFixed(2)}) precisa bater com o valor do orçamento (R$ ${valorCalc.toFixed(2)}).`,
+        },
+        400,
+      );
+    }
   }
   if (!conta.valor || conta.valor <= 0) return json({ error: 'Valor da conta precisa ser maior que zero.' }, 400);
 
@@ -899,75 +922,53 @@ Deno.serve(async (req: Request) => {
   // envolvidas, não só na âncora usada pro numero_dps.
   let idsContasParaAtualizarNf: number[] = conta.id != null ? [conta.id] : [];
   if (conta.id == null) {
-    if (orcamentosIdsParaCriarContas && parcelasBody) {
-      const idsCriados: number[] = [];
-      for (let i = 0; i < parcelasBody.length; i++) {
-        const p = parcelasBody[i];
-        const numeroConta = await proximoNumeroConta(supabaseAdmin);
-        const descricaoParcela =
-          parcelasBody.length > 1 ? `${conta.descricao} - Parcela ${i + 1}/${parcelasBody.length}` : conta.descricao;
-        const { data: novaParcela, error: erroNovaParcela } = await supabaseAdmin
-          .from('contas_receber')
-          .insert({
-            numero_conta: numeroConta,
-            orcamento_id: orcamentosIdsParaCriarContas[0],
-            orcamentos_ids: orcamentosIdsParaCriarContas,
-            cliente_id: conta.cliente_id,
-            descricao: descricaoParcela,
-            valor: Number(p.valor),
-            data_vencimento: p.vencimento,
-            status: 'Em aberto',
-            boleto_numero: p.boletoNumero || null,
-            boleto_linha_digitavel: p.boletoLinhaDigitavel || null,
-            boleto_vencimento: p.vencimento,
-          })
-          .select('id')
-          .single();
-        if (erroNovaParcela || !novaParcela) {
-          return json(
-            {
-              error: `Falha ao criar a parcela ${i + 1}/${parcelasBody.length}: ${erroNovaParcela?.message ?? 'erro desconhecido'}`,
-              idsJaCriados: idsCriados,
-            },
-            500,
-          );
-        }
-        idsCriados.push(novaParcela.id);
-      }
-      idsContasParaAtualizarNf = idsCriados;
-      conta.id = idsCriados[0]; // âncora pro numero_dps/ref - a NF em si é UMA só
-      contaId = idsCriados[0];
-      payload.numero_dps = conta.id;
-      ref = `qcvf-cr-${conta.id}`;
-    } else {
+    // Unificado (2026-09-15): tanto o fluxo de 1 orçamento só quanto o
+    // consolidado (orcamentoIds) agora sempre chegam aqui com `parcelasBody`
+    // já calculado (1 parcela só = pagamento à vista, N parcelas = boleto
+    // dividido) - a única diferença é se `orcamentosIdsParaCriarContas` foi
+    // preenchido (consolidação de vários orçamentos, grava orcamentos_ids)
+    // ou não (1 orçamento só).
+    const parcelas = parcelasBody ?? [];
+    const orcamentoIdAncora = orcamentosIdsParaCriarContas ? orcamentosIdsParaCriarContas[0] : orcamentoIdParaCriarConta;
+    const idsCriados: number[] = [];
+    for (let i = 0; i < parcelas.length; i++) {
+      const p = parcelas[i];
       const numeroConta = await proximoNumeroConta(supabaseAdmin);
-      // Usa corpo.vencimento (campo "Vencimento do boleto" da tela de
-      // conferência) quando vier, senão cai no padrão de 30 dias.
-      const vencimentoPadraoUnico = new Date();
-      vencimentoPadraoUnico.setDate(vencimentoPadraoUnico.getDate() + 30);
-      const dataVencimentoUnica = corpo.vencimento || vencimentoPadraoUnico.toISOString().slice(0, 10);
-      const { data: novaConta, error: erroNovaConta } = await supabaseAdmin
+      const descricaoParcela =
+        parcelas.length > 1 ? `${conta.descricao} - Parcela ${i + 1}/${parcelas.length}` : conta.descricao;
+      const { data: novaParcela, error: erroNovaParcela } = await supabaseAdmin
         .from('contas_receber')
         .insert({
           numero_conta: numeroConta,
-          orcamento_id: orcamentoIdParaCriarConta,
+          orcamento_id: orcamentoIdAncora,
+          ...(orcamentosIdsParaCriarContas ? { orcamentos_ids: orcamentosIdsParaCriarContas } : {}),
           cliente_id: conta.cliente_id,
-          descricao: conta.descricao,
-          valor: conta.valor,
-          data_vencimento: dataVencimentoUnica,
+          descricao: descricaoParcela,
+          valor: Number(p.valor),
+          data_vencimento: p.vencimento,
           status: 'Em aberto',
+          boleto_numero: p.boletoNumero || null,
+          boleto_linha_digitavel: p.boletoLinhaDigitavel || null,
+          boleto_vencimento: p.vencimento,
         })
         .select('id')
         .single();
-      if (erroNovaConta || !novaConta) {
-        return json({ error: 'Falha ao criar a conta a receber para este orçamento.' }, 500);
+      if (erroNovaParcela || !novaParcela) {
+        return json(
+          {
+            error: `Falha ao criar a parcela ${i + 1}/${parcelas.length}: ${erroNovaParcela?.message ?? 'erro desconhecido'}`,
+            idsJaCriados: idsCriados,
+          },
+          500,
+        );
       }
-      conta.id = novaConta.id;
-      contaId = novaConta.id;
-      idsContasParaAtualizarNf = [conta.id];
-      payload.numero_dps = conta.id;
-      ref = `qcvf-cr-${conta.id}`;
+      idsCriados.push(novaParcela.id);
     }
+    idsContasParaAtualizarNf = idsCriados;
+    conta.id = idsCriados[0]; // âncora pro numero_dps/ref - a NF em si é UMA só
+    contaId = idsCriados[0];
+    payload.numero_dps = conta.id;
+    ref = `qcvf-cr-${conta.id}`;
 
     // Cliente com faturamento diferido de peças (Grupo Cortical e outros,
     // ver splitServicoPecas acima): a NFS-e recém-criada cobre só a mão de

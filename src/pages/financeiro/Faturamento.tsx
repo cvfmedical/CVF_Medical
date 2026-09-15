@@ -19,7 +19,6 @@ import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 import { totalOrcamento } from '../../lib/valorOrcamento';
 import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
 import { abrirPreviaDanfse } from '../../lib/previaDanfse';
-import { IconTrash } from '@tabler/icons-react';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { urlAssinadaDocumentoFinanceiro } from '../../lib/storage';
 import { gerarAnexoOrcamentoSozinho, blobParaBase64, type DadosOrcamentoPdf, type AnexoBase64 } from '../../lib/pdfsOrcamento';
@@ -322,16 +321,47 @@ export function Faturamento() {
   // de cada uma (ver emitirBoletoConsolidado).
   const [selecionadasFaturar, setSelecionadasFaturar] = useState<Set<string>>(new Set());
   const [consolidandoContas, setConsolidandoContas] = useState(false);
-  const [parceladoConsolidado, setParceladoConsolidado] = useState(false);
-  const [parcelasConsolidado, setParcelasConsolidado] = useState<
-    { valor: string; vencimento: string; boletoNumero: string; boletoLinhaDigitavel: string }[]
+  // Forma de pagamento do boleto na emissão automática de NFS-e (1
+  // orçamento ou consolidado) - pedido do usuário (2026-09-15): em vez de
+  // digitar/calcular a mão cada vencimento, escolhe um prazo pronto (28 ou
+  // 30 dias à vista) ou "Parcelado" (informa só a quantidade de parcelas e
+  // o intervalo entre elas - 28 ou 30 dias - e o sistema calcula sozinho
+  // cada vencimento e divide o valor). "custom" cobre o caso raro de
+  // precisar de uma data fora desses padrões.
+  const [formaPagamentoNfse, setFormaPagamentoNfse] = useState<'30' | '28' | 'parcelado' | 'custom'>('30');
+  const [vencimentoCustomNfse, setVencimentoCustomNfse] = useState('');
+  const [qtdParcelasNfse, setQtdParcelasNfse] = useState(2);
+  const [intervaloParcelasNfse, setIntervaloParcelasNfse] = useState<'28' | '30'>('30');
+  // Nº/linha digitável de cada boleto, pra colar depois de gerado no banco
+  // (o boleto em si continua sendo gerado fora do sistema) - um item por
+  // parcela, sincronizado com qtdParcelasNfse.
+  const [boletosParcelasNfse, setBoletosParcelasNfse] = useState<
+    { boletoNumero: string; boletoLinhaDigitavel: string }[]
   >([]);
-  // Vencimento do boleto pra emissão automática de NFS-e (1 orçamento ou
-  // consolidado, sem dividir em parcelas) - antes disso não tinha campo
-  // nenhum pra isso na tela de conferência, caía sempre em 30 dias fixo,
-  // sem o usuário saber que dava pra mudar (só via o workaround de marcar
-  // "dividir em mais de um boleto" e apagar uma parcela).
-  const [vencimentoNfseUnico, setVencimentoNfseUnico] = useState('');
+
+  function calcularParcelasNfse(
+    qtd: number,
+    intervaloDias: number,
+    total: number,
+  ): { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[] {
+    // Divide em centavos pra não deixar sobra/falta de centavos por
+    // arredondamento (ex.: R$ 100,00 ÷ 3) - a diferença fica na última parcela.
+    const totalCentavos = Math.round(total * 100);
+    const baseCentavos = Math.floor(totalCentavos / qtd);
+    const parcelas: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[] = [];
+    for (let i = 0; i < qtd; i++) {
+      const centavos = i === qtd - 1 ? totalCentavos - baseCentavos * (qtd - 1) : baseCentavos;
+      const data = new Date();
+      data.setDate(data.getDate() + intervaloDias * (i + 1));
+      parcelas.push({
+        valor: centavos / 100,
+        vencimento: data.toISOString().slice(0, 10),
+        boletoNumero: boletosParcelasNfse[i]?.boletoNumero || undefined,
+        boletoLinhaDigitavel: boletosParcelasNfse[i]?.boletoLinhaDigitavel || undefined,
+      });
+    }
+    return parcelas;
+  }
   const [formNfse, setFormNfse] = useState<{
     razaoSocial: string;
     documento: string;
@@ -1321,17 +1351,14 @@ export function Faturamento() {
         email: r.emailTomador ?? '',
         descricaoServico: r.descricaoServico ?? '',
       });
-      setParceladoConsolidado(false);
-      setParcelasConsolidado(
-        linhas.length > 1
-          ? [{ valor: String(r.valorServico), vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' }]
-          : [],
-      );
-      // Pré-preenche com os mesmos 30 dias que seriam usados por padrão -
-      // já mostra pro usuário o que vai acontecer, e deixa aberto pra mudar.
-      const vencimentoPadrao = new Date();
-      vencimentoPadrao.setDate(vencimentoPadrao.getDate() + 30);
-      setVencimentoNfseUnico(vencimentoPadrao.toISOString().slice(0, 10));
+      setFormaPagamentoNfse('30');
+      setVencimentoCustomNfse('');
+      setQtdParcelasNfse(2);
+      setIntervaloParcelasNfse('30');
+      setBoletosParcelasNfse([
+        { boletoNumero: '', boletoLinhaDigitavel: '' },
+        { boletoNumero: '', boletoLinhaDigitavel: '' },
+      ]);
     } catch (e) {
       setErro(await mensagemErroFuncao(e));
     } finally {
@@ -1484,32 +1511,33 @@ export function Faturamento() {
   async function confirmarEmissaoNfse() {
     if (!previaNfse || !formNfse) return;
     let parcelasParaEnviar: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[] | undefined;
-    if (previaNfse.linhas.length > 1) {
-      if (parceladoConsolidado) {
-        if (parcelasConsolidado.some((p) => !p.valor || !p.vencimento)) {
-          setErro('Preencha valor e vencimento de todas as parcelas.');
+    let vencimentoParaEnviar: string | undefined;
+    // A conta já existente (contaId) tem seu próprio vencimento/boleto,
+    // definidos quando ela foi criada - "Forma de pagamento" só vale
+    // quando a conta ainda vai ser criada agora (fluxo orçamentoId/
+    // orcamentoIds).
+    if (!previaNfse.linhas[0].contaId) {
+      if (formaPagamentoNfse === 'parcelado') {
+        if (qtdParcelasNfse < 2) {
+          setErro('Informe ao menos 2 parcelas.');
           return;
         }
-        const somaParcelas = parcelasConsolidado.reduce((s, p) => s + Number(p.valor), 0);
-        if (Math.abs(somaParcelas - previaNfse.resumoSomenteLeitura.valorServico) > 0.01) {
-          setErro(
-            `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) precisa bater com o valor total (R$ ${previaNfse.resumoSomenteLeitura.valorServico.toFixed(2)}).`,
-          );
+        parcelasParaEnviar = calcularParcelasNfse(
+          qtdParcelasNfse,
+          Number(intervaloParcelasNfse),
+          previaNfse.resumoSomenteLeitura.valorServico,
+        );
+      } else if (formaPagamentoNfse === 'custom') {
+        if (!vencimentoCustomNfse) {
+          setErro('Informe o vencimento do boleto.');
           return;
         }
-        parcelasParaEnviar = parcelasConsolidado.map((p) => ({
-          valor: Number(p.valor),
-          vencimento: p.vencimento,
-          boletoNumero: p.boletoNumero || undefined,
-          boletoLinhaDigitavel: p.boletoLinhaDigitavel || undefined,
-        }));
+        vencimentoParaEnviar = vencimentoCustomNfse;
       } else {
-        parcelasParaEnviar = undefined; // 1 parcela só, com o total - usa o campo "Vencimento do boleto" abaixo
+        const data = new Date();
+        data.setDate(data.getDate() + Number(formaPagamentoNfse));
+        vencimentoParaEnviar = data.toISOString().slice(0, 10);
       }
-    }
-    if (!parceladoConsolidado && !previaNfse.linhas[0].contaId && !vencimentoNfseUnico) {
-      setErro('Informe o vencimento do boleto.');
-      return;
     }
     const sucesso = await emitirNFSe(
       previaNfse.linhas,
@@ -1528,7 +1556,7 @@ export function Faturamento() {
         email_tomador: formNfse.email,
         descricao_servico: formNfse.descricaoServico,
       },
-      !parceladoConsolidado ? vencimentoNfseUnico : undefined,
+      vencimentoParaEnviar,
     );
     if (sucesso) {
       fecharPreviaNfse();
@@ -1574,7 +1602,7 @@ export function Faturamento() {
           ...(linhas.length === 1
             ? l.contaId
               ? { contaId: l.contaId }
-              : { orcamentoId: l.orcamentoId }
+              : { orcamentoId: l.orcamentoId, ...(parcelas ? { parcelas } : {}) }
             : { orcamentoIds: linhas.map((x) => x.orcamentoId!), ...(parcelas ? { parcelas } : {}) }),
           acao: 'emitir',
           ...(overrides ? { overrides } : {}),
@@ -2738,92 +2766,131 @@ export function Faturamento() {
             </div>
           </div>
 
-          {!previaNfse.linhas[0].contaId && !parceladoConsolidado && (
-            <div className="campo-form" style={{ maxWidth: 220 }}>
-              <label>Vencimento do boleto</label>
-              <input type="date" value={vencimentoNfseUnico} onChange={(e) => setVencimentoNfseUnico(e.target.value)} />
-              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Já vem preenchido com 30 dias (padrão) - só muda se você editar.
-              </p>
-            </div>
-          )}
-
-          {previaNfse.linhas.length > 1 && (
+          {!previaNfse.linhas[0].contaId && (
             <>
-              <h2 style={{ fontSize: 13, marginTop: 16 }}>Cobrança</h2>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={parceladoConsolidado}
-                  onChange={(e) => {
-                    setParceladoConsolidado(e.target.checked);
-                    if (e.target.checked && parcelasConsolidado.length < 2) {
-                      setParcelasConsolidado([
-                        { valor: '', vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' },
-                        { valor: '', vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' },
-                      ]);
-                    }
-                  }}
-                />
-                Dividir em mais de um boleto (a NF continua sendo UMA só, pro valor total)
-              </label>
-              {parceladoConsolidado && (
-                <div style={{ marginTop: 8 }}>
-                  {parcelasConsolidado.map((p, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
-                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-                        <label>Parcela {i + 1} - Valor (R$)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={p.valor}
-                          onChange={(e) =>
-                            setParcelasConsolidado((lista) => lista.map((x, j) => (j === i ? { ...x, valor: e.target.value } : x)))
-                          }
-                        />
-                      </div>
-                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-                        <label>Vencimento</label>
-                        <input
-                          type="date"
-                          value={p.vencimento}
-                          onChange={(e) =>
-                            setParcelasConsolidado((lista) => lista.map((x, j) => (j === i ? { ...x, vencimento: e.target.value } : x)))
-                          }
-                        />
-                      </div>
-                      <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-                        <label>Boleto (opcional)</label>
-                        <input
-                          type="text"
-                          value={p.boletoNumero}
-                          onChange={(e) =>
-                            setParcelasConsolidado((lista) => lista.map((x, j) => (j === i ? { ...x, boletoNumero: e.target.value } : x)))
-                          }
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        className="botao-icone perigo"
-                        title="Remover parcela"
-                        onClick={() => setParcelasConsolidado((lista) => lista.filter((_, j) => j !== i))}
-                      >
-                        <IconTrash size={14} />
-                      </button>
+              <h2 style={{ fontSize: 13, marginTop: 16 }}>Forma de pagamento</h2>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="formaPagamentoNfse"
+                    checked={formaPagamentoNfse === '30'}
+                    onChange={() => setFormaPagamentoNfse('30')}
+                  />
+                  30 dias
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="formaPagamentoNfse"
+                    checked={formaPagamentoNfse === '28'}
+                    onChange={() => setFormaPagamentoNfse('28')}
+                  />
+                  28 dias
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="formaPagamentoNfse"
+                    checked={formaPagamentoNfse === 'parcelado'}
+                    onChange={() => setFormaPagamentoNfse('parcelado')}
+                  />
+                  Parcelado
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="formaPagamentoNfse"
+                    checked={formaPagamentoNfse === 'custom'}
+                    onChange={() => setFormaPagamentoNfse('custom')}
+                  />
+                  Outra data
+                </label>
+              </div>
+
+              {(formaPagamentoNfse === '30' || formaPagamentoNfse === '28') && (
+                <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                  Vencimento único: {(() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + Number(formaPagamentoNfse));
+                    return d.toLocaleDateString('pt-BR');
+                  })()}
+                </p>
+              )}
+
+              {formaPagamentoNfse === 'custom' && (
+                <div className="campo-form" style={{ maxWidth: 220 }}>
+                  <label>Vencimento do boleto</label>
+                  <input type="date" value={vencimentoCustomNfse} onChange={(e) => setVencimentoCustomNfse(e.target.value)} />
+                </div>
+              )}
+
+              {formaPagamentoNfse === 'parcelado' && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <div className="campo-form" style={{ maxWidth: 160 }}>
+                      <label>Quantidade de parcelas</label>
+                      <input
+                        type="number"
+                        min={2}
+                        step={1}
+                        value={qtdParcelasNfse}
+                        onChange={(e) => {
+                          const qtd = Math.max(2, Number(e.target.value) || 2);
+                          setQtdParcelasNfse(qtd);
+                          setBoletosParcelasNfse((lista) => {
+                            const nova = [...lista];
+                            while (nova.length < qtd) nova.push({ boletoNumero: '', boletoLinhaDigitavel: '' });
+                            return nova.slice(0, qtd);
+                          });
+                        }}
+                      />
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    className="botao-secundario botao-pequeno"
-                    onClick={() =>
-                      setParcelasConsolidado((lista) => [...lista, { valor: '', vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' }])
-                    }
-                  >
-                    + Adicionar parcela
-                  </button>
+                    <div className="campo-form" style={{ maxWidth: 220 }}>
+                      <label>Intervalo entre parcelas</label>
+                      <select
+                        value={intervaloParcelasNfse}
+                        onChange={(e) => setIntervaloParcelasNfse(e.target.value as '28' | '30')}
+                      >
+                        <option value="28">28 dias (28 / 56 / 84...)</option>
+                        <option value="30">30 dias (30 / 60 / 90...)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    {calcularParcelasNfse(
+                      qtdParcelasNfse,
+                      Number(intervaloParcelasNfse),
+                      previaNfse.resumoSomenteLeitura.valorServico,
+                    ).map((p, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
+                        <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                          <label>Parcela {i + 1}</label>
+                          <input
+                            type="text"
+                            value={`${formatarMoeda(p.valor)} - vence ${new Date(p.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}`}
+                            disabled
+                          />
+                        </div>
+                        <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
+                          <label>Boleto (opcional)</label>
+                          <input
+                            type="text"
+                            value={boletosParcelasNfse[i]?.boletoNumero ?? ''}
+                            onChange={(e) =>
+                              setBoletosParcelasNfse((lista) =>
+                                lista.map((x, j) => (j === i ? { ...x, boletoNumero: e.target.value } : x)),
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                   <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                    Boleto continua manual (cola o número/linha digitável depois de gerar no banco) - a soma das
-                    parcelas precisa bater com o valor total (R$ {previaNfse.resumoSomenteLeitura.valorServico.toFixed(2)}).
+                    Calculado automaticamente: {qtdParcelasNfse}x, cada vencimento {intervaloParcelasNfse} dias
+                    depois do anterior, valor dividido igualmente. Boleto continua manual (cola o número depois de
+                    gerar no banco, se quiser).
                   </p>
                 </div>
               )}
