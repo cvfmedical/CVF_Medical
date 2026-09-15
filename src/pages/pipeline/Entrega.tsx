@@ -52,6 +52,17 @@ interface ResumoDevolucao {
   numeroRemessa: string | null;
   chaveRemessa: string | null;
   valorBemSugerido: number | null;
+  itensExtras: { descricao: string | null; ncm: string | null; valor: number | null }[];
+}
+
+// Um item da NF de remessa (vindo da consulta por chave de acesso) - usado
+// pra listar itens "acompanhantes" (ex.: cabos/acessórios que vieram junto
+// com a ótica, mas não têm Entrada/OS/orçamento próprios) que o usuário
+// pode escolher devolver junto, como linhas extras na mesma NF-e.
+interface ItemNotaRemessa {
+  descricao: string | null;
+  ncm: string | null;
+  valorTotal: string | number | null;
 }
 
 export function Entrega() {
@@ -77,6 +88,15 @@ export function Entrega() {
   const [erroDevolucao, setErroDevolucao] = useState<string | null>(null);
   const [consultandoStatusDevolucaoId, setConsultandoStatusDevolucaoId] = useState<number | null>(null);
   const [cancelandoDevolucaoId, setCancelandoDevolucaoId] = useState<number | null>(null);
+  // Itens "acompanhantes" da mesma NF de remessa (pedido do usuário,
+  // 2026-09-15) - buscados sob demanda (não toda vez que abre a prévia,
+  // pra não gastar consulta à Focus à toa) e escolhidos um a um pra virarem
+  // linhas extras na mesma NF-e de devolução, cada um com valor próprio.
+  const [itensNotaRemessa, setItensNotaRemessa] = useState<ItemNotaRemessa[] | null>(null);
+  const [buscandoItensNotaRemessa, setBuscandoItensNotaRemessa] = useState(false);
+  const [itensExtrasSelecionados, setItensExtrasSelecionados] = useState<
+    { descricao: string; ncm: string; valor: string }[]
+  >([]);
 
   // Nº do orçamento de cada OS - pra saber a que orçamento essa entrega se
   // refere, sem precisar abrir a OS. Com orçamentos alternativos, prioriza
@@ -457,6 +477,8 @@ export function Entrega() {
     setPreviaDevolucao(null);
     setErroDevolucao(null);
     setValorBemDevolucao('');
+    setItensNotaRemessa(null);
+    setItensExtrasSelecionados([]);
     setCarregandoPreviaDevolucao(true);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfe', {
@@ -483,6 +505,51 @@ export function Entrega() {
     setPreviaDevolucao(null);
     setErroDevolucao(null);
     setValorBemDevolucao('');
+    setItensNotaRemessa(null);
+    setItensExtrasSelecionados([]);
+  }
+
+  // Busca TODOS os itens da mesma NF de remessa (não só o da ótica) - pedido
+  // do usuário (2026-09-15): itens que só "acompanham" a ótica (cabos,
+  // acessórios) não têm Entrada/OS/orçamento próprios, então a única fonte
+  // de dados deles é a própria NF. Sob demanda (botão), não busca sozinho ao
+  // abrir a prévia, pra não gastar uma consulta à Focus sem necessidade.
+  async function buscarItensNotaRemessa() {
+    const chave = previaDevolucao?.resumo.chaveRemessa;
+    if (!chave) return;
+    setBuscandoItensNotaRemessa(true);
+    setErroDevolucao(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+        body: { acao: 'consultar_remessa', chaveAcesso: chave },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar a NF de remessa.');
+      setItensNotaRemessa((data.itens as ItemNotaRemessa[]) ?? []);
+    } catch (e) {
+      setErroDevolucao(await mensagemErroFuncao(e));
+    } finally {
+      setBuscandoItensNotaRemessa(false);
+    }
+  }
+
+  function alternarItemExtra(item: ItemNotaRemessa) {
+    setItensExtrasSelecionados((lista) => {
+      const jaSelecionado = lista.some((i) => i.descricao === item.descricao);
+      if (jaSelecionado) return lista.filter((i) => i.descricao !== item.descricao);
+      return [
+        ...lista,
+        {
+          descricao: item.descricao ?? '',
+          ncm: item.ncm ?? '',
+          valor: item.valorTotal != null ? String(item.valorTotal) : '',
+        },
+      ];
+    });
+  }
+
+  function atualizarValorItemExtra(descricao: string, valor: string) {
+    setItensExtrasSelecionados((lista) => lista.map((i) => (i.descricao === descricao ? { ...i, valor } : i)));
   }
 
   // Transmite de fato pra SEFAZ - irreversível (só dá pra cancelar até 24h
@@ -495,6 +562,15 @@ export function Entrega() {
       setErroDevolucao('Informe o valor do bem devolvido antes de transmitir.');
       return;
     }
+    if (itensExtrasSelecionados.some((i) => !i.valor || Number(i.valor.replace(',', '.')) <= 0)) {
+      setErroDevolucao('Informe o valor de todos os itens acompanhantes marcados antes de transmitir.');
+      return;
+    }
+    const itensExtras = itensExtrasSelecionados.map((i) => ({
+      descricao: i.descricao,
+      ncm: i.ncm,
+      valor: Number(i.valor.replace(',', '.')),
+    }));
     const alvo = devolucaoAlvo;
     pedirConfirmacao(
       async () => {
@@ -502,7 +578,7 @@ export function Entrega() {
         setErroDevolucao(null);
         try {
           const { data, error } = await supabase.functions.invoke('emitir-nfe', {
-            body: { acao: 'emitir_devolucao', entregaId: alvo.id, valorBem: valor },
+            body: { acao: 'emitir_devolucao', entregaId: alvo.id, valorBem: valor, itensExtras },
           });
           if (error) throw error;
           if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao emitir a NF-e de devolução.');
@@ -516,7 +592,10 @@ export function Entrega() {
       },
       {
         titulo: 'Emitir NF-e de devolução',
-        mensagem: `Confirma a transmissão da NF-e de devolução para a SEFAZ, referente à OS ${previaDevolucao?.resumo.numeroOS ?? alvo.ordem_servico_id}? Depois de autorizada, só é possível cancelar em até 24h.`,
+        mensagem:
+          itensExtras.length > 0
+            ? `Confirma a transmissão da NF-e de devolução para a SEFAZ, referente à OS ${previaDevolucao?.resumo.numeroOS ?? alvo.ordem_servico_id}, com ${itensExtras.length} item(ns) acompanhante(s) junto? Depois de autorizada, só é possível cancelar em até 24h.`
+            : `Confirma a transmissão da NF-e de devolução para a SEFAZ, referente à OS ${previaDevolucao?.resumo.numeroOS ?? alvo.ordem_servico_id}? Depois de autorizada, só é possível cancelar em até 24h.`,
       },
     );
   }
@@ -1115,6 +1194,58 @@ export function Entrega() {
                 value={valorBemDevolucao}
                 onChange={(e) => setValorBemDevolucao(e.target.value)}
               />
+            </div>
+
+            <div className="campo-form">
+              <label>Itens que acompanham (opcional)</label>
+              <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 6 }}>
+                Itens que vieram na mesma NF de remessa junto com a ótica, mas sem Entrada/OS/orçamento próprios
+                (ex.: cabos, acessórios). Marcados aqui, saem como itens extras dentro desta MESMA NF-e de
+                devolução.
+              </p>
+              {itensNotaRemessa == null ? (
+                <button
+                  type="button"
+                  className="botao-secundario botao-pequeno"
+                  onClick={buscarItensNotaRemessa}
+                  disabled={buscandoItensNotaRemessa || !previaDevolucao?.resumo.chaveRemessa}
+                  title={
+                    previaDevolucao?.resumo.chaveRemessa
+                      ? undefined
+                      : 'Essa Entrada não tem chave de acesso da NF de remessa cadastrada.'
+                  }
+                >
+                  {buscandoItensNotaRemessa ? 'Buscando...' : 'Buscar itens da NF de remessa'}
+                </button>
+              ) : itensNotaRemessa.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>Essa nota não trouxe mais nenhum item.</p>
+              ) : (
+                itensNotaRemessa.map((item, i) => {
+                  const selecionado = itensExtrasSelecionados.find((sel) => sel.descricao === item.descricao);
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!selecionado}
+                        onChange={() => alternarItemExtra(item)}
+                      />
+                      <span style={{ fontSize: 13, flex: 1 }}>
+                        {item.descricao ?? '(sem descrição)'} — NCM {item.ncm ?? '-'}
+                      </span>
+                      {selecionado && (
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={{ width: 110 }}
+                          placeholder="Valor (R$)"
+                          value={selecionado.valor}
+                          onChange={(e) => atualizarValorItemExtra(item.descricao ?? '', e.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </>
         )}

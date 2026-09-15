@@ -163,6 +163,13 @@ Deno.serve(async (req: Request) => {
     acao?: 'consultar_remessa' | 'previsualizar_devolucao' | 'emitir_devolucao' | 'consultar_devolucao' | 'cancelar_devolucao';
     serie?: number;
     justificativa?: string;
+    // Itens que vieram na MESMA NF de remessa "acompanhando" o equipamento
+    // (ex.: cabos/acessórios que não têm Entrada/OS/orçamento próprios) -
+    // pedido do usuário (2026-09-15): a devolução desses itens sai como
+    // linhas EXTRAS na mesma NF-e de devolução da ótica, não numa nota à
+    // parte. Descrição/NCM vêm da consulta por chave de acesso (mesmo
+    // endpoint usado pra Entrada); valor é digitado/confirmado na tela.
+    itensExtras?: { descricao: string; ncm: string; valor: number }[];
   };
   try {
     corpo = await req.json();
@@ -517,6 +524,37 @@ Deno.serve(async (req: Request) => {
     ],
   };
 
+  // Itens que "acompanham" a ótica na mesma NF de remessa, mas não têm
+  // Entrada/OS/orçamento próprios (ex.: cabos/acessórios) - pedido do
+  // usuário (2026-09-15). O frontend consulta a mesma NF por chave de
+  // acesso (acao=consultar_remessa) pra listar os itens disponíveis, e
+  // manda aqui só os que o usuário escolheu devolver junto, com o valor
+  // confirmado na tela - viram linhas extras na MESMA NF-e de devolução
+  // (mesmo CFOP/tratamento fiscal do item principal), não uma nota à parte.
+  const itensExtras = Array.isArray(corpo.itensExtras) ? corpo.itensExtras : [];
+  for (const extra of itensExtras) {
+    if (!extra || typeof extra.valor !== 'number' || extra.valor <= 0) continue;
+    payload.items.push({
+      numero_item: payload.items.length + 1,
+      codigo_produto: `OS-${os.numero_os}-ACOMP-${payload.items.length + 1}`,
+      descricao: extra.descricao || 'Item acompanhante',
+      cfop,
+      codigo_ncm: extra.ncm || ncmItem,
+      quantidade_comercial: 1,
+      quantidade_tributavel: 1,
+      unidade_comercial: 'UN',
+      unidade_tributavel: 'UN',
+      valor_unitario_comercial: extra.valor,
+      valor_unitario_tributavel: extra.valor,
+      valor_bruto: extra.valor,
+      inclui_no_total: 1,
+      icms_origem: ICMS_ORIGEM,
+      icms_situacao_tributaria: CSOSN_DEVOLUCAO,
+      pis_situacao_tributaria: PIS_CST_NAO_TRIBUTADO,
+      cofins_situacao_tributaria: COFINS_CST_NAO_TRIBUTADO,
+    });
+  }
+
   if (acao === 'previsualizar_devolucao') {
     return json({
       ok: true,
@@ -529,6 +567,11 @@ Deno.serve(async (req: Request) => {
         numeroOS: os.numero_os,
         descricaoItem,
         numeroSerie: os.optica_sn,
+        itensExtras: payload.items.slice(1).map((it) => ({
+          descricao: it.descricao,
+          ncm: it.codigo_ncm,
+          valor: it.valor_bruto,
+        })),
         cfop,
         ncm: ncmItem,
         numeroRemessa,
