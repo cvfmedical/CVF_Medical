@@ -271,6 +271,18 @@ Deno.serve(async (req: Request) => {
 
     let erroGravacao: string | null = null;
     if (resultado.status === 'autorizado') {
+      // DANFE (PDF) pra impressão/reimpressão - documentado pela Focus como
+      // "caminho_danfe" na consulta de NF-e (caminho RELATIVO, diferente do
+      // "url_danfse" já usado na NFS-e, que vem como URL completa) - por
+      // isso precisa prefixar com o host da própria Focus. Ainda não
+      // confirmado contra uma resposta real (primeira vez que isso é
+      // usado) - se o link não abrir, o campo certo pode ter outro nome.
+      const caminhoDanfe = typeof resultado.caminho_danfe === 'string' ? resultado.caminho_danfe : null;
+      const pdfPath = caminhoDanfe
+        ? caminhoDanfe.startsWith('http')
+          ? caminhoDanfe
+          : `${focusBaseUrl}${caminhoDanfe}`
+        : null;
       const { error: erroUpdate } = await supabaseAdmin
         .from('entregas')
         .update({
@@ -285,6 +297,7 @@ Deno.serve(async (req: Request) => {
           nf_devolucao_data_emissao: resultado.data_emissao ? String(resultado.data_emissao).slice(0, 10) : null,
           nfe_devolucao_status: 'autorizada',
           nfe_devolucao_erro_detalhe: null,
+          nf_devolucao_pdf_path: pdfPath,
         })
         .eq('id', corpo.entregaId);
       if (erroUpdate) erroGravacao = erroUpdate.message;

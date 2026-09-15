@@ -30,6 +30,7 @@ interface EntregaRow {
   nf_devolucao_cfop: string | null;
   nf_devolucao_data_emissao: string | null;
   nf_devolucao_valor: number | null;
+  nf_devolucao_pdf_path: string | null;
   nfe_devolucao_status: string | null;
   nfe_devolucao_ref: string | null;
   nfe_devolucao_erro_detalhe: string | null;
@@ -884,6 +885,25 @@ export function Entrega() {
               disabled={consultandoStatusDevolucaoId === row.id}
             >
               {consultandoStatusDevolucaoId === row.id ? 'Consultando...' : 'Verificar status NF-e'}
+            </button>
+          )}
+          {row.nfe_devolucao_status === 'autorizada' && row.nf_devolucao_pdf_path && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Abrir o DANFE (PDF) da NF-e de devolução pra imprimir"
+              onClick={() => window.open(row.nf_devolucao_pdf_path!, '_blank')}
+            >
+              Ver PDF da NF-e
+            </button>
+          )}
+          {row.nfe_devolucao_status === 'autorizada' && !row.nf_devolucao_pdf_path && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Autorizada antes deste link existir no sistema - busca o PDF de novo na Focus"
+              onClick={() => consultarStatusDevolucao(row)}
+              disabled={consultandoStatusDevolucaoId === row.id}
+            >
+              {consultandoStatusDevolucaoId === row.id ? 'Buscando...' : 'Buscar PDF da NF-e'}
             </button>
           )}
           {row.nfe_devolucao_status === 'autorizada' && (
