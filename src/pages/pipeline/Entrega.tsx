@@ -929,7 +929,11 @@ export function Entrega() {
         // porteira "liberada pra entrega", já que o status naturalmente
         // avança pra "Entregue" assim que a entrega é criada pela 1ª vez.
         const editando = !!d.id;
-        if (!editando && !podeEntregar(Number(d.ordem_servico_id)))
+        if (
+          !editando &&
+          !podeEntregar(Number(d.ordem_servico_id)) &&
+          !entregueSemRegistro(Number(d.ordem_servico_id))
+        )
           return 'Esta OS ainda não está liberada para entrega (precisa estar em "Pronto para entrega" ou "Devolução sem reparo").';
         if (!d.forma_devolucao) return 'Selecione a forma de devolução.';
         return null;
