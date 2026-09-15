@@ -2328,9 +2328,17 @@ export function Faturamento() {
                           style={{ width: 'auto' }}
                         />
                         <label htmlFor="parcelarBoleto" style={{ marginBottom: 0 }}>
-                          Dividir este boleto em parcelas?
+                          Dividir este boleto em parcelas via Sicoob?
                         </label>
                       </div>
+                      {parcelarBoleto && (
+                        <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: -4, marginBottom: 8 }}>
+                          Só pra boleto real emitido pela Sicoob - o botão "Emitir N boletos via Sicoob" abaixo faz a
+                          divisão de verdade. O botão "Salvar" no fim do formulário não tem efeito aqui. Pra digitar
+                          boletos manualmente (não pela Sicoob), desmarque isto e marque "Pagamento parcelado?"
+                          mais acima.
+                        </p>
+                      )}
                       {parcelarBoleto ? (
                         <>
                           <div style={{ display: 'flex', gap: 8 }}>
