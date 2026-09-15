@@ -1574,7 +1574,13 @@ export function Faturamento() {
           if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao cancelar NFS-e.');
           qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
         } catch (e) {
-          setErro(await mensagemErroFuncao(e));
+          // Alerta (não só o texto vermelho no topo da página) - essa ação
+          // é disparada de um botão dentro de uma lista longa, que costuma
+          // estar bem rolada pra baixo; o erro no topo passava despercebido
+          // (bug real relatado pelo usuário, 2026-09-15).
+          const mensagemErroCancelamento = await mensagemErroFuncao(e);
+          setErro(mensagemErroCancelamento);
+          alert(`Falha ao cancelar a NFS-e ${l.nf_numero}:\n\n${mensagemErroCancelamento}`);
         } finally {
           setCancelandoNfseId(null);
         }
@@ -1715,8 +1721,22 @@ export function Faturamento() {
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar status.');
       qc.invalidateQueries({ queryKey: ['faturamento-contas-receber'] });
+      // Alerta com o resultado - sem isso, quando o status não muda (ex.:
+      // continua "autorizada"), a tela fica visualmente idêntica e parece
+      // que "não aconteceu nada" (bug real relatado pelo usuário,
+      // 2026-09-15) mesmo a consulta tendo funcionado de verdade.
+      const statusFocus = data?.resultado?.status as string | undefined;
+      const statusAmigavel: Record<string, string> = {
+        autorizado: 'AUTORIZADA (ativa, não cancelada)',
+        cancelado: 'CANCELADA',
+        erro_autorizacao: 'ERRO na autorização',
+        negado: 'NEGADA',
+      };
+      alert(`NFS-e ${l.nf_numero}: status atual na prefeitura é ${statusAmigavel[statusFocus ?? ''] ?? statusFocus ?? 'desconhecido'}.`);
     } catch (e) {
-      setErro(await mensagemErroFuncao(e));
+      const mensagemErroConsulta = await mensagemErroFuncao(e);
+      setErro(mensagemErroConsulta);
+      alert(`Falha ao verificar status da NFS-e ${l.nf_numero}:\n\n${mensagemErroConsulta}`);
     } finally {
       setEmitindoNfseId(null);
     }
