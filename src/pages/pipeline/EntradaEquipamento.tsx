@@ -52,6 +52,7 @@ interface Entrada {
   nf_remessa_serie: string | null;
   nf_remessa_chave_acesso: string | null;
   nf_remessa_cfop: string | null;
+  nf_remessa_ncm: string | null;
   nf_remessa_data_emissao: string | null;
   nf_remessa_valor: number | null;
   numero_controle_cliente: string | null;
@@ -254,6 +255,7 @@ const formVazio = {
   nf_remessa_serie: '',
   nf_remessa_chave_acesso: '',
   nf_remessa_cfop: '',
+  nf_remessa_ncm: '',
   nf_remessa_data_emissao: '',
   nf_remessa_valor: '',
   numero_controle_cliente: '',
@@ -310,6 +312,12 @@ export function EntradaEquipamento() {
   } = useFiltrosColuna();
   const [consultandoRemessa, setConsultandoRemessa] = useState(false);
   const [avisoRemessa, setAvisoRemessa] = useState<string | null>(null);
+  // Preenchido só quando a nota consultada tem MAIS de um item (ex.: NF com
+  // vários equipamentos, um por Entrada diferente) - pede pro usuário
+  // escolher qual item bate com ESTA Entrada antes de aplicar no formulário.
+  const [itensRemessaEscolha, setItensRemessaEscolha] = useState<
+    { cabecalho: CabecalhoNotaXml; itens: ItemNotaXml[] } | null
+  >(null);
   const inputXmlRemessaRef = useRef<HTMLInputElement>(null);
 
   // Entrada por NF-e (import em lote) - uma NF pode trazer vários itens, e
@@ -578,6 +586,7 @@ export function EntradaEquipamento() {
     setClienteFinalId('');
     setErro(null);
     setAvisoRemessa(null);
+    setItensRemessaEscolha(null);
     setModalAberto(true);
   }
 
@@ -597,6 +606,7 @@ export function EntradaEquipamento() {
     numero: string | number | null;
     serie: string | number | null;
     cfop: string | null;
+    ncm: string | null;
     valorTotal: string | number | null;
     dataEmissao: string | null;
     cnpjEmitente: string | null;
@@ -614,9 +624,11 @@ export function EntradaEquipamento() {
       nf_remessa_serie: d.serie != null ? String(d.serie) : f.nf_remessa_serie,
       nf_remessa_cfop: d.cfop ?? f.nf_remessa_cfop,
       nf_remessa_valor: d.valorTotal != null ? String(d.valorTotal) : f.nf_remessa_valor,
+      nf_remessa_ncm: d.ncm ?? f.nf_remessa_ncm,
       nf_remessa_data_emissao: d.dataEmissao ? String(d.dataEmissao).slice(0, 10) : f.nf_remessa_data_emissao,
       nf_remessa_chave_acesso: d.chaveNfe ?? chaveFallback,
     }));
+    setItensRemessaEscolha(null);
     const clienteSelecionado = clientesQuery.data?.find((c) => String(c.id) === form.cliente_id);
     const cnpjCliente = clienteSelecionado?.cnpj?.replace(/\D/g, '') ?? '';
     const cnpjNota = (d.cnpjEmitente ?? '').replace(/\D/g, '');
@@ -629,10 +641,39 @@ export function EntradaEquipamento() {
     }
   }
 
+  // Combina o cabeçalho da nota com UM item escolhido (a nota pode ter vários
+  // produtos - cada um vira uma Entrada diferente, mas essa tela edita só
+  // UMA Entrada por vez) no formato que aplicarDadosNotaRemessa espera.
+  function combinarCabecalhoEItem(cabecalho: CabecalhoNotaXml, item: ItemNotaXml): DadosNotaRemessa {
+    return {
+      numero: cabecalho.numero,
+      serie: cabecalho.serie,
+      cfop: item.cfop,
+      ncm: item.ncm,
+      valorTotal: item.valorTotal,
+      dataEmissao: cabecalho.dataEmissao,
+      cnpjEmitente: cabecalho.cnpjEmitente,
+      nomeEmitente: cabecalho.nomeEmitente,
+      chaveNfe: cabecalho.chaveNfe,
+    };
+  }
+
   // Consulta a NF-e de remessa (que o cliente emitiu) direto na Focus, pela
-  // chave de acesso, e preenche número/série/CFOP/valor/data automaticamente
-  // - evita digitar esses dados à mão e garante que batem com a nota real.
-  // Só consulta, nunca grava nada sozinha (mesmo princípio da prévia de NFS-e).
+  // chave de acesso, e preenche número/série/CFOP/NCM/valor/data
+  // automaticamente - evita digitar esses dados à mão e garante que batem
+  // com a nota real. Só consulta, nunca grava nada sozinha (mesmo princípio
+  // da prévia de NFS-e).
+  //
+  // BUG REAL corrigido em 2026-09-15: essa function ainda esperava um campo
+  // "data.dados" (formato antigo, de quando a consulta só trazia 1 item) -
+  // mas a emitir-nfe passou a devolver "cabecalho"+"itens[]" (pra suportar
+  // notas com vários produtos, usado no import em lote). Como "data.dados"
+  // nunca existiu na resposta nova, ler "d.numero" de um "undefined" jogava
+  // uma exceção dentro do setForm, fora do try/catch (React já está no meio
+  // do render nesse ponto) - a tela inteira ficava em branco (sem
+  // ErrorBoundary pra segurar), travando o app pro usuário sem nenhuma
+  // mensagem de erro. Notas com mais de um item (ex.: NF 93482, com um
+  // equipamento por Entrada) sempre disparavam isso.
   async function consultarNotaRemessa() {
     const chave = form.nf_remessa_chave_acesso.replace(/\D/g, '');
     if (chave.length !== 44) {
@@ -641,18 +682,36 @@ export function EntradaEquipamento() {
     }
     setConsultandoRemessa(true);
     setAvisoRemessa(null);
+    setItensRemessaEscolha(null);
     try {
       const { data, error } = await supabase.functions.invoke('emitir-nfe', {
         body: { acao: 'consultar_remessa', chaveAcesso: chave },
       });
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao consultar a nota.');
-      aplicarDadosNotaRemessa(data.dados as DadosNotaRemessa, chave);
+      const cabecalho = data.cabecalho as CabecalhoNotaXml;
+      const itens = (data.itens as ItemNotaXml[]) ?? [];
+      if (itens.length === 0) throw new Error('Essa nota não trouxe nenhum item na consulta.');
+      if (itens.length === 1) {
+        aplicarDadosNotaRemessa(combinarCabecalhoEItem(cabecalho, itens[0]), chave);
+      } else {
+        // Nota com vários produtos - pede pro usuário escolher qual item é
+        // o equipamento desta Entrada (não dá pra adivinhar sozinho).
+        setItensRemessaEscolha({ cabecalho, itens });
+      }
     } catch (e) {
       setAvisoRemessa(await mensagemErroFuncao(e));
     } finally {
       setConsultandoRemessa(false);
     }
+  }
+
+  function escolherItemRemessa(item: ItemNotaXml) {
+    if (!itensRemessaEscolha) return;
+    aplicarDadosNotaRemessa(
+      combinarCabecalhoEItem(itensRemessaEscolha.cabecalho, item),
+      form.nf_remessa_chave_acesso.replace(/\D/g, ''),
+    );
   }
 
   // Extrai os mesmos campos direto do XML da NF-e (baixado do site do cliente
@@ -685,6 +744,7 @@ export function EntradaEquipamento() {
       numero: ide ? textoTag('nNF', ide) : null,
       serie: ide ? textoTag('serie', ide) : null,
       cfop: primeiroItem ? textoTag('CFOP', primeiroItem) : null,
+      ncm: primeiroItem ? textoTag('NCM', primeiroItem) : null,
       valorTotal: totalIcms ? textoTag('vNF', totalIcms) : null,
       dataEmissao: ide ? (textoTag('dhEmi', ide) ?? textoTag('dEmi', ide)) : null,
       cnpjEmitente: emit ? textoTag('CNPJ', emit) : null,
@@ -951,6 +1011,7 @@ export function EntradaEquipamento() {
       nf_remessa_serie: e.nf_remessa_serie ?? '',
       nf_remessa_chave_acesso: e.nf_remessa_chave_acesso ?? '',
       nf_remessa_cfop: e.nf_remessa_cfop ?? '',
+      nf_remessa_ncm: e.nf_remessa_ncm ?? '',
       nf_remessa_data_emissao: e.nf_remessa_data_emissao ?? '',
       nf_remessa_valor: e.nf_remessa_valor != null ? String(e.nf_remessa_valor) : '',
       numero_controle_cliente: e.numero_controle_cliente ?? '',
@@ -974,6 +1035,7 @@ export function EntradaEquipamento() {
     setClienteFinalId(e.cliente_final_id ? String(e.cliente_final_id) : '');
     setErro(null);
     setAvisoRemessa(null);
+    setItensRemessaEscolha(null);
     setModalAberto(true);
     carregarFotosExistentes(e.id);
   }
@@ -1037,6 +1099,7 @@ export function EntradaEquipamento() {
         // 44 dígitos - remove espaços/pontos coladas como formatação de leitura.
         nf_remessa_chave_acesso: form.nf_remessa_chave_acesso ? form.nf_remessa_chave_acesso.replace(/\D/g, '') : null,
         nf_remessa_cfop: form.nf_remessa_cfop || null,
+        nf_remessa_ncm: form.nf_remessa_ncm || null,
         nf_remessa_data_emissao: form.nf_remessa_data_emissao || null,
         nf_remessa_valor: form.nf_remessa_valor ? Number(form.nf_remessa_valor) : null,
         numero_controle_cliente: form.numero_controle_cliente || null,
@@ -1836,12 +1899,40 @@ export function EntradaEquipamento() {
                 />
               </div>
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
-                Preenche número/série/CFOP/valor/data automaticamente com os dados reais da nota - consultando
+                Preenche número/série/CFOP/NCM/valor/data automaticamente com os dados reais da nota - consultando
                 direto na Focus/SEFAZ, ou lendo o arquivo XML da nota (baixado do cliente/e-mail).
               </p>
               {avisoRemessa && <p className="erro-login">{avisoRemessa}</p>}
+              {itensRemessaEscolha && (
+                <div style={{ marginTop: 8, border: '1px solid var(--ink-200, #ddd)', borderRadius: 6, padding: 8 }}>
+                  <p style={{ fontSize: 12, marginBottom: 6 }}>
+                    Essa nota tem {itensRemessaEscolha.itens.length} itens - escolha qual é o equipamento desta
+                    Entrada:
+                  </p>
+                  {itensRemessaEscolha.itens.map((item, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="botao-secundario botao-pequeno"
+                      style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4 }}
+                      onClick={() => escolherItemRemessa(item)}
+                    >
+                      {item.descricao ?? `Item ${i + 1}`} — NCM {item.ncm ?? '-'} — R${' '}
+                      {item.valorTotal != null ? Number(item.valorTotal).toFixed(2) : '-'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
+              <div className="campo-form" style={{ flex: 1 }}>
+                <label>NCM</label>
+                <input
+                  type="text"
+                  value={form.nf_remessa_ncm}
+                  onChange={(e) => setForm((f) => ({ ...f, nf_remessa_ncm: e.target.value }))}
+                />
+              </div>
               <div className="campo-form" style={{ flex: 1 }}>
                 <label>Data de emissão</label>
                 <input
