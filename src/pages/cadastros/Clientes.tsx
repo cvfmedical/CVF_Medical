@@ -21,6 +21,10 @@ interface Cliente {
   id: number;
   razao_social: string;
   cnpj: string | null;
+  // Só dígitos, ou o literal "ISENTO" - usada na NF-e de devolução
+  // (emitir-nfe): sem ela, a Sefaz rejeita quando o cliente na verdade é
+  // contribuinte de ICMS ("IE do destinatário não informada").
+  inscricao_estadual: string | null;
   nome_fantasia: string | null;
   hospital_clinica: string | null;
   eh_terceirizado: boolean;
@@ -53,6 +57,7 @@ interface Cliente {
 const formVazio = {
   razao_social: '',
   cnpj: '',
+  inscricao_estadual: '',
   nome_fantasia: '',
   hospital_clinica: '',
   eh_terceirizado: false,
@@ -314,6 +319,7 @@ export function Clientes() {
     setForm({
       razao_social: c.razao_social,
       cnpj: c.cnpj ?? '',
+      inscricao_estadual: c.inscricao_estadual ?? '',
       nome_fantasia: c.nome_fantasia ?? '',
       hospital_clinica: c.hospital_clinica ?? '',
       eh_terceirizado: c.eh_terceirizado,
@@ -420,12 +426,20 @@ export function Clientes() {
     }
     setSalvando(true);
     try {
+      const ieDigitada = form.inscricao_estadual.trim();
       const dados = {
         ...form,
         cnpj: form.cnpj ? formatarCnpj(form.cnpj) : null,
         data_abertura: form.data_abertura || null,
         representante_id: form.representante_id ? Number(form.representante_id) : null,
         tabela_preco_padrao: form.tabela_preco_padrao || null,
+        // "ISENTO" fica como texto literal (indicador 2 na NF-e); qualquer
+        // outra coisa vira só dígitos (indicador 1, com o número da IE).
+        inscricao_estadual: !ieDigitada
+          ? null
+          : ieDigitada.toUpperCase() === 'ISENTO'
+            ? 'ISENTO'
+            : somenteDigitos(ieDigitada),
       };
       if (editando) {
         const { error } = await supabase.from('clientes').update(dados).eq('id', editando.id);
@@ -582,6 +596,20 @@ export function Clientes() {
               </div>
               <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
                 Ao sair do campo, busca automaticamente os dados na Receita Federal (BrasilAPI).
+              </p>
+            </div>
+
+            <div className="campo-form">
+              <label>Inscrição Estadual (se o cliente for contribuinte de ICMS)</label>
+              <input
+                type="text"
+                value={form.inscricao_estadual}
+                onChange={(e) => setForm((f) => ({ ...f, inscricao_estadual: e.target.value }))}
+                placeholder="Só números, ou &quot;ISENTO&quot; - deixe em branco se não for contribuinte"
+              />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Necessária pra emitir NF-e de devolução (Entrega ao cliente) pra clientes contribuintes - sem ela a
+                Sefaz rejeita com "IE do destinatário não informada".
               </p>
             </div>
 

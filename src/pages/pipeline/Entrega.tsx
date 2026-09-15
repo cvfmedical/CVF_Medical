@@ -859,16 +859,23 @@ export function Entrega() {
               Finalizar
             </button>
           )}
-          {!row.nf_devolucao_numero && !row.nfe_devolucao_ref && (
+          {!row.nf_devolucao_numero && (!row.nfe_devolucao_ref || row.nfe_devolucao_status === 'erro') && (
             <button
               className="botao-secundario botao-pequeno"
-              title="Emitir a NF-e de devolução (Focus NF-e) referente ao equipamento consertado"
+              title={
+                row.nfe_devolucao_status === 'erro'
+                  ? 'A tentativa anterior foi rejeitada - corrija o motivo (ver erro abaixo) e tente de novo'
+                  : 'Emitir a NF-e de devolução (Focus NF-e) referente ao equipamento consertado'
+              }
               onClick={() => abrirPreviaDevolucao(row)}
             >
-              Emitir NF-e de devolução
+              {row.nfe_devolucao_status === 'erro' ? 'Tentar novamente' : 'Emitir NF-e de devolução'}
             </button>
           )}
-          {row.nfe_devolucao_ref && row.nfe_devolucao_status !== 'autorizada' && row.nfe_devolucao_status !== 'cancelada' && (
+          {row.nfe_devolucao_ref &&
+            row.nfe_devolucao_status !== 'autorizada' &&
+            row.nfe_devolucao_status !== 'cancelada' &&
+            row.nfe_devolucao_status !== 'erro' && (
             <button
               className="botao-secundario botao-pequeno"
               title="Consultar o status da NF-e de devolução na SEFAZ"

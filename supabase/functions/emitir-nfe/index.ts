@@ -350,7 +350,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: cliente, error: erroCliente } = await supabaseAdmin
     .from('clientes')
-    .select('cnpj, razao_social, logradouro, numero_endereco, bairro, cidade, uf, cep, telefone')
+    .select('cnpj, razao_social, logradouro, numero_endereco, bairro, cidade, uf, cep, telefone, inscricao_estadual')
     .eq('id', os.cliente_id)
     .single();
   if (erroCliente || !cliente) return json({ error: 'Cliente da OS não encontrado.' }, 404);
@@ -366,6 +366,19 @@ Deno.serve(async (req: Request) => {
   const codigoMunicipioDestinatario = await codigoIbgeMunicipio(cliente.cidade, cliente.uf);
   const cfop = cfopDevolucao(cliente.uf);
   const idDest = idDestino(cliente.uf);
+
+  // Indicador de IE do destinatário - confirmado em rejeição real da Sefaz
+  // (2026-09-15, OS-5693/ALLERE VALE, status_sefaz 232 "IE do destinatário
+  // não informada"): o código antes sempre mandava 9 ("Não Contribuinte")
+  // fixo, mas esse cliente É contribuinte de ICMS (tem IE própria) - sem
+  // ela informada a nota é rejeitada. 1 = Contribuinte (manda a IE), 2 =
+  // Contribuinte isento (cliente.inscricao_estadual = "ISENTO"), 9 = Não
+  // Contribuinte (sem IE cadastrada - comportamento anterior, preservado
+  // como padrão).
+  const ieCliente = (cliente.inscricao_estadual ?? '').trim();
+  const ieIsenta = ieCliente.toUpperCase() === 'ISENTO';
+  const ieDigitos = !ieIsenta ? apenasDigitos(ieCliente) : '';
+  const indicadorIeDestinatario = ieDigitos ? 1 : ieIsenta ? 2 : 9;
 
   // NCM do item: prioridade máxima pro NCM REAL que veio na própria nota de
   // remessa (guardado em nf_remessa_ncm, importado via consulta/XML) - só
@@ -393,7 +406,12 @@ Deno.serve(async (req: Request) => {
   // há venda de fato (valor de referência do próprio bem, não da mão de
   // obra) - por ora, exige que o usuário informe esse valor na tela de
   // conferência (não adivinha).
-  const ref = `qcvf-devol-${entrega.id}`;
+  // Referência com timestamp (não só o id da entrega): se uma tentativa
+  // anterior foi rejeitada pela Sefaz (nfe_devolucao_status='erro'), a
+  // Focus não permite reusar a mesma ref - sem isso, tentar de novo depois
+  // de corrigir o problema (ex.: IE do destinatário) falhava sempre com a
+  // MESMA ref já "gasta" da tentativa anterior.
+  const ref = `qcvf-devol-${entrega.id}-${Date.now()}`;
   const infCpl = numeroRemessa
     ? `DEVOLUÇÃO REFERENTE À NF ${numeroRemessa}`
     : 'DEVOLUÇÃO DE EQUIPAMENTO RECEBIDO PARA CONSERTO';
@@ -425,7 +443,8 @@ Deno.serve(async (req: Request) => {
     // VALE, razão social com 63 caracteres) - trunca em vez de deixar a
     // Focus rejeitar a nota inteira.
     nome_destinatario: (cliente.razao_social ?? '').slice(0, 60),
-    indicador_inscricao_estadual_destinatario: 9, // "Não Contribuinte" - mesmo valor visto no XML real pro destinatário
+    indicador_inscricao_estadual_destinatario: indicadorIeDestinatario,
+    ...(ieDigitos ? { inscricao_estadual_destinatario: ieDigitos } : {}),
     logradouro_destinatario: cliente.logradouro,
     numero_destinatario: cliente.numero_endereco || 'S/N',
     bairro_destinatario: cliente.bairro || 'Não informado',
