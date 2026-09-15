@@ -326,6 +326,12 @@ export function Faturamento() {
   const [parcelasConsolidado, setParcelasConsolidado] = useState<
     { valor: string; vencimento: string; boletoNumero: string; boletoLinhaDigitavel: string }[]
   >([]);
+  // Vencimento do boleto pra emissão automática de NFS-e (1 orçamento ou
+  // consolidado, sem dividir em parcelas) - antes disso não tinha campo
+  // nenhum pra isso na tela de conferência, caía sempre em 30 dias fixo,
+  // sem o usuário saber que dava pra mudar (só via o workaround de marcar
+  // "dividir em mais de um boleto" e apagar uma parcela).
+  const [vencimentoNfseUnico, setVencimentoNfseUnico] = useState('');
   const [formNfse, setFormNfse] = useState<{
     razaoSocial: string;
     documento: string;
@@ -1321,6 +1327,11 @@ export function Faturamento() {
           ? [{ valor: String(r.valorServico), vencimento: '', boletoNumero: '', boletoLinhaDigitavel: '' }]
           : [],
       );
+      // Pré-preenche com os mesmos 30 dias que seriam usados por padrão -
+      // já mostra pro usuário o que vai acontecer, e deixa aberto pra mudar.
+      const vencimentoPadrao = new Date();
+      vencimentoPadrao.setDate(vencimentoPadrao.getDate() + 30);
+      setVencimentoNfseUnico(vencimentoPadrao.toISOString().slice(0, 10));
     } catch (e) {
       setErro(await mensagemErroFuncao(e));
     } finally {
@@ -1493,23 +1504,32 @@ export function Faturamento() {
           boletoLinhaDigitavel: p.boletoLinhaDigitavel || undefined,
         }));
       } else {
-        parcelasParaEnviar = undefined; // 1 parcela só, com o total - a function usa vencimento padrão de 30 dias
+        parcelasParaEnviar = undefined; // 1 parcela só, com o total - usa o campo "Vencimento do boleto" abaixo
       }
     }
-    const sucesso = await emitirNFSe(previaNfse.linhas, parcelasParaEnviar, {
-      razao_social_tomador: formNfse.razaoSocial,
-      documento_tomador: formNfse.documento,
-      logradouro_tomador: formNfse.logradouro,
-      numero_tomador: formNfse.numero,
-      complemento_tomador: formNfse.complemento,
-      bairro_tomador: formNfse.bairro,
-      cep_tomador: formNfse.cep,
-      cidade_tomador: formNfse.cidade,
-      uf_tomador: formNfse.uf,
-      telefone_tomador: formNfse.telefone,
-      email_tomador: formNfse.email,
-      descricao_servico: formNfse.descricaoServico,
-    });
+    if (!parceladoConsolidado && !previaNfse.linhas[0].contaId && !vencimentoNfseUnico) {
+      setErro('Informe o vencimento do boleto.');
+      return;
+    }
+    const sucesso = await emitirNFSe(
+      previaNfse.linhas,
+      parcelasParaEnviar,
+      {
+        razao_social_tomador: formNfse.razaoSocial,
+        documento_tomador: formNfse.documento,
+        logradouro_tomador: formNfse.logradouro,
+        numero_tomador: formNfse.numero,
+        complemento_tomador: formNfse.complemento,
+        bairro_tomador: formNfse.bairro,
+        cep_tomador: formNfse.cep,
+        cidade_tomador: formNfse.cidade,
+        uf_tomador: formNfse.uf,
+        telefone_tomador: formNfse.telefone,
+        email_tomador: formNfse.email,
+        descricao_servico: formNfse.descricaoServico,
+      },
+      !parceladoConsolidado ? vencimentoNfseUnico : undefined,
+    );
     if (sucesso) {
       fecharPreviaNfse();
       setSelecionadasFaturar(new Set());
@@ -1538,6 +1558,11 @@ export function Faturamento() {
       email_tomador: string;
       descricao_servico: string;
     },
+    // Vencimento único (sem parcelas) pro boleto - só é usado quando a
+    // conta ainda vai ser criada agora (sem contaId); se não vier, a
+    // function cai no padrão de 30 dias (compatibilidade com chamadas
+    // antigas/outros pontos que ainda não passam esse campo).
+    vencimento?: string,
   ): Promise<boolean> {
     const l = linhas[0];
     if (linhas.length === 1 && !l.contaId && !l.orcamentoId) return false;
@@ -1553,6 +1578,7 @@ export function Faturamento() {
             : { orcamentoIds: linhas.map((x) => x.orcamentoId!), ...(parcelas ? { parcelas } : {}) }),
           acao: 'emitir',
           ...(overrides ? { overrides } : {}),
+          ...(vencimento ? { vencimento } : {}),
         },
       });
       if (error) throw error;
@@ -2711,6 +2737,16 @@ export function Faturamento() {
               <input type="text" value={String(previaNfse.payload.data_emissao)} disabled />
             </div>
           </div>
+
+          {!previaNfse.linhas[0].contaId && !parceladoConsolidado && (
+            <div className="campo-form" style={{ maxWidth: 220 }}>
+              <label>Vencimento do boleto</label>
+              <input type="date" value={vencimentoNfseUnico} onChange={(e) => setVencimentoNfseUnico(e.target.value)} />
+              <p style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>
+                Já vem preenchido com 30 dias (padrão) - só muda se você editar.
+              </p>
+            </div>
+          )}
 
           {previaNfse.linhas.length > 1 && (
             <>

@@ -270,6 +270,10 @@ Deno.serve(async (req: Request) => {
     orcamentoId?: number;
     orcamentoIds?: number[];
     parcelas?: { valor: number; vencimento: string; boletoNumero?: string; boletoLinhaDigitavel?: string }[];
+    // Vencimento único (yyyy-mm-dd) pro caso sem parcelas - se não vier,
+    // cai no padrão de 30 dias (mantém compatibilidade com chamadas
+    // antigas). Só se aplica quando a conta ainda vai ser criada agora.
+    vencimento?: string;
     acao?: 'emitir' | 'consultar' | 'previsualizar' | 'reenviar_email' | 'cancelar';
     overrides?: Overrides;
     emails?: string[];
@@ -599,15 +603,16 @@ Deno.serve(async (req: Request) => {
       valorPecas: valorPecasTotal,
     };
     orcamentosIdsParaCriarContas = orcamentoIdsBody;
-    // Sem `parcelas` no corpo, trata como uma parcela única (o total
-    // inteiro, vencimento padrão de 30 dias) - mesma regra do fluxo de 1
-    // orçamento só.
+    // Sem `parcelas` no corpo, trata como uma parcela única - usa
+    // corpo.vencimento (campo "Vencimento do boleto" na tela de
+    // conferência) se vier, senão cai no padrão de 30 dias (mesma regra
+    // do fluxo de 1 orçamento só).
     const vencimentoPadrao = new Date();
     vencimentoPadrao.setDate(vencimentoPadrao.getDate() + 30);
     parcelasBody =
       Array.isArray(corpo.parcelas) && corpo.parcelas.length > 0
         ? corpo.parcelas
-        : [{ valor: valorTotal, vencimento: vencimentoPadrao.toISOString().slice(0, 10) }];
+        : [{ valor: valorTotal, vencimento: corpo.vencimento || vencimentoPadrao.toISOString().slice(0, 10) }];
     const somaParcelas = parcelasBody.reduce((s, p) => s + Number(p.valor), 0);
     if (Math.abs(somaParcelas - valorTotal) > 0.01) {
       return json(
@@ -936,8 +941,11 @@ Deno.serve(async (req: Request) => {
       ref = `qcvf-cr-${conta.id}`;
     } else {
       const numeroConta = await proximoNumeroConta(supabaseAdmin);
-      const vencimento = new Date();
-      vencimento.setDate(vencimento.getDate() + 30);
+      // Usa corpo.vencimento (campo "Vencimento do boleto" da tela de
+      // conferência) quando vier, senão cai no padrão de 30 dias.
+      const vencimentoPadraoUnico = new Date();
+      vencimentoPadraoUnico.setDate(vencimentoPadraoUnico.getDate() + 30);
+      const dataVencimentoUnica = corpo.vencimento || vencimentoPadraoUnico.toISOString().slice(0, 10);
       const { data: novaConta, error: erroNovaConta } = await supabaseAdmin
         .from('contas_receber')
         .insert({
@@ -946,7 +954,7 @@ Deno.serve(async (req: Request) => {
           cliente_id: conta.cliente_id,
           descricao: conta.descricao,
           valor: conta.valor,
-          data_vencimento: vencimento.toISOString().slice(0, 10),
+          data_vencimento: dataVencimentoUnica,
           status: 'Em aberto',
         })
         .select('id')
