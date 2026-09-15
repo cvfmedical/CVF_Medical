@@ -276,7 +276,12 @@ Deno.serve(async (req: Request) => {
         .update({
           nf_devolucao_numero: resultado.numero != null ? String(resultado.numero) : null,
           nf_devolucao_serie: resultado.serie != null ? String(resultado.serie) : null,
-          nf_devolucao_chave_acesso: resultado.chave_nfe ?? null,
+          // Confirmado em teste real (2026-09-15, OS-5661): a Focus devolve
+          // "chave_nfe" prefixada com "NFe" (47 caracteres) na consulta de
+          // status - a chave de acesso de verdade são só os 44 dígitos,
+          // limite da coluna. Sem isso, "value too long for type character
+          // varying(44)" trava o salvamento mesmo com a nota já autorizada.
+          nf_devolucao_chave_acesso: resultado.chave_nfe ? apenasDigitos(resultado.chave_nfe) : null,
           nf_devolucao_data_emissao: resultado.data_emissao ? String(resultado.data_emissao).slice(0, 10) : null,
           nfe_devolucao_status: 'autorizada',
           nfe_devolucao_erro_detalhe: null,
@@ -318,7 +323,7 @@ Deno.serve(async (req: Request) => {
   const { data: entrega, error: erroEntrega } = await supabaseAdmin
     .from('entregas')
     .select(
-      'id, ordem_servico_id, nf_devolucao_numero, ordens_servico(id, numero_os, cliente_id, optica_desc, optica_fab, cliente_nome, entradas_equipamento(nf_remessa_chave_acesso, nf_remessa_numero, nf_remessa_ncm, catalogo_otica_id, produto_servico_id))',
+      'id, ordem_servico_id, nf_devolucao_numero, ordens_servico(id, numero_os, cliente_id, optica_desc, optica_fab, optica_sn, cliente_nome, entradas_equipamento(nf_remessa_chave_acesso, nf_remessa_numero, nf_remessa_ncm, catalogo_otica_id, produto_servico_id))',
     )
     .eq('id', corpo.entregaId)
     .single();
@@ -333,6 +338,7 @@ Deno.serve(async (req: Request) => {
         cliente_id: number;
         optica_desc: string | null;
         optica_fab: string | null;
+        optica_sn: string | null;
         cliente_nome: string;
         entradas_equipamento: {
           nf_remessa_chave_acesso: string | null;
@@ -490,6 +496,7 @@ Deno.serve(async (req: Request) => {
         documentoDestinatario: cliente.cnpj,
         numeroOS: os.numero_os,
         descricaoItem,
+        numeroSerie: os.optica_sn,
         cfop,
         ncm: ncmItem,
         numeroRemessa,

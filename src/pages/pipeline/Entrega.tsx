@@ -45,6 +45,7 @@ interface ResumoDevolucao {
   documentoDestinatario: string | null;
   numeroOS: string;
   descricaoItem: string;
+  numeroSerie: string | null;
   cfop: string;
   ncm: string;
   numeroRemessa: string | null;
@@ -1051,11 +1052,16 @@ export function Entrega() {
                 disabled
               />
             </div>
+            <div className="campo-form">
+              <label>Item devolvido</label>
+              <p style={{ fontSize: 13, margin: '2px 0 0' }}>
+                <strong>Equipamento:</strong> {previaDevolucao.resumo.descricaoItem}
+              </p>
+              {previaDevolucao.resumo.numeroSerie && (
+                <div className="mono" style={{ fontSize: 13 }}>Nº série: {previaDevolucao.resumo.numeroSerie}</div>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <div className="campo-form" style={{ flex: 2 }}>
-                <label>Item devolvido</label>
-                <input type="text" value={previaDevolucao.resumo.descricaoItem} disabled />
-              </div>
               <div className="campo-form" style={{ flex: 1 }}>
                 <label>CFOP</label>
                 <input type="text" value={previaDevolucao.resumo.cfop} disabled />
