@@ -51,6 +51,7 @@ interface ResumoDevolucao {
   ncm: string;
   numeroRemessa: string | null;
   chaveRemessa: string | null;
+  valorBemSugerido: number | null;
 }
 
 export function Entrega() {
@@ -464,6 +465,12 @@ export function Entrega() {
       if (error) throw error;
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao gerar a prévia da NF-e.');
       setPreviaDevolucao({ payload: data.payload, resumo: data.resumo });
+      // Pré-preenche com o valor já lançado na Entrada (nf_remessa_valor) -
+      // pedido do usuário (2026-09-15) pra evitar erro de digitação; continua
+      // editável, e some vazio quando a Entrada não tem esse valor (ex.:
+      // cadastro manual sem NF de remessa importada).
+      const sugerido = data.resumo?.valorBemSugerido;
+      setValorBemDevolucao(typeof sugerido === 'number' && sugerido > 0 ? String(sugerido) : '');
     } catch (e) {
       setErroDevolucao(await mensagemErroFuncao(e));
     } finally {

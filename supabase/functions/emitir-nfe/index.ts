@@ -336,7 +336,7 @@ Deno.serve(async (req: Request) => {
   const { data: entrega, error: erroEntrega } = await supabaseAdmin
     .from('entregas')
     .select(
-      'id, ordem_servico_id, nf_devolucao_numero, ordens_servico(id, numero_os, cliente_id, optica_desc, optica_fab, optica_sn, cliente_nome, entradas_equipamento(nf_remessa_chave_acesso, nf_remessa_numero, nf_remessa_ncm, catalogo_otica_id, produto_servico_id))',
+      'id, ordem_servico_id, nf_devolucao_numero, ordens_servico(id, numero_os, cliente_id, optica_desc, optica_fab, optica_sn, cliente_nome, entradas_equipamento(nf_remessa_chave_acesso, nf_remessa_numero, nf_remessa_ncm, nf_remessa_valor, catalogo_otica_id, produto_servico_id))',
     )
     .eq('id', corpo.entregaId)
     .single();
@@ -357,6 +357,7 @@ Deno.serve(async (req: Request) => {
           nf_remessa_chave_acesso: string | null;
           nf_remessa_numero: string | null;
           nf_remessa_ncm: string | null;
+          nf_remessa_valor: number | null;
           catalogo_otica_id: number | null;
           produto_servico_id: number | null;
         }[] | null;
@@ -418,6 +419,14 @@ Deno.serve(async (req: Request) => {
   const descricaoItem = [os.optica_desc, os.optica_fab].filter(Boolean).join(' - ') || `Equipamento OS ${os.numero_os}`;
   const numeroRemessa = entradaEquip?.nf_remessa_numero ?? null;
   const chaveRemessa = entradaEquip?.nf_remessa_chave_acesso ? apenasDigitos(entradaEquip.nf_remessa_chave_acesso) : null;
+  // Sugestão de "Valor do bem devolvido" - pedido do usuário (2026-09-15)
+  // pra evitar erro de digitação: usa o mesmo valor já lançado na Entrada
+  // (nf_remessa_valor, vindo da NF de remessa importada, dividido por
+  // unidade quando a nota tinha mais de um item - ver EntradaEquipamento.tsx)
+  // como PALPITE inicial do campo. Continua editável na tela de conferência
+  // (nem toda Entrada tem esse valor - ex.: cadastro manual sem NF
+  // importada - nesse caso fica null e o campo some vazio, como antes).
+  const valorBemSugerido = entradaEquip?.nf_remessa_valor ?? null;
 
   // Valor do bem devolvido - não temos um "preço do bem" cadastrado (a
   // CVF cobra é a mão de obra do conserto, valor à parte, já faturado via
@@ -514,6 +523,7 @@ Deno.serve(async (req: Request) => {
         ncm: ncmItem,
         numeroRemessa,
         chaveRemessa,
+        valorBemSugerido,
       },
     });
   }
