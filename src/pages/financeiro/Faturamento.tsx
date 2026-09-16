@@ -567,8 +567,8 @@ export function Faturamento() {
   }
 
   // Orçamentos aprovados que ficaram presos numa etapa anterior do
-  // pipeline mas que, na vida real, o equipamento já foi entregue e a NF
-  // já foi emitida por fora (Nota Control) - candidatos ao "Pular etapa".
+  // pipeline (ainda não chegaram em "Pronto para entrega"/"Entregue"),
+  // mas que já podem ser cobrados - candidatos ao "Pular etapa".
   const naoLiberadas = (orcamentosQuery.data ?? []).filter(
     (o) => !orcamentosComConta.has(o.id) && !liberada(o.ordens_servico?.status_os ?? null) && totalOrcamento(o) > 0,
   );
@@ -1139,9 +1139,15 @@ export function Faturamento() {
     }
   }
 
-  // Marca a OS como entregue (sem passar pelas telas de teste/entrega) e
-  // já abre "Lançar NF" em seguida - pra equipamentos cuja entrega e NF
-  // já aconteceram na vida real, fora do sistema.
+  // Pula as etapas de teste/checkpoint restantes e libera pra faturamento -
+  // vai pra "Pronto para entrega" (NÃO "Entregue" - corrigido a pedido do
+  // usuário, 2026-09-16: antes ia direto pra "Entregue", o que pulava
+  // TAMBÉM a tela de Entrega ao cliente - sem isso, quando o envio físico
+  // ainda não tinha acontecido de verdade, ficava impossível depois incluir
+  // o código de rastreio ou emitir a NF-e de devolução, porque a OS não
+  // aparecia mais como "liberada pra entrega" em lugar nenhum). Tanto
+  // "Pronto para entrega" quanto "Entregue" já liberam lançar NF aqui em
+  // Faturamento (ver podeLancarNF), então essa troca não tira nada.
   function pularEtapa() {
     const orc = naoLiberadas.find((o) => String(o.id) === orcamentoParaPular);
     if (!orc || !orc.ordens_servico) return;
@@ -1153,7 +1159,7 @@ export function Faturamento() {
         try {
           const { error } = await supabase
             .from('ordens_servico')
-            .update({ status_os: STATUS_ENTREGUE })
+            .update({ status_os: STATUS_PRONTO_ENTREGA })
             .eq('id', orc.ordem_servico_id);
           if (error) throw error;
           await qc.invalidateQueries({ queryKey: ['faturamento-orcamentos-aprovados'] });
@@ -1168,7 +1174,7 @@ export function Faturamento() {
       },
       {
         titulo: 'Pular etapa e liberar para faturamento',
-        mensagem: `Confirma que o equipamento da OS ${numeroOS} já foi entregue ao cliente e a NF já foi emitida fora do sistema? O status da OS vai virar "Entregue ao cliente" e o orçamento passa a aparecer na lista abaixo pra lançar a NF.`,
+        mensagem: `Confirma pular as etapas de teste/checkpoint restantes da OS ${numeroOS}? O status da OS vai virar "Pronto para entrega" - o orçamento já passa a aparecer na lista abaixo pra lançar a NF, e a OS continua disponível normalmente em "Entrega ao cliente" pra registrar rastreio e emitir a NF-e de devolução quando o envio acontecer.`,
       },
     );
   }
@@ -2111,14 +2117,13 @@ export function Faturamento() {
           }}
         >
           <strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
-            Já foi entregue fora do sistema (atalho, uso raro)
+            Pular etapas de teste e liberar para entrega (atalho, uso raro)
           </strong>
           <p style={{ fontSize: 12, color: 'var(--ink-400)', marginBottom: 8 }}>
-            Só pra orçamentos aprovados cuja entrega ao cliente e a NF JÁ ACONTECERAM na vida real, fora do sistema
-            (ex.: caso antigo, lançado com atraso). Marca a OS direto como "Entregue", sem passar pela tela de
-            Entrega ao cliente - por isso <strong>não gera código de rastreio nem dispara e-mail ao cliente</strong>.
-            Se o equipamento ainda vai ser despachado/retirado normalmente, NÃO use isto - espere a OS chegar em
-            "Pronto para entrega" e registre pela tela Entrega ao cliente, que é o caminho que envia o rastreio.
+            Pra orçamentos aprovados cujo equipamento já pode ser cobrado, mas ainda não passou (ou não vai passar)
+            pelas etapas de teste/checkpoint restantes. Marca a OS como <strong>"Pronto para entrega"</strong> - o
+            orçamento já libera pra lançar a NF aqui embaixo, e a OS continua disponível normalmente em "Entrega ao
+            cliente" pra registrar o rastreio e emitir a NF-e de devolução quando o envio acontecer de verdade.
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 320 }}>
@@ -2130,7 +2135,7 @@ export function Faturamento() {
               />
             </div>
             <button className="botao-secundario" onClick={pularEtapa} disabled={!orcamentoParaPular || pulandoEtapa}>
-              {pulandoEtapa ? 'Processando...' : 'Marcar como já entregue'}
+              {pulandoEtapa ? 'Processando...' : 'Marcar como pronto para entrega'}
             </button>
           </div>
         </div>
