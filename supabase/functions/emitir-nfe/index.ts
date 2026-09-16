@@ -278,13 +278,38 @@ Deno.serve(async (req: Request) => {
       .order('id');
     if (erroCandidatos) return json({ error: erroCandidatos.message }, 500);
 
-    const itens = (candidatos ?? []).map((c) => ({
-      entradaId: c.id,
-      descricao: c.equipamento_desc,
-      numeroSerie: c.equipamento_sn,
-      ncm: c.nf_remessa_ncm,
-      valorSugerido: c.nf_remessa_valor,
-    }));
+    // Alguns itens desta NF foram importados EM DUPLICIDADE (bug real
+    // encontrado pelo usuário, 2026-09-15): a mesma unidade física (mesmo
+    // nº de série) virou DUAS Entradas - uma com descrição detalhada (que
+    // acabou vinculada à OS/orçamento) e outra genérica ("OTICA 30G", sem
+    // OS) que ficava aparecendo aqui como "disponível" mesmo o item já
+    // tendo sua própria devolução pela OS. Filtra pelo Nº DE SÉRIE (não só
+    // por Entrada/chave) porque a Entrada "com OS" às vezes nem tem
+    // nf_remessa_chave_acesso preenchida (ex.: ORC-5588/5590, cadastradas
+    // manualmente antes da importação em lote) - comparar só por chave não
+    // pegaria essa duplicata. "(-)" e vazio não contam como série real.
+    const seriaisCandidatos = (candidatos ?? [])
+      .map((c) => (c.equipamento_sn ?? '').trim())
+      .filter((sn) => sn && sn !== '-' && sn !== '(-)');
+    let seriaisJaComOs = new Set<string>();
+    if (seriaisCandidatos.length > 0) {
+      const { data: entradasComOs } = await supabaseAdmin
+        .from('entradas_equipamento')
+        .select('equipamento_sn')
+        .in('equipamento_sn', seriaisCandidatos)
+        .not('ordem_servico_id', 'is', null);
+      seriaisJaComOs = new Set((entradasComOs ?? []).map((e) => (e.equipamento_sn ?? '').trim()));
+    }
+
+    const itens = (candidatos ?? [])
+      .filter((c) => !seriaisJaComOs.has((c.equipamento_sn ?? '').trim()))
+      .map((c) => ({
+        entradaId: c.id,
+        descricao: c.equipamento_desc,
+        numeroSerie: c.equipamento_sn,
+        ncm: c.nf_remessa_ncm,
+        valorSugerido: c.nf_remessa_valor,
+      }));
     return json({ ok: true, itens });
   }
 
@@ -597,7 +622,27 @@ Deno.serve(async (req: Request) => {
       .is('ordem_servico_id', null)
       .is('devolvido_na_entrega_id', null);
     if (erroEntradasExtras) return json({ error: erroEntradasExtras.message }, 500);
-    const mapaExtras = new Map((entradasExtras ?? []).map((e) => [e.id, e]));
+    // Defesa em profundidade contra a mesma duplicidade de nº de série
+    // tratada em listar_itens_acompanhantes - se a lista que o frontend
+    // mandou estiver desatualizada (ex.: aba aberta há um tempo), não
+    // deixa passar aqui na hora de emitir de verdade.
+    const seriaisExtras = (entradasExtras ?? [])
+      .map((e) => (e.equipamento_sn ?? '').trim())
+      .filter((sn) => sn && sn !== '-' && sn !== '(-)');
+    let seriaisExtrasComOs = new Set<string>();
+    if (seriaisExtras.length > 0) {
+      const { data: entradasComOsCheck } = await supabaseAdmin
+        .from('entradas_equipamento')
+        .select('equipamento_sn')
+        .in('equipamento_sn', seriaisExtras)
+        .not('ordem_servico_id', 'is', null);
+      seriaisExtrasComOs = new Set((entradasComOsCheck ?? []).map((e) => (e.equipamento_sn ?? '').trim()));
+    }
+    const mapaExtras = new Map(
+      (entradasExtras ?? [])
+        .filter((e) => !seriaisExtrasComOs.has((e.equipamento_sn ?? '').trim()))
+        .map((e) => [e.id, e]),
+    );
     for (const pedido of itensExtrasBody) {
       const entradaExtra = mapaExtras.get(pedido.entradaId);
       if (!entradaExtra || typeof pedido.valor !== 'number' || pedido.valor <= 0) continue;
