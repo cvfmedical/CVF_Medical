@@ -858,7 +858,7 @@ export function Faturamento() {
     const { data: orc, error: erroOrc } = await supabase
       .from('orcamentos')
       .select(
-        'numero_orcamento, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
+        'numero_orcamento, data_criacao, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
       )
       .eq('id', orcamentoId)
       .single();
@@ -907,6 +907,7 @@ export function Faturamento() {
       telefone: cliente.telefone,
       email: cliente.email,
       numeroOrcamento: orc.numero_orcamento,
+      dataSalvo: orc.data_criacao,
       numeroOS: os?.numero_os ?? '-',
       clienteNome: os?.cliente_nome ?? clienteRazaoSocial,
       clienteFinalNome,

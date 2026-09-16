@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Document, Page, Text, View, Image, StyleSheet, pdf } from '@react-pdf/renderer';
-import { EMPRESA, formatarMoeda, CHECKLIST_OTICA, AVISO_MANUTENCAO } from './formato';
+import { EMPRESA, formatarMoeda, formatarDataHora, CHECKLIST_OTICA, AVISO_MANUTENCAO } from './formato';
 import { PORTAL_CLIENTE_URL } from './compartilhar';
 import cvfLogoCompleto from '../assets/cvf-logo-completo.png';
 
@@ -90,11 +90,17 @@ function SecaoIdentificacaoCliente({
   nome,
   d,
   clienteFinalNome,
+  dataSalvo,
 }: {
   numero?: string;
   nome: string;
   d: DadosClientePdf;
   clienteFinalNome?: string | null;
+  // Data/hora em que o registro (Entrada/OS/Orçamento) foi salvo - pedido
+  // do usuário (2026-09-16), pra constar impresso ao lado dos dados do
+  // cliente. Cada documento tem sua própria data (não é do cliente em si),
+  // por isso é um prop à parte, não um campo de DadosClientePdf.
+  dataSalvo?: string | null;
 }) {
   return (
     <>
@@ -110,6 +116,14 @@ function SecaoIdentificacaoCliente({
             {d.cnpj || '-'}
           </Text>
         </View>
+        {dataSalvo !== undefined && (
+          <View style={[s.linhaDupla, s.linhaBorda]}>
+            <Text style={{ padding: 4 }}>
+              <Text style={s.bold}>Salvo em: </Text>
+              {formatarDataHora(dataSalvo)}
+            </Text>
+          </View>
+        )}
         <View style={[s.linhaDupla, s.linhaBorda, s.linhaZebra]}>
           <Text style={[s.colEsq, { borderRightWidth: 0 }]}>
             <Text style={s.bold}>Nome fantasia: </Text>
@@ -215,6 +229,9 @@ export interface DadosClientePdf {
 
 export interface DadosOrcamentoPdf extends DadosClientePdf {
   numeroOrcamento: string;
+  // Data/hora de criação do orçamento (orcamentos.data_criacao) - ver
+  // SecaoIdentificacaoCliente/dataSalvo.
+  dataSalvo?: string | null;
   numeroOS: string;
   clienteNome: string;
   clienteFinalNome?: string | null;
@@ -264,7 +281,7 @@ function DocOrcamento({ d }: { d: DadosOrcamentoPdf }) {
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Orçamento de Manutenção" subtitulo={`Nº ${d.numeroOrcamento} · OS ${d.numeroOS}`} />
 
-        <SecaoIdentificacaoCliente numero="1" nome={d.clienteNome} d={d} clienteFinalNome={d.clienteFinalNome} />
+        <SecaoIdentificacaoCliente numero="1" nome={d.clienteNome} d={d} clienteFinalNome={d.clienteFinalNome} dataSalvo={d.dataSalvo} />
         <SecaoIdentificacaoEquipamento
           numero="2"
           equipamento={d.equipamento}
@@ -369,6 +386,10 @@ export interface DadosEntradaPdf extends DadosClientePdf {
   numeroSerie: string;
   condicaoChegada: string;
   data: string;
+  // Mesmo instante de "data" acima, mas ISO completo (com hora) - ver
+  // SecaoIdentificacaoCliente/dataSalvo. "data" continua só com a data,
+  // usado na seção de equipamento, sem mudar o que já existia lá.
+  dataSalvo?: string | null;
   nfNumero: string;
   nfSerie: string;
   numeroControleCliente?: string | null;
@@ -399,7 +420,7 @@ function DocEntrada({ d }: { d: DadosEntradaPdf }) {
       <Page size="A4" style={s.page}>
         <Cabecalho titulo="Registro de Entrada" subtitulo={d.codigo} />
 
-        <SecaoIdentificacaoCliente nome={d.clienteNome} d={d} />
+        <SecaoIdentificacaoCliente nome={d.clienteNome} d={d} dataSalvo={d.dataSalvo} />
 
         <Text style={s.faixa}>2. Identificação do equipamento</Text>
         <View style={s.caixa}>
@@ -472,6 +493,9 @@ export interface ItemOSPdf {
 
 export interface DadosOSPdf extends DadosClientePdf {
   numeroOS: string;
+  // Data/hora de abertura da OS (ordens_servico.data_abertura) - ver
+  // SecaoIdentificacaoCliente/dataSalvo.
+  dataSalvo?: string | null;
   clienteNome: string;
   clienteFinalNome?: string | null;
   equipamento: string;
@@ -505,7 +529,7 @@ function DocOS({ d }: { d: DadosOSPdf }) {
           </View>
         </View>
 
-        <SecaoIdentificacaoCliente numero="1" nome={d.clienteNome} d={d} clienteFinalNome={d.clienteFinalNome} />
+        <SecaoIdentificacaoCliente numero="1" nome={d.clienteNome} d={d} clienteFinalNome={d.clienteFinalNome} dataSalvo={d.dataSalvo} />
         <SecaoIdentificacaoEquipamento
           numero="2"
           equipamento={d.equipamento}

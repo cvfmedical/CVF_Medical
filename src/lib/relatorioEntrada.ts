@@ -1,7 +1,7 @@
 import { abrirImpressao } from './imprimir';
 import { linkEmail, linkWhatsApp, PORTAL_CLIENTE_URL } from './compartilhar';
 import { type ChecklistAvarias } from './checklistAvarias';
-import { formatarMoeda } from './formato';
+import { formatarMoeda, formatarDataHora } from './formato';
 import type { AvariaTriagem } from './useAvariasTriagem';
 
 // Extraído de EntradaEquipamento.tsx::imprimirRelatorio - usado tanto
@@ -66,6 +66,9 @@ export function montarCorpoRegistroEntrada(
       <div class="laudo-linha-dupla">
         <div><strong>Razão social:</strong> ${cliente?.razao_social ?? '-'}</div>
         <div><strong>CNPJ/CPF:</strong> ${cliente?.cnpj ?? '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Salvo em:</strong> ${formatarDataHora(entrada.data_entrada)}</div>
       </div>
       <div class="laudo-linha-dupla">
         <div><strong>Nome fantasia:</strong> ${cliente?.nome_fantasia ?? '-'}</div>

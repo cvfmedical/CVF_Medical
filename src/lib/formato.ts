@@ -103,6 +103,17 @@ export function formatarNumero(valor: number | null | undefined): string {
   return fmtNumero.format(Number(valor) || 0);
 }
 
+// "16/09/2026 14:32" - data E hora (não só a data) de quando um registro
+// foi salvo - pedido do usuário (2026-09-16): os documentos impressos/PDF
+// (Entrada, OS, Orçamento, Ficha de Acompanhamento) precisam mostrar isso
+// na seção de identificação, ao lado dos dados do cliente.
+export function formatarDataHora(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return '-';
+  return `${data.toLocaleDateString('pt-BR')} ${data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 export interface ModeloOticaResumo {
   fabricante: string;
   modelo: string;

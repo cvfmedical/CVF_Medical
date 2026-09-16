@@ -47,6 +47,9 @@ import { IconPhoto, IconTrash } from '@tabler/icons-react';
 interface Orcamento {
   id: number;
   numero_orcamento: string;
+  // Data/hora de criação do orçamento - pra constar impresso no PDF (ver
+  // SecaoIdentificacaoCliente/dataSalvo em pdfsOrcamento.tsx).
+  data_criacao: string;
   status: string;
   ordem_servico_id: number;
   observacoes_tecnico: string | null;
@@ -72,6 +75,9 @@ interface Orcamento {
     grupo: string | null;
     subgrupo: string | null;
     status_os: string | null;
+    // Data/hora de abertura da OS - pra constar impressa no PDF da OS (ver
+    // SecaoIdentificacaoCliente/dataSalvo em pdfsOrcamento.tsx).
+    data_abertura: string | null;
   } | null;
 }
 
@@ -271,7 +277,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('orcamentos')
         .select(
-          'id, numero_orcamento, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo, status_os)',
+          'id, numero_orcamento, data_criacao, status, ordem_servico_id, observacoes_tecnico, observacoes_financeiro, aprovacao_manual, motivo_aprovacao_manual, valor_fixo_contrato, validade_proposta, condicoes_pagamento, desconto, bonificacao, ordens_servico(numero_os, cliente_nome, cliente_id, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica, cliente_final_id, grupo, subgrupo, status_os, data_abertura)',
         )
         .order('data_criacao', { ascending: false });
       if (error) throw error;
@@ -809,6 +815,7 @@ export function OrcamentoFinanceiro() {
     return montarCorpoRelatorioOS(
       {
         numero_os: orcamentoSelecionado.ordens_servico.numero_os,
+        data_abertura: orcamentoSelecionado.ordens_servico.data_abertura,
         cliente_nome: orcamentoSelecionado.ordens_servico.cliente_nome,
         cliente_final_nome: clienteFinalQuery.data?.razao_social ?? null,
         cliente_cnpj: clienteQuery.data?.cnpj ?? null,
@@ -1122,6 +1129,7 @@ export function OrcamentoFinanceiro() {
       numeroSerie: os?.optica_sn ?? '',
       condicaoChegada: entrada.condicao_chegada ?? '',
       data: entrada.data_entrada ? new Date(entrada.data_entrada).toLocaleDateString('pt-BR') : '',
+      dataSalvo: entrada.data_entrada,
       nfNumero: entrada.nf_remessa_numero ?? '',
       nfSerie: entrada.nf_remessa_serie ?? '',
       numeroControleCliente: entrada.numero_controle_cliente ?? null,
@@ -1235,6 +1243,7 @@ export function OrcamentoFinanceiro() {
         const dadosOrc: DadosOrcamentoPdf = {
           ...clientePdfLote,
           numeroOrcamento: o.numero_orcamento,
+          dataSalvo: o.data_criacao,
           numeroOS: os?.numero_os ?? '-',
           clienteNome: os?.cliente_nome ?? cliente.razao_social,
           clienteFinalNome,
@@ -1265,6 +1274,7 @@ export function OrcamentoFinanceiro() {
         const dadosOS: DadosOSPdf = {
           ...clientePdfLote,
           numeroOS: os?.numero_os ?? '-',
+          dataSalvo: os?.data_abertura ?? null,
           clienteNome: os?.cliente_nome ?? '',
           clienteFinalNome,
           equipamento: os?.optica_desc ?? '-',
@@ -1371,6 +1381,7 @@ export function OrcamentoFinanceiro() {
       const dadosOrc: DadosOrcamentoPdf = {
         ...clienteParaPdf(clienteQuery.data),
         numeroOrcamento: orcamentoSelecionado.numero_orcamento,
+        dataSalvo: orcamentoSelecionado.data_criacao,
         numeroOS: os?.numero_os ?? '-',
         clienteNome: os?.cliente_nome ?? clienteQuery.data.razao_social,
         clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
@@ -1401,6 +1412,7 @@ export function OrcamentoFinanceiro() {
       const dadosOS: DadosOSPdf = {
         ...clienteParaPdf(clienteQuery.data),
         numeroOS: os?.numero_os ?? '-',
+        dataSalvo: os?.data_abertura ?? null,
         clienteNome: os?.cliente_nome ?? '',
         clienteFinalNome: clienteFinalQuery.data?.razao_social ?? null,
         equipamento: os?.optica_desc ?? '-',

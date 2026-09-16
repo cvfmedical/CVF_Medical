@@ -26,6 +26,7 @@ interface Orcamento {
 
 interface OSDetalhe {
   numero_os: string;
+  data_abertura: string | null;
   cliente_id: number;
   cliente_nome: string;
   optica_desc: string | null;
@@ -235,7 +236,7 @@ export function OrcamentoTecnico() {
     queryFn: async (): Promise<OSDetalhe> => {
       const { data, error } = await supabase
         .from('ordens_servico')
-        .select('numero_os, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica, grupo, subgrupo')
+        .select('numero_os, data_abertura, cliente_id, cliente_nome, optica_desc, optica_fab, optica_sn, defeito_relatado, prazo_entrega, eh_otica, grupo, subgrupo')
         .eq('id', Number(osId))
         .single();
       if (error) throw error;

@@ -12,6 +12,7 @@ import { tonoDoStatusOS, STATUS_ENTREGUE, STATUS_DEVOLUCAO_SEM_REPARO, STATUS_OS
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfirmarSenha } from '../../lib/useConfirmarSenha';
 import { mensagemErro } from '../../lib/erros';
+import { formatarDataHora } from '../../lib/formato';
 import { abrirImpressao } from '../../lib/imprimir';
 import { IconPrinter, IconTrash } from '@tabler/icons-react';
 
@@ -215,6 +216,9 @@ export function OrdensServicoPanel() {
         <div class="laudo-linha-dupla">
           <div><strong>Nº OS:</strong> <span class="mono">${os.numero_os}</span></div>
           <div><strong>Cliente:</strong> ${os.cliente_nome}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Salvo em:</strong> ${formatarDataHora(os.data_abertura)}</div>
         </div>
         ${clienteFinal ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${clienteFinal.razao_social}</div></div>` : ''}
         <div class="laudo-linha-dupla">

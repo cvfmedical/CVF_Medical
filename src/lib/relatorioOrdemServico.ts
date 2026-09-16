@@ -1,5 +1,6 @@
 import { abrirImpressao } from './imprimir';
 import { linkEmail, linkWhatsApp } from './compartilhar';
+import { formatarDataHora } from './formato';
 
 // Relatório da Ordem de Serviço: peças/serviços identificados como
 // danificados pelo técnico (Orçamento Técnico), com foto e observação
@@ -17,6 +18,10 @@ export interface ItemRelatorioOS {
 
 export interface DadosOSParaRelatorio {
   numero_os: string;
+  // Data/hora de abertura da OS - pedido do usuário (2026-09-16): consta
+  // impressa dentro de "Identificação do cliente", junto com os dados do
+  // cliente.
+  data_abertura?: string | null;
   cliente_nome: string;
   cliente_final_nome?: string | null;
   // Identificação completa do cliente - mesmo padrão usado no Laudo de
@@ -72,6 +77,9 @@ export function montarCorpoRelatorioOS(os: DadosOSParaRelatorio, itens: ItemRela
       <div class="laudo-linha-dupla">
         <div><strong>Razão social:</strong> ${os.cliente_nome}</div>
         <div><strong>CNPJ/CPF:</strong> ${os.cliente_cnpj ?? '-'}</div>
+      </div>
+      <div class="laudo-linha-dupla">
+        <div><strong>Salvo em:</strong> ${formatarDataHora(os.data_abertura)}</div>
       </div>
       <div class="laudo-linha-dupla">
         <div><strong>Nome fantasia:</strong> ${os.cliente_fantasia ?? '-'}</div>

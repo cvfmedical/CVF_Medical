@@ -24,7 +24,7 @@ import { CapturaFoto } from '../../components/CapturaFoto';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { ComboboxBusca } from '../../components/ComboboxBusca';
-import { formatarModeloOtica } from '../../lib/formato';
+import { formatarModeloOtica, formatarDataHora } from '../../lib/formato';
 import { registrarEmailEnviado } from '../../lib/emailsEnviados';
 import { AlertaGarantia } from '../../components/AlertaGarantia';
 
@@ -1335,6 +1335,9 @@ export function EntradaEquipamento() {
         <div class="laudo-linha-dupla">
           <div><strong>Nº Entrada:</strong> <span class="mono">${entrada.codigo_entrada}</span></div>
           <div><strong>Cliente:</strong> ${c?.razao_social ?? '-'}</div>
+        </div>
+        <div class="laudo-linha-dupla">
+          <div><strong>Salvo em:</strong> ${formatarDataHora(entrada.data_entrada)}</div>
         </div>
         ${entrada.cliente_final_id ? `<div class="laudo-linha-dupla"><div><strong>Unidade atendida:</strong> ${cliente(entrada.cliente_final_id)?.razao_social ?? '-'}</div></div>` : ''}
         <div class="laudo-linha-dupla">
