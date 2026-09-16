@@ -165,9 +165,19 @@ button {
 }
 
 /* ===================== Layout: rail + barra contextual ===================== */
+/* Altura FIXA da tela (não min-height) - de propósito: sem isso, .conteudo
+   crescia junto com o conteúdo (ex.: tabela longa) e sua barra de rolagem
+   horizontal (.conteudo tem overflow-x: auto) ficava lá embaixo, fora da
+   tela, só visível depois de rolar a página inteira até o fim - bug real
+   reportado pelo usuário (2026-09-16): via a barra só quando já tinha
+   descido, precisava rolar pra baixo, pra direita e voltar pra cima nas
+   colunas que ficavam fora da tela no topo da tabela. Com altura fixa aqui
+   e overflow-y:auto em .conteudo, a rolagem (nos dois eixos) passa a
+   acontecer DENTRO de .conteudo, com a barra horizontal sempre na mesma
+   posição (embaixo da área visível), não no fim do conteúdo. */
 .layout-app {
   display: flex;
-  min-height: 100svh;
+  height: 100svh;
 }
 
 /* Menu lateral vertical expansível (accordion) */
@@ -340,6 +350,11 @@ button {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Sem isso, um filho flex (.conteudo) com flex:1 dentro de um pai coluna
+     não encolhe de verdade (min-height padrão é "auto", ou seja, do
+     tamanho do próprio conteúdo) - .conteudo nunca ficaria com altura
+     limitada o bastante pra precisar de scroll interno. */
+  min-height: 0;
 }
 
 .topo-app {
@@ -369,9 +384,11 @@ button {
 
 .conteudo {
   flex: 1;
+  min-height: 0;
   padding: 24px;
   position: relative;
   overflow-x: auto;
+  overflow-y: auto;
 }
 
 .conteudo-camada {
