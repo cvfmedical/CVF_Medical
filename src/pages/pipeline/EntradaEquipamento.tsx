@@ -62,6 +62,13 @@ interface Entrada {
   cliente_final_id: number | null;
   grupo: string | null;
   subgrupo: string | null;
+  // Preenchido quando esta Entrada foi devolvida ao cliente como "item
+  // acompanhante" numa NF-e de devolução (ver emitir-nfe/index.ts) - a
+  // partir daí some das listas de trabalho (pedido do usuário,
+  // 2026-09-16): não faz sentido oferecer "Converter em OS" pra um item
+  // que já voltou pro cliente. Continua achável filtrando qualquer coluna
+  // (mesmo padrão já usado pra Entradas já convertidas em OS).
+  devolvido_na_entrega_id: number | null;
 }
 
 interface FotoEntrada {
@@ -537,7 +544,7 @@ export function EntradaEquipamento() {
   function valorColuna(e: Entrada, chave: string): unknown {
     if (chave === 'cliente') return cliente(e.cliente_id)?.razao_social ?? '';
     if (chave === 'nf_remessa') return e.nf_remessa_numero || e.numero_controle_cliente || '';
-    if (chave === 'status') return e.ordem_servico_id ? 'Convertida em OS' : e.status;
+    if (chave === 'status') return e.devolvido_na_entrega_id ? 'Devolvida ao cliente' : e.ordem_servico_id ? 'Convertida em OS' : e.status;
     if (chave === 'data_entrada') return e.data_entrada;
     return (e as unknown as Record<string, unknown>)[chave];
   }
@@ -547,7 +554,7 @@ export function EntradaEquipamento() {
   // esta. Assim que alguma coluna é filtrada, passa a buscar em tudo
   // (inclusive já convertidas), pra continuar achável.
   const linhasFiltradas = (entradasQuery.data ?? []).filter((e) => {
-    if (!algumFiltroAtivo) return !e.ordem_servico_id;
+    if (!algumFiltroAtivo) return !e.ordem_servico_id && !e.devolvido_na_entrega_id;
     return COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(e, chave), chave));
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
