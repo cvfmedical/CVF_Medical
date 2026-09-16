@@ -588,6 +588,39 @@ export function Faturamento() {
     ordenarPor,
   } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
+  // Agrupa na exibição as contas que são PARCELAS da mesma NF (mesmo
+  // nfseRef, ou mesmo nf_tipo+numero+série pra NF lançada manualmente sem
+  // nfseRef) - pedido do usuário (2026-09-16): uma NF parcelada em 3
+  // boletos aparecia como 3 linhas quase idênticas na tabela. Cada grupo
+  // vira 1 linha só (valor somado, descrição sem o sufixo "- Parcela
+  // X/Y", números das contas listados) - as ações (Verificar status/
+  // Cancelar NF/Enviar e-mail/etc.) continuam operando pela conta
+  // "âncora" (a 1ª do grupo), o que já é seguro: o backend
+  // (emitir-nfse, ações consultar/cancelar) atualiza TODAS as parcelas
+  // pelo nfse_ref compartilhado, não só a conta clicada. Contas sem
+  // nf_numero (ainda não faturadas) nunca agrupam.
+  interface GrupoFaturamento {
+    chave: string;
+    principal: LinhaFaturamento;
+    linhas: LinhaFaturamento[];
+    valorTotal: number;
+  }
+  const gruposParaExibir: GrupoFaturamento[] = [];
+  {
+    const indicePorChaveGrupo = new Map<string, number>();
+    for (const l of linhasOrdenadasFiltradas) {
+      const chaveGrupo = l.nf_numero ? (l.nfseRef ?? `${l.nf_tipo ?? ''}|${l.nf_numero}|${l.nf_serie ?? ''}`) : null;
+      if (chaveGrupo && indicePorChaveGrupo.has(chaveGrupo)) {
+        const grupo = gruposParaExibir[indicePorChaveGrupo.get(chaveGrupo)!];
+        grupo.linhas.push(l);
+        grupo.valorTotal += l.valor;
+        continue;
+      }
+      if (chaveGrupo) indicePorChaveGrupo.set(chaveGrupo, gruposParaExibir.length);
+      gruposParaExibir.push({ chave: chaveGrupo ?? l.chave, principal: l, linhas: [l], valorTotal: l.valor });
+    }
+  }
+
   function abrirLancarNota(l: LinhaFaturamento) {
     setLinhaSelecionada(l);
     setForm({
@@ -2079,8 +2112,12 @@ export function Faturamento() {
           </tr>
         </thead>
         <tbody>
-          {linhasOrdenadasFiltradas.map((l) => (
-            <tr key={l.chave}>
+          {gruposParaExibir.map((grupo) => {
+            const l = grupo.principal;
+            const numerosGrupo = grupo.linhas.map((x) => x.numero).join(', ');
+            const descricaoGrupo = grupo.linhas.length > 1 ? descricaoSemParcela(l.descricao) : l.descricao;
+            return (
+            <tr key={grupo.chave}>
               <td>
                 {((l.contaId == null && l.orcamentoId != null && !l.nf_numero) ||
                   (l.contaId != null && !l.boleto_numero)) && (
@@ -2139,10 +2176,12 @@ export function Faturamento() {
                   </span>
                 )}
               </td>
-              <td className="mono">{l.numero}</td>
+              <td className="mono" title={grupo.linhas.length > 1 ? `${grupo.linhas.length} parcelas: ${numerosGrupo}` : undefined}>
+                {numerosGrupo}
+              </td>
               <td>{nomeCliente(l.clienteId)}</td>
-              <td>{l.descricao}</td>
-              <td>R$ {Number(l.valor).toFixed(2)}</td>
+              <td>{descricaoGrupo}</td>
+              <td>R$ {grupo.valorTotal.toFixed(2)}</td>
               <td>
                 {l.nfseStatus === 'cancelada' ? (
                   <>
@@ -2268,8 +2307,9 @@ export function Faturamento() {
                 )}
               </td>
             </tr>
-          ))}
-          {linhasOrdenadasFiltradas.length === 0 && (
+            );
+          })}
+          {gruposParaExibir.length === 0 && (
             <tr>
               <td colSpan={9}>Nenhuma conta a receber ou orçamento aprovado encontrado.</td>
             </tr>
