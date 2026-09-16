@@ -31,6 +31,7 @@ interface EntregaRow {
   nf_devolucao_data_emissao: string | null;
   nf_devolucao_valor: number | null;
   nf_devolucao_pdf_path: string | null;
+  nf_devolucao_xml_path: string | null;
   nfe_devolucao_status: string | null;
   nfe_devolucao_ref: string | null;
   nfe_devolucao_erro_detalhe: string | null;
@@ -995,6 +996,25 @@ export function Entrega() {
               disabled={consultandoStatusDevolucaoId === row.id}
             >
               {consultandoStatusDevolucaoId === row.id ? 'Buscando...' : 'Buscar PDF da NF-e'}
+            </button>
+          )}
+          {row.nfe_devolucao_status === 'autorizada' && row.nf_devolucao_xml_path && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Baixar o XML autorizado da NF-e de devolução"
+              onClick={() => window.open(row.nf_devolucao_xml_path!, '_blank')}
+            >
+              Baixar XML da NF-e
+            </button>
+          )}
+          {row.nfe_devolucao_status === 'autorizada' && !row.nf_devolucao_xml_path && (
+            <button
+              className="botao-secundario botao-pequeno"
+              title="Autorizada antes deste link existir no sistema - busca o XML de novo na Focus"
+              onClick={() => consultarStatusDevolucao(row)}
+              disabled={consultandoStatusDevolucaoId === row.id}
+            >
+              {consultandoStatusDevolucaoId === row.id ? 'Buscando...' : 'Buscar XML da NF-e'}
             </button>
           )}
           {row.nfe_devolucao_status === 'autorizada' && (

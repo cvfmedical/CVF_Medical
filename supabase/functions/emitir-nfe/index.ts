@@ -368,6 +368,15 @@ Deno.serve(async (req: Request) => {
           ? caminhoDanfe
           : `${focusBaseUrl}${caminhoDanfe}`
         : null;
+      // Caminho do XML autorizado - campo confirmado na doc oficial da
+      // Focus (reference/consultar_nfe): "caminho_xml_nota_fiscal", mesmo
+      // padrão relativo/absoluto do "caminho_danfe" já usado acima.
+      const caminhoXml = typeof resultado.caminho_xml_nota_fiscal === 'string' ? resultado.caminho_xml_nota_fiscal : null;
+      const xmlPath = caminhoXml
+        ? caminhoXml.startsWith('http')
+          ? caminhoXml
+          : `${focusBaseUrl}${caminhoXml}`
+        : null;
       const { error: erroUpdate } = await supabaseAdmin
         .from('entregas')
         .update({
@@ -383,6 +392,7 @@ Deno.serve(async (req: Request) => {
           nfe_devolucao_status: 'autorizada',
           nfe_devolucao_erro_detalhe: null,
           nf_devolucao_pdf_path: pdfPath,
+          nf_devolucao_xml_path: xmlPath,
         })
         .eq('id', corpo.entregaId);
       if (erroUpdate) erroGravacao = erroUpdate.message;
