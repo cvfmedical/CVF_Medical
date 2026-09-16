@@ -20,7 +20,7 @@ import { quintoDiaUtilMesSeguinte } from '../../lib/diaUtil';
 import { abrirPreviaDanfse } from '../../lib/previaDanfse';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
 import { urlAssinadaDocumentoFinanceiro } from '../../lib/storage';
-import { gerarAnexoOrcamentoSozinho, blobParaBase64, type DadosOrcamentoPdf, type AnexoBase64 } from '../../lib/pdfsOrcamento';
+import { gerarAnexoOrcamentoSozinho, gerarBlobOrcamentoSozinho, blobParaBase64, type DadosOrcamentoPdf, type AnexoBase64 } from '../../lib/pdfsOrcamento';
 import { GARANTIA_CVF, CLAUSULAS_GERAIS, EMPRESA, formatarMoeda } from '../../lib/formato';
 import { PORTAL_CLIENTE_URL } from '../../lib/compartilhar';
 
@@ -461,6 +461,23 @@ export function Faturamento() {
     (contasQuery.data ?? []).flatMap((c) => [c.orcamento_id, ...(c.orcamentos_ids ?? [])]).filter((id): id is number => id != null),
   );
 
+  // Números (ORC-XXXX) de TODOS os orçamentos já faturados - inclui os que
+  // só aparecem em orcamentos_ids (NF consolidada), não só o "âncora" -
+  // usado pra oferecer um botão "PDF ORC-XXXX" por orçamento na linha da
+  // tabela (pedido do usuário 2026-09-16: baixar o PDF de um orçamento
+  // específico dentro de uma NF consolidada).
+  const idsOrcamentosParaNumero = Array.from(orcamentosComConta).sort((a, b) => a - b);
+  const numerosOrcamentosQuery = useQuery({
+    queryKey: ['numeros-orcamentos-faturados', idsOrcamentosParaNumero.join(',')],
+    enabled: idsOrcamentosParaNumero.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('orcamentos').select('id, numero_orcamento').in('id', idsOrcamentosParaNumero);
+      if (error) throw error;
+      return data as { id: number; numero_orcamento: string }[];
+    },
+  });
+  const numeroOrcamentoPorId = new Map((numerosOrcamentosQuery.data ?? []).map((o) => [o.id, o.numero_orcamento]));
+
   const linhas: LinhaFaturamento[] = [
     ...(contasQuery.data ?? []).map((c): LinhaFaturamento => ({
       chave: `cr-${c.id}`,
@@ -824,6 +841,138 @@ export function Faturamento() {
     );
   }
 
+  // Monta os dados de UM orçamento pro PDF (DadosOrcamentoPdf) - extraído
+  // do loop de enviarEmailCompleto pra ser reaproveitado também por
+  // baixarPdfOrcamento (pedido do usuário 2026-09-16: baixar só o PDF de
+  // um orçamento específico, sem disparar o e-mail completo de novo -
+  // caso real: cliente reclamou que o PDF do ORC-5662 enviado antes não
+  // mostrava o desconto de 10%, aplicado no banco depois do envio).
+  async function montarDadosOrcamentoPdf(
+    orcamentoId: number,
+    cliente: { cnpj: string | null; nome_fantasia: string | null; telefone: string | null; email: string | null },
+    enderecoCliente: string | null,
+    clienteRazaoSocial: string,
+    clienteCidade: string | null,
+    clienteUf: string | null,
+  ): Promise<{ dados: DadosOrcamentoPdf; numeroOS: string }> {
+    const { data: orc, error: erroOrc } = await supabase
+      .from('orcamentos')
+      .select(
+        'numero_orcamento, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
+      )
+      .eq('id', orcamentoId)
+      .single();
+    if (erroOrc || !orc) throw erroOrc ?? new Error('Orçamento não encontrado.');
+    // deno-lint-ignore no-explicit-any
+    const os = orc.ordens_servico as unknown as {
+      numero_os: string;
+      cliente_id: number;
+      cliente_nome: string;
+      optica_desc: string | null;
+      optica_sn: string | null;
+      eh_otica: boolean | null;
+      cliente_final_id: number | null;
+    } | null;
+
+    const { data: itensOrc, error: erroItens } = await supabase
+      .from('orcamento_itens')
+      .select('preco_unitario, quantidade, observacao, descricao_servico, produtos_servicos(nome)')
+      .eq('orcamento_id', orcamentoId);
+    if (erroItens) throw erroItens;
+
+    let clienteFinalNome: string | null = null;
+    if (os?.cliente_final_id) {
+      const { data: cf } = await supabase.from('clientes').select('razao_social').eq('id', os.cliente_final_id).maybeSingle();
+      clienteFinalNome = cf?.razao_social ?? null;
+    }
+
+    const { data: entrada } = await supabase
+      .from('entradas_equipamento')
+      .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
+      .eq('ordem_servico_id', orc.ordem_servico_id)
+      .maybeSingle();
+
+    const subtotalItens = (itensOrc ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
+    const subtotal = orc.valor_fixo_contrato ?? subtotalItens;
+    // Valor DESTE orçamento (não o total da NF consolidada, que pode
+    // somar vários) - mesma fórmula de totalOrcamento().
+    const totalOrc = orc.bonificacao ? 0 : Math.max(subtotal - (orc.desconto ?? 0), 0);
+
+    const dados: DadosOrcamentoPdf = {
+      cnpj: cliente.cnpj,
+      nomeFantasia: cliente.nome_fantasia,
+      endereco: enderecoCliente,
+      cidade: clienteCidade,
+      uf: clienteUf,
+      telefone: cliente.telefone,
+      email: cliente.email,
+      numeroOrcamento: orc.numero_orcamento,
+      numeroOS: os?.numero_os ?? '-',
+      clienteNome: os?.cliente_nome ?? clienteRazaoSocial,
+      clienteFinalNome,
+      equipamento: os?.optica_desc ?? '-',
+      numeroSerie: os?.optica_sn ?? '',
+      nfRemessaNumero: entrada?.nf_remessa_numero ?? null,
+      nfRemessaSerie: entrada?.nf_remessa_serie ?? null,
+      numeroControleCliente: entrada?.numero_controle_cliente ?? null,
+      itens: (itensOrc ?? []).map((it) => ({
+        nome: (it.produtos_servicos as unknown as { nome: string } | null)?.nome ?? it.descricao_servico ?? '-',
+        quantidade: it.quantidade,
+        precoUnit: it.preco_unitario ?? 0,
+        observacao: it.observacao,
+      })),
+      subtotal,
+      desconto: orc.desconto ?? 0,
+      bonificacao: orc.bonificacao ?? false,
+      total: totalOrc,
+      validade: orc.validade_proposta ?? '',
+      pagamento: orc.condicoes_pagamento ?? '',
+      observacoes: orc.observacoes_financeiro ?? '',
+      ehOtica: os?.eh_otica ?? false,
+      garantiaResumo: GARANTIA_CVF.resumo,
+      garantiaIntro: GARANTIA_CVF.intro,
+      garantiaItens: GARANTIA_CVF.itens,
+      clausulas: CLAUSULAS_GERAIS,
+    };
+    return { dados, numeroOS: os?.numero_os ?? '-' };
+  }
+
+  // Gera na hora (dados atuais do banco, sempre atualizados) e baixa
+  // direto no navegador o PDF de UM orçamento específico - sem enviar
+  // e-mail nenhum. Uso típico: reenviar manualmente (WhatsApp etc.) um
+  // orçamento cujo PDF já mandado por e-mail ficou desatualizado (ex.:
+  // desconto aplicado depois do envio original).
+  const [baixandoPdfOrcamentoId, setBaixandoPdfOrcamentoId] = useState<number | null>(null);
+  async function baixarPdfOrcamento(orcamentoId: number, clienteId: number) {
+    setBaixandoPdfOrcamentoId(orcamentoId);
+    setErro(null);
+    try {
+      const { data: cliente, error: erroCliente } = await supabase
+        .from('clientes')
+        .select('razao_social, nome_fantasia, cnpj, telefone, email, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
+        .eq('id', clienteId)
+        .single();
+      if (erroCliente || !cliente) throw erroCliente ?? new Error('Cliente não encontrado.');
+      const enderecoCliente = [[cliente.logradouro, cliente.numero_endereco].filter(Boolean).join(', '), cliente.complemento, cliente.bairro, cliente.cep ? `CEP ${cliente.cep}` : null]
+        .filter(Boolean)
+        .join(' - ') || null;
+      const { dados } = await montarDadosOrcamentoPdf(orcamentoId, cliente, enderecoCliente, cliente.razao_social, cliente.cidade, cliente.uf);
+      const blob = await gerarBlobOrcamentoSozinho(dados);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Orcamento-${dados.numeroOrcamento}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setBaixandoPdfOrcamentoId(null);
+    }
+  }
+
   // Monta e envia (via Resend, function enviar-orcamento) um e-mail com o
   // PDF do Orçamento (já com preço final, direto do banco - não depende de
   // nenhum estado de edição em tela) + o(s) PDF(s) de boleto de TODAS as
@@ -869,87 +1018,16 @@ export function Faturamento() {
       const orcamentosResumo: { numeroOrcamento: string; numeroOS: string }[] = [];
 
       for (const orcamentoId of idsOrcamentos) {
-        const { data: orc, error: erroOrc } = await supabase
-          .from('orcamentos')
-          .select(
-            'numero_orcamento, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
-          )
-          .eq('id', orcamentoId)
-          .single();
-        if (erroOrc || !orc) throw erroOrc ?? new Error('Orçamento não encontrado.');
-        // deno-lint-ignore no-explicit-any
-        const os = orc.ordens_servico as unknown as {
-          numero_os: string;
-          cliente_id: number;
-          cliente_nome: string;
-          optica_desc: string | null;
-          optica_sn: string | null;
-          eh_otica: boolean | null;
-          cliente_final_id: number | null;
-        } | null;
-
-        const { data: itensOrc, error: erroItens } = await supabase
-          .from('orcamento_itens')
-          .select('preco_unitario, quantidade, observacao, descricao_servico, produtos_servicos(nome)')
-          .eq('orcamento_id', orcamentoId);
-        if (erroItens) throw erroItens;
-
-        let clienteFinalNome: string | null = null;
-        if (os?.cliente_final_id) {
-          const { data: cf } = await supabase.from('clientes').select('razao_social').eq('id', os.cliente_final_id).maybeSingle();
-          clienteFinalNome = cf?.razao_social ?? null;
-        }
-
-        const { data: entrada } = await supabase
-          .from('entradas_equipamento')
-          .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
-          .eq('ordem_servico_id', orc.ordem_servico_id)
-          .maybeSingle();
-
-        const subtotalItens = (itensOrc ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
-        const subtotal = orc.valor_fixo_contrato ?? subtotalItens;
-        // Valor DESTE orçamento (não o total da NF consolidada, que pode
-        // somar vários) - mesma fórmula de totalOrcamento().
-        const totalOrc = orc.bonificacao ? 0 : Math.max(subtotal - (orc.desconto ?? 0), 0);
-
-        const dadosOrc: DadosOrcamentoPdf = {
-          cnpj: cliente.cnpj,
-          nomeFantasia: cliente.nome_fantasia,
-          endereco: enderecoCliente,
-          cidade: cliente.cidade,
-          uf: cliente.uf,
-          telefone: cliente.telefone,
-          email: cliente.email,
-          numeroOrcamento: orc.numero_orcamento,
-          numeroOS: os?.numero_os ?? '-',
-          clienteNome: os?.cliente_nome ?? cliente.razao_social,
-          clienteFinalNome,
-          equipamento: os?.optica_desc ?? '-',
-          numeroSerie: os?.optica_sn ?? '',
-          nfRemessaNumero: entrada?.nf_remessa_numero ?? null,
-          nfRemessaSerie: entrada?.nf_remessa_serie ?? null,
-          numeroControleCliente: entrada?.numero_controle_cliente ?? null,
-          itens: (itensOrc ?? []).map((it) => ({
-            nome: (it.produtos_servicos as unknown as { nome: string } | null)?.nome ?? it.descricao_servico ?? '-',
-            quantidade: it.quantidade,
-            precoUnit: it.preco_unitario ?? 0,
-            observacao: it.observacao,
-          })),
-          subtotal,
-          desconto: orc.desconto ?? 0,
-          bonificacao: orc.bonificacao ?? false,
-          total: totalOrc,
-          validade: orc.validade_proposta ?? '',
-          pagamento: orc.condicoes_pagamento ?? '',
-          observacoes: orc.observacoes_financeiro ?? '',
-          ehOtica: os?.eh_otica ?? false,
-          garantiaResumo: GARANTIA_CVF.resumo,
-          garantiaIntro: GARANTIA_CVF.intro,
-          garantiaItens: GARANTIA_CVF.itens,
-          clausulas: CLAUSULAS_GERAIS,
-        };
+        const { dados: dadosOrc, numeroOS } = await montarDadosOrcamentoPdf(
+          orcamentoId,
+          cliente,
+          enderecoCliente,
+          cliente.razao_social,
+          cliente.cidade,
+          cliente.uf,
+        );
         anexos.push(await gerarAnexoOrcamentoSozinho(dadosOrc));
-        orcamentosResumo.push({ numeroOrcamento: orc.numero_orcamento, numeroOS: os?.numero_os ?? '-' });
+        orcamentosResumo.push({ numeroOrcamento: dadosOrc.numeroOrcamento, numeroOS });
       }
 
       // Todas as contas que compartilham a mesma NF+orçamento (cobre o
@@ -2267,6 +2345,20 @@ export function Faturamento() {
                     {enviandoEmailCompleto ? 'Enviando...' : 'Enviar por e-mail'}
                   </button>
                 )}
+                {l.orcamentoId &&
+                  Array.from(new Set([l.orcamentoId, ...(l.orcamentosIds ?? [])])).map((idOrc) => (
+                    <button
+                      key={idOrc}
+                      className="botao-secundario"
+                      onClick={() => baixarPdfOrcamento(idOrc, l.clienteId!)}
+                      disabled={baixandoPdfOrcamentoId === idOrc}
+                      title="Gera na hora (com os dados atuais - preço, desconto etc.) e baixa só o PDF deste orçamento, sem enviar e-mail nenhum"
+                    >
+                      {baixandoPdfOrcamentoId === idOrc
+                        ? 'Gerando...'
+                        : `PDF ${numeroOrcamentoPorId.get(idOrc) ?? (idOrc === l.orcamentoId ? l.numeroOrcamento : null) ?? `#${idOrc}`}`}
+                    </button>
+                  ))}
                 {l.nfsePdfPath && (
                   <button
                     className="botao-secundario"

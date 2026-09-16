@@ -794,11 +794,20 @@ export interface AnexoBase64 {
   content: string;
 }
 
+// Gera só o PDF do Orçamento (sem Entrada/OS) como Blob puro - usado tanto
+// pra anexar num e-mail (ver gerarAnexoOrcamentoSozinho) quanto pra baixar
+// direto no navegador (ver baixarPdfOrcamento em Faturamento.tsx, pedido do
+// usuário 2026-09-16: reenviar só o PDF corrigido de um orçamento, sem
+// disparar o e-mail completo de novo).
+export async function gerarBlobOrcamentoSozinho(orcamento: DadosOrcamentoPdf): Promise<Blob> {
+  return pdf(<DocOrcamento d={orcamento} />).toBlob();
+}
+
 // Gera só o PDF do Orçamento (sem Entrada/OS) - usado no e-mail de
 // cobrança do Faturamento, onde Entrada/OS já foram enviados antes (na
 // aprovação do orçamento) e reenviar tudo de novo seria redundante.
 export async function gerarAnexoOrcamentoSozinho(orcamento: DadosOrcamentoPdf): Promise<AnexoBase64> {
-  const blob = await pdf(<DocOrcamento d={orcamento} />).toBlob();
+  const blob = await gerarBlobOrcamentoSozinho(orcamento);
   return { filename: `Orcamento-${orcamento.numeroOrcamento}.pdf`, content: await blobParaBase64(blob) };
 }
 
