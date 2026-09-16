@@ -357,10 +357,18 @@ export function Entrega() {
   const entregueSemRegistro = (osId: number) => porId(osId)?.status_os === STATUS_ENTREGUE && !temEntregaRegistrada(osId);
   // Combobox do formulário (criar/editar entrega) precisa continuar incluindo
   // OS já com entrega registrada, senão editar uma entrega já salva mostra o
-  // campo em branco (ver comentário de entregasExistentesQuery acima).
-  const opcoesEntrega = opcoes.filter(
-    (o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)) || entregueSemRegistro(Number(o.value)),
-  );
+  // campo em branco (ver comentário de entregasExistentesQuery acima). Mas
+  // isso faz uma OS já concluída (entrega + devolução emitida) continuar
+  // aparecendo em "+ Novo" sem nenhum aviso, gerando dúvida real do usuário
+  // (2026-09-16: "já fiz a NF de devolução da OS 5711, pq continua
+  // aparecendo na pesquisa?"). Mantém a opção (necessária pro editar), mas
+  // deixa claro no rótulo que ela já está registrada - não deve ser
+  // escolhida de novo em "+ Novo".
+  const opcoesEntrega = opcoes
+    .filter((o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)) || entregueSemRegistro(Number(o.value)))
+    .map((o) =>
+      temEntregaRegistrada(Number(o.value)) ? { ...o, label: `${o.label} (já tem entrega registrada)` } : o,
+    );
   // Checklist de impressão de etiqueta é outra coisa: só interessa quem
   // ainda não teve etiqueta impressa - assim que imprime (em lote, pela
   // linha da tabela ou pelo formulário), a OS sai daqui e só é encontrável
