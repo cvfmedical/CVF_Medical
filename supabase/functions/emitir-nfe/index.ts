@@ -396,6 +396,17 @@ Deno.serve(async (req: Request) => {
         .update({ nfe_devolucao_status: 'erro', nfe_devolucao_erro_detalhe: detalhe })
         .eq('id', corpo.entregaId);
       if (erroUpdate) erroGravacao = erroUpdate.message;
+      // A NF-e foi rejeitada pela Sefaz - a devolução NÃO aconteceu de fato,
+      // então os itens acompanhantes que tinham sido marcados como
+      // "devolvidos" nesta tentativa (ver bloco emitir_devolucao mais abaixo)
+      // precisam voltar a ficar disponíveis pra próxima tentativa. Bug real
+      // encontrado pelo usuário (2026-09-16): sem isso, um item some da
+      // lista de "itens acompanhantes" pra sempre depois de uma tentativa
+      // rejeitada, mesmo a devolução nunca tendo se concretizado.
+      await supabaseAdmin
+        .from('entradas_equipamento')
+        .update({ devolvido_na_entrega_id: null, devolvido_em: null })
+        .eq('devolvido_na_entrega_id', corpo.entregaId);
     } else if (resultado.status === 'cancelado') {
       const { error: erroUpdate } = await supabaseAdmin
         .from('entregas')
