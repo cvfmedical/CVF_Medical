@@ -544,7 +544,14 @@ export function EntradaEquipamento() {
   function valorColuna(e: Entrada, chave: string): unknown {
     if (chave === 'cliente') return cliente(e.cliente_id)?.razao_social ?? '';
     if (chave === 'nf_remessa') return e.nf_remessa_numero || e.numero_controle_cliente || '';
-    if (chave === 'status') return e.devolvido_na_entrega_id ? 'Devolvida ao cliente' : e.ordem_servico_id ? 'Convertida em OS' : e.status;
+    if (chave === 'status')
+      return e.devolvido_na_entrega_id
+        ? 'Devolvida ao cliente'
+        : e.ordem_servico_id
+          ? 'Convertida em OS'
+          : ehDuplicataComOs(e)
+            ? 'Duplicata (já tem OS)'
+            : e.status;
     if (chave === 'data_entrada') return e.data_entrada;
     return (e as unknown as Record<string, unknown>)[chave];
   }
@@ -553,8 +560,23 @@ export function EntradaEquipamento() {
   // a partir daí quem acompanha o andamento é a tela "Ordem de serviço", não
   // esta. Assim que alguma coluna é filtrada, passa a buscar em tudo
   // (inclusive já convertidas), pra continuar achável.
+  // Algumas NF de remessa foram importadas em duplicidade (mesma unidade
+  // física virou 2 Entradas com o mesmo nº de série - bug real encontrado
+  // pelo usuário, 2026-09-16): uma detalhada (que virou OS de verdade) e
+  // outra genérica, órfã, que nunca deveria oferecer "Converter em OS" de
+  // novo pro mesmo equipamento. Mesma lógica de exclusão por nº de série
+  // já usada em emitir-nfe/index.ts (listar_itens_acompanhantes).
+  const seriaisComOs = new Set(
+    (entradasQuery.data ?? [])
+      .filter((e) => e.ordem_servico_id != null)
+      .map((e) => (e.equipamento_sn ?? '').trim())
+      .filter((sn) => sn && sn !== '-' && sn !== '(-)'),
+  );
+  const ehDuplicataComOs = (e: Entrada) =>
+    !e.ordem_servico_id && seriaisComOs.has((e.equipamento_sn ?? '').trim());
+
   const linhasFiltradas = (entradasQuery.data ?? []).filter((e) => {
-    if (!algumFiltroAtivo) return !e.ordem_servico_id && !e.devolvido_na_entrega_id;
+    if (!algumFiltroAtivo) return !e.ordem_servico_id && !e.devolvido_na_entrega_id && !ehDuplicataComOs(e);
     return COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(e, chave), chave));
   });
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
