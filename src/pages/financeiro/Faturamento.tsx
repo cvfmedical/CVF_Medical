@@ -7,7 +7,6 @@ import { FiltroColunaValores } from '../../components/FiltroColunaValores';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { mensagemErro, mensagemErroFuncao } from '../../lib/erros';
-import { linkEmail } from '../../lib/compartilhar';
 import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { STATUS_PRONTO_ENTREGA } from '../../lib/statusOS';
 import { Badge } from '../../components/Badge';
@@ -800,8 +799,15 @@ export function Faturamento() {
   // Entrada/Ordem de Serviço - esses já foram enviados antes, na aprovação
   // do orçamento (ver OrcamentoFinanceiro.tsx) - reenviar de novo aqui
   // seria redundante.
-  async function enviarEmailCompleto() {
-    if (!linhaSelecionada?.orcamentoId) {
+  // Recebe a linha (não confia no state linhaSelecionada/form) porque este
+  // e-mail pode ser disparado de dois lugares: de dentro do modal "Lançar
+  // nota fiscal" (onde linhaSelecionada/form estão sincronizados com a
+  // linha) e direto do botão "Enviar por e-mail" da tabela (sem abrir
+  // modal nenhum) - bug real corrigido (2026-09-16): esse 2º botão usava
+  // uma função antiga (enviarPorEmail) que só abria um rascunho no Gmail
+  // (mailto:), sem anexar nada nem enviar de verdade.
+  async function enviarEmailCompleto(l: LinhaFaturamento) {
+    if (!l.orcamentoId) {
       setErro('Essa conta não está ligada a um orçamento - não dá pra montar o PDF do orçamento pra anexar.');
       return;
     }
@@ -813,14 +819,12 @@ export function Faturamento() {
       // anexava o PDF do orçamento "âncora" (orcamentoId), nunca os demais
       // em orcamentosIds. Caso real: NFS-e 2925 consolidou ORC-5588 +
       // ORC-5590, mas o e-mail só mandou o Orcamento-ORC-5590.pdf.
-      const idsOrcamentos = Array.from(
-        new Set([linhaSelecionada.orcamentoId, ...(linhaSelecionada.orcamentosIds ?? [])]),
-      );
+      const idsOrcamentos = Array.from(new Set([l.orcamentoId, ...(l.orcamentosIds ?? [])]));
 
       const { data: cliente, error: erroCliente } = await supabase
         .from('clientes')
         .select('razao_social, nome_fantasia, cnpj, telefone, email, emails_adicionais, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
-        .eq('id', linhaSelecionada.clienteId!)
+        .eq('id', l.clienteId!)
         .single();
       if (erroCliente || !cliente) throw erroCliente ?? new Error('Cliente não encontrado.');
 
@@ -921,8 +925,8 @@ export function Faturamento() {
       const { data: contasIrmas } = await supabase
         .from('contas_receber')
         .select('numero_conta, boleto_pdf_path, boleto_numero')
-        .eq('orcamento_id', linhaSelecionada.orcamentoId)
-        .eq('nf_numero', form.nf_numero);
+        .eq('orcamento_id', l.orcamentoId)
+        .eq('nf_numero', l.nf_numero);
       const qtdAnexosOrcamento = anexos.length;
       for (const c of contasIrmas ?? []) {
         if (!c.boleto_pdf_path) continue;
@@ -943,12 +947,10 @@ export function Faturamento() {
       // só. Quando não tem o link salvo (ex.: NF lançada manualmente, sem
       // nunca ter sido consultada pela Focus), cai no fallback antigo:
       // pede à própria Focus reenviar a NFS-e oficial numa 2ª mensagem.
-      const anexosUrls = linhaSelecionada.nfsePdfPath
-        ? [{ filename: `NFSe-${form.nf_numero}.pdf`, url: linhaSelecionada.nfsePdfPath }]
-        : [];
+      const anexosUrls = l.nfsePdfPath ? [{ filename: `NFSe-${l.nf_numero}.pdf`, url: l.nfsePdfPath }] : [];
 
-      const nfTexto = form.nf_numero
-        ? `${form.nf_tipo ?? 'NF'} ${form.nf_numero}${form.nf_serie ? '/' + form.nf_serie : ''}`
+      const nfTexto = l.nf_numero
+        ? `${l.nf_tipo ?? 'NF'} ${l.nf_numero}${l.nf_serie ? '/' + l.nf_serie : ''}`
         : 'a nota fiscal referente a este orçamento';
       const qtdBoletos = anexos.length - qtdAnexosOrcamento;
       // Junta "ORC-A", "ORC-A e ORC-B" ou "ORC-A, ORC-B e ORC-C" (português
@@ -984,7 +986,7 @@ export function Faturamento() {
       const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
         body: {
           to: destinatarios,
-          subject: `Q-CVF Medical - ${multiploOrcamentos ? 'Orçamentos' : 'Orçamento'} ${textoOrcamentos} faturado${multiploOrcamentos ? 's' : ''} (${formatarMoeda(linhaSelecionada.valor)})`,
+          subject: `Q-CVF Medical - ${multiploOrcamentos ? 'Orçamentos' : 'Orçamento'} ${textoOrcamentos} faturado${multiploOrcamentos ? 's' : ''} (${formatarMoeda(l.valor)})`,
           html,
           anexos,
           anexosUrls,
@@ -997,10 +999,10 @@ export function Faturamento() {
       // lançada manualmente, nunca confirmada via Focus) - pede à Focus
       // reenviar a NFS-e oficial numa 2ª mensagem separada.
       let nfReenviada = false;
-      if (form.nf_numero && anexosUrls.length === 0) {
+      if (l.nf_numero && anexosUrls.length === 0) {
         try {
           const { data: dataNf, error: erroNf } = await supabase.functions.invoke('emitir-nfse', {
-            body: { contaId: linhaSelecionada.contaId, acao: 'reenviar_email', emails: destinatarios },
+            body: { contaId: l.contaId, acao: 'reenviar_email', emails: destinatarios },
           });
           nfReenviada = !erroNf && !dataNf?.error;
         } catch {
@@ -1013,7 +1015,7 @@ export function Faturamento() {
         anexosUrls.length > 0
           ? `E-mail enviado para ${destinatarios.join(', ')} com ${totalAnexos} anexo(s) (orçamento + NF oficial + boleto), tudo numa mensagem só.`
           : `E-mail enviado para ${destinatarios.join(', ')} com ${anexos.length} anexo(s) (orçamento + boleto).` +
-              (form.nf_numero
+              (l.nf_numero
                 ? nfReenviada
                   ? ' A NFS-e oficial foi pedida à Focus NFe e chega numa 2ª mensagem separada, com o PDF de verdade.'
                   : ' Atenção: não foi possível pedir o reenvio da NFS-e oficial - envie manualmente pelo botão "Reenviar NF oficial por e-mail".'
@@ -1777,15 +1779,6 @@ export function Faturamento() {
     }
   }
 
-  // mailto: não anexa arquivo - igual a todo resto do sistema (WhatsApp/
-  // e-mail em outras telas), quem envia precisa anexar o PDF da nota,
-  // laudo e boleto manualmente no próprio cliente de e-mail.
-  function enviarPorEmail(l: LinhaFaturamento) {
-    const email = clientesQuery.data?.find((cl) => cl.id === l.clienteId)?.email;
-    const corpo = `Olá! Segue a nota fiscal ${l.nf_tipo ?? ''} ${l.nf_numero ?? ''}${l.nf_serie ? '/' + l.nf_serie : ''} referente a "${l.descricao ?? l.numero}".${l.boleto_numero ? ` Boleto: ${l.boleto_numero}.` : ''} Anexamos o PDF da nota (e do laudo/boleto, quando aplicável) a este e-mail.`;
-    window.open(linkEmail(email, `Q-CVF Medical - Nota fiscal ${l.nf_numero ?? ''}`, corpo), '_blank');
-  }
-
   if (contasQuery.isLoading || orcamentosQuery.isLoading || clientesQuery.isLoading) return <CarregandoTela />;
 
   return (
@@ -2225,9 +2218,14 @@ export function Faturamento() {
                 >
                   {l.nf_numero ? 'Editar NF' : 'Lançar NF'}
                 </button>
-                {l.nf_numero && (
-                  <button className="botao-secundario" onClick={() => enviarPorEmail(l)}>
-                    Enviar por e-mail
+                {l.nf_numero && l.orcamentoId && (
+                  <button
+                    className="botao-secundario"
+                    onClick={() => enviarEmailCompleto(l)}
+                    disabled={enviandoEmailCompleto}
+                    title="Envia por e-mail o PDF do orçamento + a NF oficial (buscada do servidor) + boleto(s) já emitido(s), tudo numa mensagem só"
+                  >
+                    {enviandoEmailCompleto ? 'Enviando...' : 'Enviar por e-mail'}
                   </button>
                 )}
                 {l.nfsePdfPath && (
@@ -2611,7 +2609,7 @@ export function Faturamento() {
               <button
                 type="button"
                 className="botao-secundario botao-pequeno"
-                onClick={enviarEmailCompleto}
+                onClick={() => enviarEmailCompleto(linhaSelecionada)}
                 disabled={enviandoEmailCompleto}
                 title="Envia por e-mail o PDF do orçamento + a NF oficial (buscada do servidor) + boleto(s) já emitido(s), tudo numa mensagem só"
                 style={{ marginTop: 8 }}
