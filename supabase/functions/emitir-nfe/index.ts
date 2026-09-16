@@ -527,11 +527,7 @@ Deno.serve(async (req: Request) => {
   // pedido do usuário (2026-09-15): o nº de série conferido na Entrada
   // (equipamento_sn, copiado pra ordens_servico.optica_sn na abertura da OS)
   // precisa constar na nota de devolução, não só na tela de conferência (que
-  // já mostra "Nº série" separado, ver resumo.numeroSerie abaixo). Anexado
-  // aqui, na descrição do item - não em informacoes_complementares (campo
-  // cujo nome correto na Focus segue não confirmado, ver comentário mais
-  // abaixo) - porque a descrição do item é testada e sabidamente aparece no
-  // DANFE.
+  // já mostra "Nº série" separado, ver resumo.numeroSerie abaixo).
   const descricaoItemNota = os.optica_sn ? `${descricaoItem} - Nº SÉRIE: ${os.optica_sn}` : descricaoItem;
   const numeroRemessa = entradaEquip?.nf_remessa_numero ?? null;
   const chaveRemessa = entradaEquip?.nf_remessa_chave_acesso ? apenasDigitos(entradaEquip.nf_remessa_chave_acesso) : null;
@@ -556,8 +552,15 @@ Deno.serve(async (req: Request) => {
   // de corrigir o problema (ex.: IE do destinatário) falhava sempre com a
   // MESMA ref já "gasta" da tentativa anterior.
   const ref = `qcvf-devol-${entrega.id}-${Date.now()}`;
+  // Pedido do usuário (2026-09-16), confirmado num DANFE real já
+  // autorizado: o texto que mandávamos em "informacoes_complementares"
+  // nunca aparecia no PDF - esse nome de campo NÃO existe no schema de
+  // NF-e da Focus (existe só na NFS-e, produto diferente). Confirmado na
+  // doc oficial (schema de NFe recebida, mesmo objeto RequisicaoNotaFiscal
+  // usado na emissão): o campo certo pra infAdic/infCpl é
+  // "informacoes_adicionais_contribuinte".
   const infCpl = numeroRemessa
-    ? `DEVOLUÇÃO REFERENTE À NF ${numeroRemessa}`
+    ? `DEVOLUÇÃO REFERENTE A NOTA FISCAL DE REMESSA: ${numeroRemessa}`
     : 'DEVOLUÇÃO DE EQUIPAMENTO RECEBIDO PARA CONSERTO';
 
   const payload = {
@@ -598,7 +601,7 @@ Deno.serve(async (req: Request) => {
     telefone_destinatario: cliente.telefone ?? undefined,
     ...(codigoMunicipioDestinatario ? { codigo_municipio_destinatario: codigoMunicipioDestinatario } : {}),
     modalidade_frete: 9, // "Sem frete" - confirmado no XML real (<modFrete>9</modFrete>)
-    informacoes_complementares: infCpl,
+    informacoes_adicionais_contribuinte: infCpl,
     ...(chaveRemessa && chaveRemessa.length === 44 ? { notas_referenciadas: [{ chave_nfe: chaveRemessa }] } : {}),
     items: [
       {
