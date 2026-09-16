@@ -46,9 +46,15 @@ interface CatalogoOtica {
   angulo_graus: number | null;
 }
 
+interface ProdutoServico {
+  id: number;
+  nome: string;
+}
+
 interface PrecoFixo {
   id: number;
-  catalogo_otica_id: number;
+  catalogo_otica_id: number | null;
+  produto_servico_id: number | null;
   valor_fixo: number;
 }
 
@@ -56,7 +62,10 @@ export function ContratosManutencao() {
   const qc = useQueryClient();
   const [numeroGerado, setNumeroGerado] = useState('');
   const [contratoPrecos, setContratoPrecos] = useState<ContratoManutencao | null>(null);
-  const [catalogoOticaId, setCatalogoOticaId] = useState('');
+  // Um único combobox pra escolher ótica OU produto/serviço - valor no
+  // formato "otica:123" ou "produto:456" (prefixo decide em qual coluna
+  // salvar, ver adicionarPrecoFixo).
+  const [itemPrecoFixo, setItemPrecoFixo] = useState('');
   const [valorFixoNovo, setValorFixoNovo] = useState('');
   const [erroPrecos, setErroPrecos] = useState<string | null>(null);
 
@@ -88,13 +97,30 @@ export function ContratosManutencao() {
     },
   });
 
+  // Pedido do usuário (2026-09-16): além de ótica, o preço fixo por
+  // contrato também precisa cobrir produtos/serviços (peças, cabos etc. -
+  // ver ProdutosServicos.tsx) - até então só dava pra travar preço por
+  // modelo de ótica.
+  const produtosServicosQuery = useQuery({
+    queryKey: ['produtos-servicos-opcoes-contratos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('produtos_servicos')
+        .select('id, nome')
+        .eq('status_ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return data as ProdutoServico[];
+    },
+  });
+
   const precosFixosQuery = useQuery({
     queryKey: ['contrato-precos-fixos', contratoPrecos?.id],
     enabled: !!contratoPrecos,
     queryFn: async (): Promise<PrecoFixo[]> => {
       const { data, error } = await supabase
         .from('contrato_precos_fixos')
-        .select('id, catalogo_otica_id, valor_fixo')
+        .select('id, catalogo_otica_id, produto_servico_id, valor_fixo')
         .eq('contrato_manutencao_id', contratoPrecos!.id);
       if (error) throw error;
       return data as PrecoFixo[];
@@ -121,9 +147,22 @@ export function ContratosManutencao() {
     return o ? formatarModeloOtica(o) : `#${catalogoOticaId}`;
   }
 
+  function nomeProdutoServico(produtoServicoId: number) {
+    return produtosServicosQuery.data?.find((p) => p.id === produtoServicoId)?.nome ?? `#${produtoServicoId}`;
+  }
+
+  // Nome exibido na tabela de preços fixos já lançados - cada linha é OU
+  // ótica OU produto/serviço (nunca os dois), garantido pelo check
+  // constraint no banco.
+  function nomeItemPrecoFixo(p: PrecoFixo) {
+    if (p.catalogo_otica_id != null) return nomeOtica(p.catalogo_otica_id);
+    if (p.produto_servico_id != null) return nomeProdutoServico(p.produto_servico_id);
+    return '-';
+  }
+
   function abrirPrecosFixos(c: ContratoManutencao) {
     setContratoPrecos(c);
-    setCatalogoOticaId('');
+    setItemPrecoFixo('');
     setValorFixoNovo('');
     setErroPrecos(null);
   }
@@ -131,20 +170,22 @@ export function ContratosManutencao() {
   async function adicionarPrecoFixo() {
     if (!contratoPrecos) return;
     setErroPrecos(null);
-    if (!catalogoOticaId || !valorFixoNovo) {
-      setErroPrecos('Selecione o modelo de ótica e informe o valor.');
+    if (!itemPrecoFixo || !valorFixoNovo) {
+      setErroPrecos('Selecione o modelo de ótica ou produto/serviço e informe o valor.');
       return;
     }
+    const [tipo, idTexto] = itemPrecoFixo.split(':');
     const { error } = await supabase.from('contrato_precos_fixos').insert({
       contrato_manutencao_id: contratoPrecos.id,
-      catalogo_otica_id: Number(catalogoOticaId),
+      catalogo_otica_id: tipo === 'otica' ? Number(idTexto) : null,
+      produto_servico_id: tipo === 'produto' ? Number(idTexto) : null,
       valor_fixo: Number(valorFixoNovo),
     });
     if (error) {
       setErroPrecos(mensagemErro(error));
       return;
     }
-    setCatalogoOticaId('');
+    setItemPrecoFixo('');
     setValorFixoNovo('');
     qc.invalidateQueries({ queryKey: ['contrato-precos-fixos', contratoPrecos.id] });
   }
@@ -271,14 +312,15 @@ export function ContratosManutencao() {
         aoFechar={() => setContratoPrecos(null)}
       >
           <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>
-            {nomeCliente(contratoPrecos.cliente_id)} - preço fechado por modelo de ótica (diferente da mensalidade).
-            O financeiro seleciona o modelo na hora de precificar um orçamento desse cliente.
+            {nomeCliente(contratoPrecos.cliente_id)} - preço fechado por modelo de ótica ou por produto/serviço
+            (diferente da mensalidade). O financeiro seleciona o item na hora de precificar um orçamento desse
+            cliente.
           </p>
 
           <table className="tabela-crud">
             <thead>
               <tr>
-                <th>Modelo de ótica</th>
+                <th>Item</th>
                 <th>Valor fixo</th>
                 <th></th>
               </tr>
@@ -286,7 +328,7 @@ export function ContratosManutencao() {
             <tbody>
               {(precosFixosQuery.data ?? []).map((p) => (
                 <tr key={p.id}>
-                  <td>{nomeOtica(p.catalogo_otica_id)}</td>
+                  <td>{nomeItemPrecoFixo(p)}</td>
                   <td>R$ {Number(p.valor_fixo).toFixed(2)}</td>
                   <td className="acoes-tabela">
                     <button className="botao-icone perigo" title="Remover" onClick={() => excluirPrecoFixo(p.id)}>
@@ -305,11 +347,21 @@ export function ContratosManutencao() {
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
             <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-              <label>Modelo de ótica</label>
+              <label>Modelo de ótica ou produto/serviço</label>
               <ComboboxBusca
-                opcoes={(catalogoOticasQuery.data ?? []).map((o) => ({ value: String(o.id), label: formatarModeloOtica(o) }))}
-                valor={catalogoOticaId}
-                onChange={setCatalogoOticaId}
+                opcoes={[
+                  ...(catalogoOticasQuery.data ?? []).map((o) => ({
+                    value: `otica:${o.id}`,
+                    label: `[Ótica] ${formatarModeloOtica(o)}`,
+                  })),
+                  ...(produtosServicosQuery.data ?? []).map((p) => ({
+                    value: `produto:${p.id}`,
+                    label: `[Produto/Serviço] ${p.nome}`,
+                  })),
+                ]}
+                valor={itemPrecoFixo}
+                onChange={setItemPrecoFixo}
+                placeholder="Buscar ótica ou produto/serviço..."
               />
             </div>
             <div className="campo-form" style={{ width: 140, marginBottom: 0 }}>

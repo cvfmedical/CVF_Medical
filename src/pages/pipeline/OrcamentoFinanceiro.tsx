@@ -130,6 +130,10 @@ interface PrecoFixoContrato {
   id: number;
   valor_fixo: number;
   catalogo_oticas: { fabricante: string; modelo: string; tipo: string | null; diametro_mm: number | null; angulo_graus: number | null } | null;
+  // Preço fixo também pode ser por produto/serviço (peça, cabo etc.), não
+  // só por modelo de ótica - pedido do usuário (2026-09-16). Nunca vêm os
+  // dois juntos (garantido pelo check constraint em contrato_precos_fixos).
+  produtos_servicos: { nome: string } | null;
 }
 
 interface PrecoModalidade {
@@ -469,7 +473,7 @@ export function OrcamentoFinanceiro() {
       const { data, error } = await supabase
         .from('contrato_precos_fixos')
         .select(
-          'id, valor_fixo, catalogo_oticas(fabricante, modelo, tipo, diametro_mm, angulo_graus), contratos_manutencao!inner(cliente_id, status)',
+          'id, valor_fixo, catalogo_oticas(fabricante, modelo, tipo, diametro_mm, angulo_graus), produtos_servicos(nome), contratos_manutencao!inner(cliente_id, status)',
         )
         .in('contratos_manutencao.cliente_id', idsCliente)
         .eq('contratos_manutencao.status', 'Ativo');
@@ -1874,11 +1878,11 @@ export function OrcamentoFinanceiro() {
                 }}
               >
                 <div className="campo-form" style={{ flex: 1, marginBottom: 0 }}>
-                  <label>Valor fixo do contrato (por modelo de ótica)</label>
+                  <label>Valor fixo do contrato (por modelo de ótica ou produto/serviço)</label>
                   <ComboboxBusca
                     opcoes={(precosFixosQuery.data ?? []).map((p) => ({
                       value: String(p.id),
-                      label: `${p.catalogo_oticas ? formatarModeloOtica(p.catalogo_oticas) : '-'} - ${formatarMoeda(p.valor_fixo)}`,
+                      label: `${p.catalogo_oticas ? formatarModeloOtica(p.catalogo_oticas) : (p.produtos_servicos?.nome ?? '-')} - ${formatarMoeda(p.valor_fixo)}`,
                     }))}
                     valor={precoFixoSelecionado}
                     onChange={setPrecoFixoSelecionado}
