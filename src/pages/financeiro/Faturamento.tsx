@@ -84,6 +84,12 @@ interface LinhaFaturamento {
   chave: string;
   contaId: number | null;
   orcamentoId: number | null;
+  // Demais orçamentos consolidados na MESMA NF (ver orcamentos_ids em
+  // ContaReceber) - além do orcamentoId "âncora" acima. Necessário pro
+  // e-mail de faturamento anexar o PDF de CADA orçamento faturado, não só
+  // do âncora (bug real, 2026-09-16: NF que consolidou ORC-5588+ORC-5590
+  // só mandou o PDF do 5590).
+  orcamentosIds: number[] | null;
   ordemServicoId: number | null;
   numeroOS: string | null;
   numeroOrcamento: string | null;
@@ -461,6 +467,7 @@ export function Faturamento() {
       chave: `cr-${c.id}`,
       contaId: c.id,
       orcamentoId: c.orcamento_id,
+      orcamentosIds: c.orcamentos_ids,
       ordemServicoId: c.orcamentos?.ordem_servico_id ?? null,
       numeroOS: c.orcamentos?.ordens_servico?.numero_os ?? null,
       numeroOrcamento: c.orcamentos?.numero_orcamento ?? null,
@@ -498,6 +505,7 @@ export function Faturamento() {
           chave: `orc-${o.id}`,
           contaId: null,
           orcamentoId: o.id,
+          orcamentosIds: null,
           ordemServicoId: o.ordem_servico_id,
           numeroOS: o.ordens_servico?.numero_os ?? null,
           numeroOrcamento: o.numero_orcamento,
@@ -800,30 +808,14 @@ export function Faturamento() {
     setEnviandoEmailCompleto(true);
     setErro(null);
     try {
-      const { data: orc, error: erroOrc } = await supabase
-        .from('orcamentos')
-        .select(
-          'numero_orcamento, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
-        )
-        .eq('id', linhaSelecionada.orcamentoId)
-        .single();
-      if (erroOrc || !orc) throw erroOrc ?? new Error('Orçamento não encontrado.');
-      // deno-lint-ignore no-explicit-any
-      const os = orc.ordens_servico as unknown as {
-        numero_os: string;
-        cliente_id: number;
-        cliente_nome: string;
-        optica_desc: string | null;
-        optica_sn: string | null;
-        eh_otica: boolean | null;
-        cliente_final_id: number | null;
-      } | null;
-
-      const { data: itensOrc, error: erroItens } = await supabase
-        .from('orcamento_itens')
-        .select('preco_unitario, quantidade, observacao, descricao_servico, produtos_servicos(nome)')
-        .eq('orcamento_id', linhaSelecionada.orcamentoId);
-      if (erroItens) throw erroItens;
+      // NF consolidada (2+ orçamentos do mesmo cliente numa NF só, ver
+      // abrirPreviaNfse) - bug real corrigido (2026-09-16): o e-mail só
+      // anexava o PDF do orçamento "âncora" (orcamentoId), nunca os demais
+      // em orcamentosIds. Caso real: NFS-e 2925 consolidou ORC-5588 +
+      // ORC-5590, mas o e-mail só mandou o Orcamento-ORC-5590.pdf.
+      const idsOrcamentos = Array.from(
+        new Set([linhaSelecionada.orcamentoId, ...(linhaSelecionada.orcamentosIds ?? [])]),
+      );
 
       const { data: cliente, error: erroCliente } = await supabase
         .from('clientes')
@@ -832,63 +824,96 @@ export function Faturamento() {
         .single();
       if (erroCliente || !cliente) throw erroCliente ?? new Error('Cliente não encontrado.');
 
-      let clienteFinalNome: string | null = null;
-      if (os?.cliente_final_id) {
-        const { data: cf } = await supabase.from('clientes').select('razao_social').eq('id', os.cliente_final_id).maybeSingle();
-        clienteFinalNome = cf?.razao_social ?? null;
-      }
-
-      const { data: entrada } = await supabase
-        .from('entradas_equipamento')
-        .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
-        .eq('ordem_servico_id', orc.ordem_servico_id)
-        .maybeSingle();
-
       const enderecoCliente = [[cliente.logradouro, cliente.numero_endereco].filter(Boolean).join(', '), cliente.complemento, cliente.bairro, cliente.cep ? `CEP ${cliente.cep}` : null]
         .filter(Boolean)
         .join(' - ') || null;
 
-      const subtotalItens = (itensOrc ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
-      const subtotal = orc.valor_fixo_contrato ?? subtotalItens;
-      const totalFinal = linhaSelecionada.valor;
+      const anexos: AnexoBase64[] = [];
+      const orcamentosResumo: { numeroOrcamento: string; numeroOS: string }[] = [];
 
-      const dadosOrc: DadosOrcamentoPdf = {
-        cnpj: cliente.cnpj,
-        nomeFantasia: cliente.nome_fantasia,
-        endereco: enderecoCliente,
-        cidade: cliente.cidade,
-        uf: cliente.uf,
-        telefone: cliente.telefone,
-        email: cliente.email,
-        numeroOrcamento: orc.numero_orcamento,
-        numeroOS: os?.numero_os ?? '-',
-        clienteNome: os?.cliente_nome ?? cliente.razao_social,
-        clienteFinalNome,
-        equipamento: os?.optica_desc ?? '-',
-        numeroSerie: os?.optica_sn ?? '',
-        nfRemessaNumero: entrada?.nf_remessa_numero ?? null,
-        nfRemessaSerie: entrada?.nf_remessa_serie ?? null,
-        numeroControleCliente: entrada?.numero_controle_cliente ?? null,
-        itens: (itensOrc ?? []).map((it) => ({
-          nome: (it.produtos_servicos as unknown as { nome: string } | null)?.nome ?? it.descricao_servico ?? '-',
-          quantidade: it.quantidade,
-          precoUnit: it.preco_unitario ?? 0,
-          observacao: it.observacao,
-        })),
-        subtotal,
-        desconto: orc.desconto ?? 0,
-        bonificacao: orc.bonificacao ?? false,
-        total: totalFinal,
-        validade: orc.validade_proposta ?? '',
-        pagamento: orc.condicoes_pagamento ?? '',
-        observacoes: orc.observacoes_financeiro ?? '',
-        ehOtica: os?.eh_otica ?? false,
-        garantiaResumo: GARANTIA_CVF.resumo,
-        garantiaIntro: GARANTIA_CVF.intro,
-        garantiaItens: GARANTIA_CVF.itens,
-        clausulas: CLAUSULAS_GERAIS,
-      };
-      const anexos: AnexoBase64[] = [await gerarAnexoOrcamentoSozinho(dadosOrc)];
+      for (const orcamentoId of idsOrcamentos) {
+        const { data: orc, error: erroOrc } = await supabase
+          .from('orcamentos')
+          .select(
+            'numero_orcamento, valor_fixo_contrato, desconto, bonificacao, validade_proposta, condicoes_pagamento, observacoes_financeiro, ordem_servico_id, ordens_servico(numero_os, cliente_id, cliente_nome, optica_desc, optica_sn, eh_otica, cliente_final_id)',
+          )
+          .eq('id', orcamentoId)
+          .single();
+        if (erroOrc || !orc) throw erroOrc ?? new Error('Orçamento não encontrado.');
+        // deno-lint-ignore no-explicit-any
+        const os = orc.ordens_servico as unknown as {
+          numero_os: string;
+          cliente_id: number;
+          cliente_nome: string;
+          optica_desc: string | null;
+          optica_sn: string | null;
+          eh_otica: boolean | null;
+          cliente_final_id: number | null;
+        } | null;
+
+        const { data: itensOrc, error: erroItens } = await supabase
+          .from('orcamento_itens')
+          .select('preco_unitario, quantidade, observacao, descricao_servico, produtos_servicos(nome)')
+          .eq('orcamento_id', orcamentoId);
+        if (erroItens) throw erroItens;
+
+        let clienteFinalNome: string | null = null;
+        if (os?.cliente_final_id) {
+          const { data: cf } = await supabase.from('clientes').select('razao_social').eq('id', os.cliente_final_id).maybeSingle();
+          clienteFinalNome = cf?.razao_social ?? null;
+        }
+
+        const { data: entrada } = await supabase
+          .from('entradas_equipamento')
+          .select('nf_remessa_numero, nf_remessa_serie, numero_controle_cliente')
+          .eq('ordem_servico_id', orc.ordem_servico_id)
+          .maybeSingle();
+
+        const subtotalItens = (itensOrc ?? []).reduce((s, it) => s + (it.preco_unitario ?? 0) * it.quantidade, 0);
+        const subtotal = orc.valor_fixo_contrato ?? subtotalItens;
+        // Valor DESTE orçamento (não o total da NF consolidada, que pode
+        // somar vários) - mesma fórmula de totalOrcamento().
+        const totalOrc = orc.bonificacao ? 0 : Math.max(subtotal - (orc.desconto ?? 0), 0);
+
+        const dadosOrc: DadosOrcamentoPdf = {
+          cnpj: cliente.cnpj,
+          nomeFantasia: cliente.nome_fantasia,
+          endereco: enderecoCliente,
+          cidade: cliente.cidade,
+          uf: cliente.uf,
+          telefone: cliente.telefone,
+          email: cliente.email,
+          numeroOrcamento: orc.numero_orcamento,
+          numeroOS: os?.numero_os ?? '-',
+          clienteNome: os?.cliente_nome ?? cliente.razao_social,
+          clienteFinalNome,
+          equipamento: os?.optica_desc ?? '-',
+          numeroSerie: os?.optica_sn ?? '',
+          nfRemessaNumero: entrada?.nf_remessa_numero ?? null,
+          nfRemessaSerie: entrada?.nf_remessa_serie ?? null,
+          numeroControleCliente: entrada?.numero_controle_cliente ?? null,
+          itens: (itensOrc ?? []).map((it) => ({
+            nome: (it.produtos_servicos as unknown as { nome: string } | null)?.nome ?? it.descricao_servico ?? '-',
+            quantidade: it.quantidade,
+            precoUnit: it.preco_unitario ?? 0,
+            observacao: it.observacao,
+          })),
+          subtotal,
+          desconto: orc.desconto ?? 0,
+          bonificacao: orc.bonificacao ?? false,
+          total: totalOrc,
+          validade: orc.validade_proposta ?? '',
+          pagamento: orc.condicoes_pagamento ?? '',
+          observacoes: orc.observacoes_financeiro ?? '',
+          ehOtica: os?.eh_otica ?? false,
+          garantiaResumo: GARANTIA_CVF.resumo,
+          garantiaIntro: GARANTIA_CVF.intro,
+          garantiaItens: GARANTIA_CVF.itens,
+          clausulas: CLAUSULAS_GERAIS,
+        };
+        anexos.push(await gerarAnexoOrcamentoSozinho(dadosOrc));
+        orcamentosResumo.push({ numeroOrcamento: orc.numero_orcamento, numeroOS: os?.numero_os ?? '-' });
+      }
 
       // Todas as contas que compartilham a mesma NF+orçamento (cobre o
       // caso de boleto parcelado em N contas) - anexa o PDF de cada boleto
@@ -898,6 +923,7 @@ export function Faturamento() {
         .select('numero_conta, boleto_pdf_path, boleto_numero')
         .eq('orcamento_id', linhaSelecionada.orcamentoId)
         .eq('nf_numero', form.nf_numero);
+      const qtdAnexosOrcamento = anexos.length;
       for (const c of contasIrmas ?? []) {
         if (!c.boleto_pdf_path) continue;
         const url = await urlAssinadaDocumentoFinanceiro(c.boleto_pdf_path);
@@ -924,11 +950,20 @@ export function Faturamento() {
       const nfTexto = form.nf_numero
         ? `${form.nf_tipo ?? 'NF'} ${form.nf_numero}${form.nf_serie ? '/' + form.nf_serie : ''}`
         : 'a nota fiscal referente a este orçamento';
-      const qtdBoletos = anexos.length - 1;
+      const qtdBoletos = anexos.length - qtdAnexosOrcamento;
+      // Junta "ORC-A", "ORC-A e ORC-B" ou "ORC-A, ORC-B e ORC-C" (português
+      // natural) - texto plural só quando há mais de um orçamento na NF.
+      const juntarPt = (itens: string[]) =>
+        itens.length <= 1
+          ? (itens[0] ?? '')
+          : `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`;
+      const multiploOrcamentos = orcamentosResumo.length > 1;
+      const textoOrcamentos = juntarPt(orcamentosResumo.map((o) => o.numeroOrcamento));
+      const textoOS = juntarPt(orcamentosResumo.map((o) => o.numeroOS));
       const html = `<p>Prezado(a) cliente,</p>
-        <p>Segue em anexo a documentação referente ao orçamento <strong>${orc.numero_orcamento}</strong> (OS ${os?.numero_os ?? '-'}), já faturado:</p>
+        <p>Segue em anexo a documentação referente a${multiploOrcamentos ? 'os orçamentos' : 'o orçamento'} <strong>${textoOrcamentos}</strong> (OS ${textoOS}), já faturado${multiploOrcamentos ? 's' : ''}:</p>
         <ul>
-          <li>Orçamento (com o valor final cobrado)</li>
+          <li>${multiploOrcamentos ? 'Orçamentos (cada um com o valor final cobrado)' : 'Orçamento (com o valor final cobrado)'}</li>
           <li>Nota fiscal: ${nfTexto}</li>
           ${qtdBoletos > 0 ? `<li>${qtdBoletos > 1 ? `${qtdBoletos} boletos para pagamento` : 'Boleto para pagamento'}</li>` : ''}
         </ul>
@@ -949,7 +984,7 @@ export function Faturamento() {
       const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
         body: {
           to: destinatarios,
-          subject: `Q-CVF Medical - Orçamento ${orc.numero_orcamento} faturado (${formatarMoeda(totalFinal)})`,
+          subject: `Q-CVF Medical - ${multiploOrcamentos ? 'Orçamentos' : 'Orçamento'} ${textoOrcamentos} faturado${multiploOrcamentos ? 's' : ''} (${formatarMoeda(linhaSelecionada.valor)})`,
           html,
           anexos,
           anexosUrls,
