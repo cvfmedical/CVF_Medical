@@ -15,7 +15,9 @@ interface Cliente {
 export function AcessoPortalCliente() {
   const qc = useQueryClient();
   const [convidando, setConvidando] = useState<number | null>(null);
+  const [resetando, setResetando] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
   const [filtro, setFiltro] = useState('');
 
   const query = useQuery({
@@ -34,6 +36,7 @@ export function AcessoPortalCliente() {
 
   async function convidar(c: Cliente) {
     setErro(null);
+    setSucesso(null);
     if (!c.email) {
       setErro(`${c.razao_social} não tem e-mail cadastrado - edite o cliente em "Clientes / hospitais" antes de convidar.`);
       return;
@@ -54,6 +57,33 @@ export function AcessoPortalCliente() {
     }
   }
 
+  // Diferente de "Convidar" (só funciona pra quem AINDA não tem conta) -
+  // pra quem já tem acesso mas esqueceu a senha, reenvia o e-mail de
+  // redefinição do próprio Supabase Auth. Ninguém da CVF vê ou digita a
+  // senha - o cliente define a nova direto no portal, pelo link do e-mail.
+  async function resetarSenha(c: Cliente) {
+    setErro(null);
+    setSucesso(null);
+    if (!c.email) {
+      setErro(`${c.razao_social} não tem e-mail cadastrado - edite o cliente em "Clientes / hospitais" antes de resetar a senha.`);
+      return;
+    }
+    if (!confirm(`Enviar e-mail de redefinição de senha para ${c.razao_social} (${c.email})?`)) return;
+    setResetando(c.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('resetar-senha-cliente', {
+        body: { cliente_id: c.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSucesso(`E-mail de redefinição de senha enviado para ${c.email}.`);
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setResetando(null);
+    }
+  }
+
   if (query.isLoading) return <CarregandoTela />;
 
   return (
@@ -66,6 +96,7 @@ export function AcessoPortalCliente() {
       <input className="campo-filtro" placeholder="Buscar cliente..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
 
       {erro && <p className="erro-login">{erro}</p>}
+      {sucesso && <p style={{ color: 'var(--teal-800)', fontSize: 13, marginTop: 4 }}>{sucesso}</p>}
 
       <table className="tabela-crud">
         <thead>
@@ -85,9 +116,18 @@ export function AcessoPortalCliente() {
                 <Badge tono={c.auth_user_id ? 'teal' : 'copper'}>{c.auth_user_id ? 'Vinculado' : 'Sem acesso'}</Badge>
               </td>
               <td className="acoes-tabela">
-                {!c.auth_user_id && (
+                {!c.auth_user_id ? (
                   <button className="botao-secundario" disabled={convidando === c.id} onClick={() => convidar(c)}>
                     {convidando === c.id ? 'Enviando...' : 'Convidar'}
+                  </button>
+                ) : (
+                  <button
+                    className="botao-secundario"
+                    disabled={resetando === c.id}
+                    onClick={() => resetarSenha(c)}
+                    title="Envia um e-mail pra este cliente definir uma nova senha - ninguém da CVF vê a senha dele"
+                  >
+                    {resetando === c.id ? 'Enviando...' : 'Resetar senha'}
                   </button>
                 )}
               </td>
