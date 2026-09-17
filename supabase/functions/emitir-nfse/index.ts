@@ -516,7 +516,7 @@ Deno.serve(async (req: Request) => {
     const { data: contaExistente, error: erroConta } = await supabaseAdmin
       .from('contas_receber')
       .select(
-        'id, valor, nf_numero, cliente_id, descricao, orcamento_id, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
+        'id, valor, nf_numero, cliente_id, descricao, orcamento_id, orcamentos_ids, orcamentos(numero_orcamento, ordem_servico_id, ordens_servico(numero_os))',
       )
       .eq('id', contaId)
       .single();
@@ -528,11 +528,34 @@ Deno.serve(async (req: Request) => {
       nf_numero: string | null;
       cliente_id: number;
       descricao: string | null;
+      orcamento_id: number | null;
+      orcamentos_ids: number[] | null;
       orcamentos: { numero_orcamento: string; ordem_servico_id: number | null } | null;
     };
+    // Bug real corrigido (2026-09-17): conta consolidada manualmente (ver
+    // orcamentos_ids em Faturamento.tsx - fusão de 2+ contas do mesmo
+    // cliente numa só) tinha o texto da NFS-e ("REFERENTE AO ORÇAMENTO")
+    // mencionando só o orçamento "âncora" (orcamento_id), nunca os demais
+    // em orcamentos_ids - mesmo o VALOR já estando correto (soma de
+    // todos). Caso real: CR-5619 (fusão de ORC-5525+ORC-5619) gerou prévia
+    // de DPS citando só o ORC-5525. Busca todos os orçamentos extras (além
+    // do âncora, já trazido pelo join "orcamentos" acima) pra completar
+    // orcamentosRefs.
+    let orcamentosRefsExtras: { numero_orcamento: string; ordem_servico_id: number | null }[] = [];
+    const idsExtras = (contaExistenteTyped.orcamentos_ids ?? []).filter((id) => id !== contaExistenteTyped.orcamento_id);
+    if (idsExtras.length > 0) {
+      const { data: orcsExtras } = await supabaseAdmin
+        .from('orcamentos')
+        .select('numero_orcamento, ordem_servico_id')
+        .in('id', idsExtras);
+      orcamentosRefsExtras = orcsExtras ?? [];
+    }
     conta = {
       ...contaExistenteTyped,
-      orcamentosRefs: contaExistenteTyped.orcamentos ? [contaExistenteTyped.orcamentos] : [],
+      orcamentosRefs: [
+        ...(contaExistenteTyped.orcamentos ? [contaExistenteTyped.orcamentos] : []),
+        ...orcamentosRefsExtras,
+      ],
       // Conta já existente - se era de cliente com faturamento diferido, a
       // separação já foi feita na hora em que ela foi criada (2 contas).
       valorPecas: 0,
