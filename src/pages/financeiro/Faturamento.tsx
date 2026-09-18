@@ -567,10 +567,14 @@ export function Faturamento() {
   }
 
   // Orçamentos aprovados que ficaram presos numa etapa anterior do
-  // pipeline (ainda não chegaram em "Pronto para entrega"/"Entregue"),
-  // mas que já podem ser cobrados - candidatos ao "Pular etapa".
+  // pipeline (ainda não chegaram em "Pronto para entrega"/"Entregue") -
+  // candidatos ao "Pular etapa". Sem o filtro de valor > 0 (diferente da
+  // lista de faturamento acima): essa ação só muda o status da OS, não
+  // lança nada pra cobrar, então serve também pra orçamento com valor
+  // zero (item de preço ainda não preenchido, garantia, bonificação
+  // etc.) que precise avançar pra "Entrega ao cliente" mesmo assim.
   const naoLiberadas = (orcamentosQuery.data ?? []).filter(
-    (o) => !orcamentosComConta.has(o.id) && !liberada(o.ordens_servico?.status_os ?? null) && totalOrcamento(o) > 0,
+    (o) => !orcamentosComConta.has(o.id) && !liberada(o.ordens_servico?.status_os ?? null),
   );
   const opcoesPular = naoLiberadas.map((o) => ({
     value: String(o.id),
