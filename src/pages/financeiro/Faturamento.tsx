@@ -511,10 +511,15 @@ export function Faturamento() {
       nfseRef: c.nfse_ref,
     })),
     ...(orcamentosQuery.data ?? [])
-      // Garantia e bonificação (cortesia) somam R$ 0,00 - não há o que
-      // faturar, o processo termina na entrega ao cliente, sem passar
-      // por aqui.
-      .filter((o) => !orcamentosComConta.has(o.id) && totalOrcamento(o) > 0)
+      // Garantia, bonificação (cortesia) etc. somam R$ 0,00 - não há o que
+      // faturar de verdade, mas o Setor de Faturamento continua precisando
+      // VER a ficha (pra saber que não ficou esquecida, só que não gera
+      // cobrança) - por isso não filtra mais totalOrcamento(o) > 0 aqui
+      // como antes (2026-09-18: esconder completamente confundia o
+      // faturamento, que não conseguia distinguir "ainda não chegou" de
+      // "chegou, mas não tem custo"). O badge "Sem faturamento" abaixo é
+      // quem sinaliza isso.
+      .filter((o) => !orcamentosComConta.has(o.id))
       .map((o): LinhaFaturamento => {
         const valor = totalOrcamento(o);
         return {
@@ -556,7 +561,10 @@ export function Faturamento() {
   // não devem poluir esta tabela.
   const linhasAcionaveis = linhas.filter((l) => l.contaId != null || liberada(l.statusOS));
 
-  const liberadas = linhasAcionaveis.filter((l) => !l.nf_numero && (l.contaId == null ? liberada(l.statusOS) : true));
+  // Sem custo (garantia/bonificação, valor 0) não conta como "pendência de
+  // ação" aqui - aparece na tabela com o badge "Sem faturamento", mas não
+  // precisa de NF/boleto nenhum, então não deve inflar esse contador.
+  const liberadas = linhasAcionaveis.filter((l) => !l.nf_numero && l.valor > 0 && (l.contaId == null ? liberada(l.statusOS) : true));
 
   // Já faturado sai da tabela principal por padrão (aqui é fila de ação,
   // não histórico) - "Mostrar faturados" liga de volta só pra consulta.
@@ -585,6 +593,7 @@ export function Faturamento() {
   // aqui pra poder ordenar/filtrar por esse status derivado.
   function labelNotaFiscal(l: LinhaFaturamento): string {
     if (l.nf_numero) return `Faturado ${l.nf_tipo ?? ''} ${l.nf_numero}${l.nf_serie ? '/' + l.nf_serie : ''}`.trim();
+    if (l.contaId == null && liberada(l.statusOS) && l.valor <= 0) return 'Sem faturamento (garantia/cortesia)';
     if (l.contaId == null && liberada(l.statusOS)) return 'Liberado';
     if (l.contaId == null) return 'Aguardando entrega';
     return 'Não faturado';
@@ -2207,7 +2216,7 @@ export function Faturamento() {
             return (
             <tr key={grupo.chave}>
               <td>
-                {((l.contaId == null && l.orcamentoId != null && !l.nf_numero) ||
+                {((l.contaId == null && l.orcamentoId != null && !l.nf_numero && l.valor > 0) ||
                   (l.contaId != null && !l.boleto_numero)) && (
                   <input
                     type="checkbox"
@@ -2287,6 +2296,10 @@ export function Faturamento() {
                       {l.nf_serie ? `/${l.nf_serie}` : ''}
                     </span>
                   </>
+                ) : l.contaId == null && liberada(l.statusOS) && l.valor <= 0 ? (
+                  <Badge tono="neutro" title="Orçamento sem custo (garantia, bonificação/cortesia etc.) - equipamento já pode ser entregue, não há nada a faturar aqui.">
+                    Sem faturamento (garantia/cortesia)
+                  </Badge>
                 ) : l.contaId == null && liberada(l.statusOS) ? (
                   <Badge tono="copper">Liberado</Badge>
                 ) : l.contaId == null ? (
@@ -2308,7 +2321,7 @@ export function Faturamento() {
                 )}
               </td>
               <td className="acoes-tabela">
-                {(l.contaId != null || liberada(l.statusOS)) && !l.nf_numero && (!l.nfseStatus || l.nfseStatus === 'erro') && (
+                {(l.contaId != null || liberada(l.statusOS)) && !l.nf_numero && l.valor > 0 && (!l.nfseStatus || l.nfseStatus === 'erro') && (
                   <button
                     className="botao-secundario"
                     onClick={() => abrirPreviaNfse([l])}
