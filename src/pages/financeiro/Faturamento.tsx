@@ -2401,9 +2401,9 @@ export function Faturamento() {
                     </span>
                   </>
                 ) : l.contaId == null && liberada(l.statusOS) && l.valor <= 0 ? (
-                  <Badge tono="neutro" title="Orçamento sem custo (garantia, bonificação/cortesia etc.) - equipamento já pode ser entregue, não há nada a faturar aqui.">
-                    Sem faturamento (garantia/cortesia)
-                  </Badge>
+                  <span title="Orçamento sem custo (garantia, bonificação/cortesia etc.) - equipamento já pode ser entregue, não há nada a faturar aqui.">
+                    <Badge tono="neutro">Sem faturamento (garantia/cortesia)</Badge>
+                  </span>
                 ) : l.contaId == null && liberada(l.statusOS) ? (
                   <Badge tono="copper">Liberado</Badge>
                 ) : l.contaId == null ? (
