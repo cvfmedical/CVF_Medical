@@ -364,11 +364,22 @@ export function Entrega() {
   // aparecendo na pesquisa?"). Mantém a opção (necessária pro editar), mas
   // deixa claro no rótulo que ela já está registrada - não deve ser
   // escolhida de novo em "+ Novo".
+  // Rótulo extra pro 3º grupo (2026-09-18): "entregue sem registro" mistura
+  // aqui SEM aviso nenhum, igual às genuinamente pendentes do 1º grupo (só
+  // "Pronto para entrega"/"Devolução sem reparo", sem entrega) - o que fazia
+  // a lista parecer ter um backlog enorme de trabalho novo quando na
+  // verdade é resíduo histórico (equipamento já entregue de verdade pelo
+  // atalho antigo, só falta o registro formal/NF de devolução se ainda não
+  // foi emitida). Sinaliza esse grupo separado pra não confundir com
+  // pendência real.
   const opcoesEntrega = opcoes
     .filter((o) => podeEntregar(Number(o.value)) || temEntregaRegistrada(Number(o.value)) || entregueSemRegistro(Number(o.value)))
-    .map((o) =>
-      temEntregaRegistrada(Number(o.value)) ? { ...o, label: `${o.label} (já tem entrega registrada)` } : o,
-    );
+    .map((o) => {
+      const id = Number(o.value);
+      if (temEntregaRegistrada(id)) return { ...o, label: `${o.label} (já tem entrega registrada)` };
+      if (entregueSemRegistro(id)) return { ...o, label: `${o.label} (entregue sem registro/NF pendente)` };
+      return o;
+    });
   // Checklist de impressão de etiqueta é outra coisa: só interessa quem
   // ainda não teve etiqueta impressa - assim que imprime (em lote, pela
   // linha da tabela ou pelo formulário), a OS sai daqui e só é encontrável
