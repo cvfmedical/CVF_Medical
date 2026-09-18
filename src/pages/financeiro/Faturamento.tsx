@@ -140,6 +140,12 @@ function liberada(statusOS: string | null): boolean {
   return statusOS === STATUS_PRONTO_ENTREGA || statusOS === STATUS_ENTREGUE;
 }
 
+// Junta "ORC-A", "ORC-A e ORC-B" ou "ORC-A, ORC-B e ORC-C" (português
+// natural) - texto plural só quando há mais de um item.
+function juntarPt(itens: string[]): string {
+  return itens.length <= 1 ? (itens[0] ?? '') : `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`;
+}
+
 const COLUNAS_FILTRAVEIS = ['codigo_entrada', 'numero_os', 'numero_orcamento', 'numero', 'cliente', 'descricao', 'valor', 'nota_fiscal'];
 
 export function Faturamento() {
@@ -299,6 +305,7 @@ export function Faturamento() {
   // poluir a tela principal).
   const [formaPagamentoBoleto, setFormaPagamentoBoleto] = useState<'30' | '28' | 'parcelado' | 'manual'>('30');
   const [enviandoEmailCompleto, setEnviandoEmailCompleto] = useState(false);
+  const [enviandoEmailDevolucao, setEnviandoEmailDevolucao] = useState(false);
   const [emitindoNfseId, setEmitindoNfseId] = useState<string | null>(null);
   const [enviandoEmailOficialId, setEnviandoEmailOficialId] = useState<string | null>(null);
   const [cancelandoNfseId, setCancelandoNfseId] = useState<string | null>(null);
@@ -1078,12 +1085,6 @@ export function Faturamento() {
         ? `${l.nf_tipo ?? 'NF'} ${l.nf_numero}${l.nf_serie ? '/' + l.nf_serie : ''}`
         : 'a nota fiscal referente a este orçamento';
       const qtdBoletos = anexos.length - qtdAnexosOrcamento;
-      // Junta "ORC-A", "ORC-A e ORC-B" ou "ORC-A, ORC-B e ORC-C" (português
-      // natural) - texto plural só quando há mais de um orçamento na NF.
-      const juntarPt = (itens: string[]) =>
-        itens.length <= 1
-          ? (itens[0] ?? '')
-          : `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`;
       const multiploOrcamentos = orcamentosResumo.length > 1;
       const textoOrcamentos = juntarPt(orcamentosResumo.map((o) => o.numeroOrcamento));
       const textoOS = juntarPt(orcamentosResumo.map((o) => o.numeroOS));
@@ -1532,6 +1533,91 @@ export function Faturamento() {
       setErro(await mensagemErroFuncao(e));
     } finally {
       setConsolidandoContas(false);
+    }
+  }
+
+  // Orçamento sem custo (garantia/bonificação/cortesia, valor R$ 0,00) não
+  // gera NF nem boleto, mas o cliente ainda precisa ser avisado que o
+  // equipamento está sendo devolvido sem cobrança - pedido do usuário
+  // (2026-09-18), pra não deixar o Setor de Faturamento tendo que avisar
+  // isso manualmente por fora do sistema. Reaproveita o mesmo PDF de
+  // orçamento (mostra "Bonificação"/desconto e o valor final R$ 0,00 como
+  // prova) e o mesmo canal de envio (enviar-orcamento) de
+  // enviarEmailCompleto, só troca o texto - não há NF/boleto pra anexar
+  // aqui.
+  async function enviarEmailDevolucaoSemCusto(linhas: LinhaFaturamento[]) {
+    const clienteId = clienteComumDasLinhas(linhas);
+    if (!clienteId) {
+      setErro('Só é possível enviar um e-mail único pra orçamentos do mesmo cliente.');
+      return;
+    }
+    setEnviandoEmailDevolucao(true);
+    setErro(null);
+    try {
+      const idsOrcamentos = linhas.map((l) => l.orcamentoId).filter((id): id is number => id != null);
+      const { data: cliente, error: erroCliente } = await supabase
+        .from('clientes')
+        .select('razao_social, nome_fantasia, cnpj, telefone, email, emails_adicionais, logradouro, numero_endereco, complemento, bairro, cidade, uf, cep')
+        .eq('id', clienteId)
+        .single();
+      if (erroCliente || !cliente) throw erroCliente ?? new Error('Cliente não encontrado.');
+
+      const enderecoCliente = [[cliente.logradouro, cliente.numero_endereco].filter(Boolean).join(', '), cliente.complemento, cliente.bairro, cliente.cep ? `CEP ${cliente.cep}` : null]
+        .filter(Boolean)
+        .join(' - ') || null;
+
+      const anexos: AnexoBase64[] = [];
+      const orcamentosResumo: { numeroOrcamento: string; numeroOS: string }[] = [];
+      for (const orcamentoId of idsOrcamentos) {
+        const { dados: dadosOrc, numeroOS } = await montarDadosOrcamentoPdf(
+          orcamentoId,
+          cliente,
+          enderecoCliente,
+          cliente.razao_social,
+          cliente.cidade,
+          cliente.uf,
+        );
+        anexos.push(await gerarAnexoOrcamentoSozinho(dadosOrc));
+        orcamentosResumo.push({ numeroOrcamento: dadosOrc.numeroOrcamento, numeroOS });
+      }
+
+      const multiplo = orcamentosResumo.length > 1;
+      const textoOrcamentos = juntarPt(orcamentosResumo.map((o) => o.numeroOrcamento));
+      const textoOS = juntarPt(orcamentosResumo.map((o) => o.numeroOS));
+      const html = `<p>Prezado(a) cliente,</p>
+        <p>Informamos que ${multiplo ? 'os equipamentos referentes aos orçamentos' : 'o equipamento referente ao orçamento'} <strong>${textoOrcamentos}</strong> (OS ${textoOS}) ${multiplo ? 'estão sendo devolvidos' : 'está sendo devolvido'} sem nenhum custo (garantia/cortesia) - não há cobrança pendente.</p>
+        <p>Segue em anexo ${multiplo ? 'os orçamentos correspondentes' : 'o orçamento correspondente'} pra seu controle.</p>
+        <p>Acompanhe pelo portal do cliente: <a href="${PORTAL_CLIENTE_URL}">${PORTAL_CLIENTE_URL}</a></p>
+        <p>Permanecemos à disposição para quaisquer esclarecimentos.</p>
+        <p>Atenciosamente,<br/><strong>${EMPRESA.razaoSocial}</strong></p>`;
+
+      const extras = (cliente.emails_adicionais ?? '')
+        .split(',')
+        .map((e: string) => e.trim())
+        .filter(Boolean);
+      const destinatarios = [cliente.email, ...extras].filter((e): e is string => !!e);
+      if (destinatarios.length === 0) {
+        setErro('Este cliente não tem e-mail cadastrado.');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('enviar-orcamento', {
+        body: {
+          to: destinatarios,
+          subject: `Q-CVF Medical - Devolução sem custo - ${multiplo ? 'Orçamentos' : 'Orçamento'} ${textoOrcamentos}`,
+          html,
+          anexos,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Falha ao enviar o e-mail.');
+
+      setSelecionadasFaturar(new Set());
+      alert(`E-mail de devolução sem custo enviado para ${destinatarios.join(', ')} (${anexos.length} orçamento(s) em anexo).`);
+    } catch (e) {
+      setErro(await mensagemErroFuncao(e));
+    } finally {
+      setEnviandoEmailDevolucao(false);
     }
   }
 
@@ -2063,11 +2149,17 @@ export function Faturamento() {
         (() => {
           const linhasSelecionadas = linhasParaFaturar.filter((l) => selecionadasFaturar.has(l.chave));
           const clienteConsolidado = clienteComumDasLinhas(linhasSelecionadas);
-          // Duas seleções mutuamente exclusivas, diferenciadas por já ter
-          // conta a receber lançada ou não - ver checkbox na tabela abaixo.
+          // Três seleções mutuamente exclusivas, diferenciadas por já ter
+          // conta a receber lançada, ser orçamento com custo real (ainda sem
+          // conta) ou ser orçamento sem custo (garantia/cortesia, só precisa
+          // do e-mail de devolução, não de NF) - ver checkbox na tabela
+          // abaixo e título de cada uma.
           const semConta = linhasSelecionadas.filter((l) => l.contaId == null);
           const comConta = linhasSelecionadas.filter((l) => l.contaId != null);
-          const mistura = semConta.length > 0 && comConta.length > 0;
+          const semCusto = semConta.filter((l) => l.valor <= 0);
+          const comCustoSemConta = semConta.filter((l) => l.valor > 0);
+          const gruposAtivos = [comConta.length > 0, comCustoSemConta.length > 0, semCusto.length > 0].filter(Boolean).length;
+          const mistura = gruposAtivos > 1;
           return (
             <div
               style={{
@@ -2088,7 +2180,8 @@ export function Faturamento() {
               </span>
               {mistura && (
                 <span className="erro-login" style={{ margin: 0 }}>
-                  Não dá pra misturar orçamentos ainda sem conta com contas já lançadas - marque só um tipo por vez.
+                  Não dá pra misturar orçamentos sem custo, orçamentos ainda sem conta e contas já lançadas - marque
+                  só um tipo por vez.
                 </span>
               )}
               {!mistura && clienteConsolidado == null && (
@@ -2108,13 +2201,22 @@ export function Faturamento() {
                 >
                   {consolidandoContas ? 'Emitindo...' : `Emitir 1 boleto (${comConta.length})`}
                 </button>
+              ) : semCusto.length > 0 ? (
+                <button
+                  className="botao-primario botao-pequeno"
+                  disabled={mistura || clienteConsolidado == null || enviandoEmailDevolucao}
+                  onClick={() => enviarEmailDevolucaoSemCusto(semCusto)}
+                  title="Envia um e-mail ao cliente avisando que o(s) equipamento(s) está(ão) sendo devolvido(s) sem custo (garantia/cortesia), com o PDF do orçamento em anexo - não gera NF nem boleto"
+                >
+                  {enviandoEmailDevolucao ? 'Enviando...' : `Enviar e-mail de devolução (${semCusto.length})`}
+                </button>
               ) : (
                 <button
                   className="botao-primario botao-pequeno"
-                  disabled={mistura || semConta.length < 2 || clienteConsolidado == null}
-                  onClick={() => abrirPreviaNfse(semConta)}
+                  disabled={mistura || comCustoSemConta.length < 2 || clienteConsolidado == null}
+                  onClick={() => abrirPreviaNfse(comCustoSemConta)}
                 >
-                  Lançar NF consolidada ({semConta.length})
+                  Lançar NF consolidada ({comCustoSemConta.length})
                 </button>
               )}
             </div>
@@ -2216,13 +2318,15 @@ export function Faturamento() {
             return (
             <tr key={grupo.chave}>
               <td>
-                {((l.contaId == null && l.orcamentoId != null && !l.nf_numero && l.valor > 0) ||
+                {((l.contaId == null && l.orcamentoId != null && !l.nf_numero) ||
                   (l.contaId != null && !l.boleto_numero)) && (
                   <input
                     type="checkbox"
                     title={
                       l.contaId == null
-                        ? 'Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente'
+                        ? l.valor > 0
+                          ? 'Marcar pra consolidar numa NF só com outros orçamentos do mesmo cliente'
+                          : 'Marcar pra enviar e-mail de devolução (sem custo) ao cliente'
                         : 'Marcar pra emitir um boleto único com outra(s) conta(s) do mesmo cliente (cada uma mantém sua própria NF, se tiver)'
                     }
                     checked={selecionadasFaturar.has(l.chave)}
