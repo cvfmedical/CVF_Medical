@@ -1345,9 +1345,8 @@ export function EntradaEquipamento() {
           <div><strong>Nº de série:</strong> <span class="mono">${entrada.equipamento_sn ?? '-'}</span></div>
         </div>
         <div class="laudo-linha-dupla">
-          <div style="border-right:0;">
-            <strong>Nº controle interno / NF cliente:</strong> <span class="mono">${controleCliente}</span>
-          </div>
+          <div><strong>Nº controle interno / NF cliente:</strong> <span class="mono">${controleCliente}</span></div>
+          <div><strong>Condição de chegada:</strong> ${entrada.condicao_chegada ?? '-'}</div>
         </div>
       </div>
 
