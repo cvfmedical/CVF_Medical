@@ -5,7 +5,7 @@ import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { Badge } from '../../components/Badge';
 import { supabase } from '../../lib/supabaseClient';
-import { STATUS_VOLTA_MANUTENCAO, STATUS_TESTE_ESTANQUEIDADE, STATUS_TESTE_AUTOCLAVE } from '../../lib/statusOS';
+import { STATUS_VOLTA_MANUTENCAO, STATUS_TESTE_ESTANQUEIDADE, STATUS_TESTE_AUTOCLAVE, osFinalizada } from '../../lib/statusOS';
 import { useEntradaOrcamentoPorOS } from '../../lib/useEntradaOrcamentoPorOS';
 
 interface TesteEstanqueidadeRow {
@@ -65,6 +65,13 @@ export function TesteEstanqueidade() {
         tabela="testes_estanqueidade"
         ordenarPor="id"
         camposFiltro={[(r) => porId(r.ordem_servico_id)?.numero_os ?? '', (r) => porId(r.ordem_servico_id)?.cliente_nome ?? '']}
+        // Teste de OS já entregue ao cliente (ou devolvida sem reparo) é
+        // registro de processo já finalizado - fica escondido por padrão,
+        // só reaparece em "consulta" (pedido do usuário, 2026-09-18).
+        ocultarPorPadrao={{
+          linhaOculta: (r) => osFinalizada(porId(r.ordem_servico_id)?.status_os),
+          rotulo: 'testes de OS já finalizadas',
+        }}
         // Pressão e tempo já vêm preenchidos com o mínimo exigido pela ISO
         // 8600-7 (20 kPa / 60 s) - é o valor que a CVF aplica como padrão de
         // procedimento; o técnico ajusta se aplicar mais margem. Temperatura,

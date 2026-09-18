@@ -11,6 +11,7 @@ import { gerarNumeroSequencial } from '../../lib/numeroSequencial';
 import { mensagemErro } from '../../lib/erros';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOrdensServicoOpcoes } from '../../lib/useOrdensServicoOpcoes';
+import { osFinalizada } from '../../lib/statusOS';
 import { CarregandoTela } from '../../components/CarregandoTela';
 import { ModalJanela } from '../../components/ModalJanela';
 import { useRascunhoDeTela } from '../../lib/useRascunhoDeTela';
@@ -85,6 +86,10 @@ export function Laudos() {
     observacoes_tecnicas: '',
   });
   const [respostas, setRespostas] = useState<Record<number, boolean | null>>({});
+  // Laudo de OS já entregue ao cliente (ou devolvida sem reparo) é registro
+  // de processo já finalizado - fica escondido por padrão, só reaparece em
+  // "consulta" (pedido do usuário, 2026-09-18).
+  const [mostrarFinalizados, setMostrarFinalizados] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -224,8 +229,10 @@ export function Laudos() {
     return (l as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (laudosQuery.data ?? []).filter((l) =>
-    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(l, chave), chave)),
+  const linhasFiltradas = (laudosQuery.data ?? []).filter(
+    (l) =>
+      (mostrarFinalizados || !osFinalizada(porId(l.ordem_servico_id)?.status_os)) &&
+      COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(l, chave), chave)),
   );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
@@ -396,7 +403,11 @@ export function Laudos() {
     <div>
       <div className="crud-cabecalho">
         <h1>Laudos e notas técnicas</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={mostrarFinalizados} onChange={(e) => setMostrarFinalizados(e.target.checked)} />
+            Mostrar laudos de OS já finalizadas (consulta)
+          </label>
           {algumFiltroAtivo && (
             <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
               Limpar filtros

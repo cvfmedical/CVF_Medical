@@ -69,3 +69,14 @@ export function tonoDoStatusOS(status: string | null | undefined): TonoBadge {
   if (status === STATUS_PRONTO_ENTREGA || status === '11. ENTREGUE AO CLIENTE') return 'teal';
   return 'neutro';
 }
+
+// OS que já terminou o processo de vez (entregue ao cliente, ou saiu por
+// devolução sem reparo/orçamento recusado) - usado por telas de log
+// técnico (testes de laboratório, laudos) que mostravam TODO registro já
+// feito, sem nenhum filtro, misturando testes de OS ainda em andamento
+// com testes de OS que já foram entregues há muito tempo (pedido do
+// usuário, 2026-09-18: "processos finalizados não devem ficar aparecendo
+// em nenhum local, apenas consulta").
+export function osFinalizada(statusOS: string | null | undefined): boolean {
+  return statusOS === STATUS_ENTREGUE || statusOS === STATUS_DEVOLUCAO_SEM_REPARO;
+}

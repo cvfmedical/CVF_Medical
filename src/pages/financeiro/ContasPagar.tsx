@@ -331,6 +331,7 @@ export function ContasPagar() {
         ordenarPor="data_vencimento"
         filtroPeriodo={{ campo: 'data_vencimento', label: 'Vencimento', campoValor: 'valor' }}
         camposFiltro={['descricao', 'numero_conta']}
+        ocultarPorPadrao={{ linhaOculta: (r) => r.status === 'Pago' || r.status === 'Cancelado', rotulo: 'pagas/canceladas' }}
         aoClicarNovo={abrirModalNovo}
         resumo={(todas) => {
           const totalEmpresa = todas.filter((r) => r.tipo_custo !== 'Pessoal' && r.status !== 'Cancelado').reduce((s, r) => s + Number(r.valor), 0);

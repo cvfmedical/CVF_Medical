@@ -58,6 +58,10 @@ export function SolicitacoesCompra() {
   const [form, setForm] = useState(formVazio);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  // Recebido/Cancelado é processo finalizado - fica escondido por padrão,
+  // só reaparece em "consulta" (mesmo padrão do "Mostrar já faturados" de
+  // Faturamento.tsx).
+  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -194,8 +198,10 @@ export function SolicitacoesCompra() {
     return (s as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (query.data ?? []).filter((s) =>
-    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(s, chave), chave)),
+  const linhasFiltradas = (query.data ?? []).filter(
+    (s) =>
+      (mostrarFinalizadas || (s.status !== 'Recebido' && s.status !== 'Cancelado')) &&
+      COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(s, chave), chave)),
   );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
@@ -205,7 +211,11 @@ export function SolicitacoesCompra() {
     <div>
       <div className="crud-cabecalho">
         <h1>Solicitação de compras</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={mostrarFinalizadas} onChange={(e) => setMostrarFinalizadas(e.target.checked)} />
+            Mostrar recebidas/canceladas (consulta)
+          </label>
           {algumFiltroAtivo && (
             <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
               Limpar filtros

@@ -109,6 +109,10 @@ export function ContasReceber() {
   const [periodoDe, setPeriodoDe] = useState('');
   const [periodoAte, setPeriodoAte] = useState('');
   const [consultandoBoletoId, setConsultandoBoletoId] = useState<number | null>(null);
+  // Título já baixado (Recebido) ou Cancelado é processo finalizado - fica
+  // escondido por padrão, só reaparece em "consulta" (mesmo padrão do
+  // "Mostrar já faturados" de Faturamento.tsx).
+  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -427,6 +431,7 @@ export function ContasReceber() {
   }
 
   const linhasFiltradas = (query.data ?? []).filter((c) => {
+    if (!mostrarFinalizadas && (c.status === 'Recebido' || c.status === 'Cancelado')) return false;
     if (!COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(c, chave), chave))) return false;
     if (periodoDe && c.data_vencimento < periodoDe) return false;
     if (periodoAte && c.data_vencimento > periodoAte) return false;
@@ -501,6 +506,10 @@ export function ContasReceber() {
               {linhas.length === 1 ? '' : 's'})
             </span>
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={mostrarFinalizadas} onChange={(e) => setMostrarFinalizadas(e.target.checked)} />
+            Mostrar recebidas/canceladas (consulta)
+          </label>
           {(algumFiltroAtivo || periodoDe || periodoAte) && (
             <button
               className="botao-secundario botao-pequeno"

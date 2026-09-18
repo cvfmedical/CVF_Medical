@@ -67,6 +67,10 @@ export function Manutencao() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  // Manutenção com data_fim preenchida já terminou (a OS avançou pro
+  // Checkpoint A) - fica escondida por padrão, só reaparece em "consulta"
+  // (mesmo padrão do "Mostrar já faturados" de Faturamento.tsx).
+  const [mostrarConcluidas, setMostrarConcluidas] = useState(false);
   const {
     textos: filtrosColuna,
     setTexto: setFiltroTexto,
@@ -269,8 +273,10 @@ export function Manutencao() {
     return (m as unknown as Record<string, unknown>)[chave];
   }
 
-  const linhasFiltradas = (manutencoesQuery.data ?? []).filter((m) =>
-    COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(m, chave), chave)),
+  const linhasFiltradas = (manutencoesQuery.data ?? []).filter(
+    (m) =>
+      (mostrarConcluidas || !m.data_fim) &&
+      COLUNAS_FILTRAVEIS.every((chave) => passaFiltro(valorColuna(m, chave), chave)),
   );
   const { linhasOrdenadas: linhas, coluna, direcao, ordenarPor } = useLinhasOrdenadas(linhasFiltradas, null, valorColuna);
 
@@ -280,7 +286,11 @@ export function Manutencao() {
     <div>
       <div className="crud-cabecalho">
         <h1>Manutenção / remontagem</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={mostrarConcluidas} onChange={(e) => setMostrarConcluidas(e.target.checked)} />
+            Mostrar concluídas (consulta)
+          </label>
           {algumFiltroAtivo && (
             <button className="botao-secundario botao-pequeno" onClick={limparTudo}>
               Limpar filtros

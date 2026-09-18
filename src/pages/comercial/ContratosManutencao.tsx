@@ -207,6 +207,7 @@ export function ContratosManutencao() {
       ordenarPor="data_inicio"
       camposFiltro={['numero_contrato']}
       valorInicial={{ status: 'Ativo' }}
+      ocultarPorPadrao={{ linhaOculta: (r) => r.status === 'Encerrado', rotulo: 'contratos encerrados' }}
       colunas={[
         { chave: 'numero_contrato', label: 'Nº contrato', mono: true },
         {
