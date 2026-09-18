@@ -70,7 +70,14 @@ export function TesteEstanqueidade() {
         // procedimento; o técnico ajusta se aplicar mais margem. Temperatura,
         // método e imersão total ficam em branco de propósito: são leituras/
         // confirmações reais de cada ensaio, não valores fixos da norma.
-        valorInicial={{ imersao_total: false, pressao_aplicada_kpa: 20, tempo_segundos: 60 }}
+        // calibracao_id pré-selecionado com o manômetro Duegatti M210496
+        // (id 7, cert. CT-JV-0658/2026) - pedido do usuário (2026-09-18) pra
+        // não precisar escolher toda vez, já que é o instrumento usado na
+        // prática pra esse teste (resolução de 1 mBar ≈ 0,1 kPa, mais fina
+        // que o outro padrão cadastrado - o Analógico 0-0,25 MPa, id 6, tem
+        // resolução de 10 kPa, grossa demais perto do mínimo de 20 kPa
+        // exigido). Continua editável se outro instrumento for usado.
+        valorInicial={{ imersao_total: false, pressao_aplicada_kpa: 20, tempo_segundos: 60, calibracao_id: '7' }}
         colunas={[
           {
             chave: 'codigo_entrada',
